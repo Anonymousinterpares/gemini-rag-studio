@@ -1,0 +1,22 @@
+.progress-container {
+  width: 100%;
+  margin-top: 10px;
+}
+
+.progress-item {
+  display: flex;
+  align-items: center;
+  margin-bottom: 5px;
+}
+
+.progress-label {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-right: 10px;
+}
+
+progress {
+  width: 100px;
+}

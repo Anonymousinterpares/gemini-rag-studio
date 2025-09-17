@@ -1,0 +1,248 @@
+{
+  "cultures": {
+    "concordant": {
+      "id": "concordant",
+      "name": "The Concordant Cities",
+      "description": "A confederation of seven interconnected city-states that sit at major Resonance nodes on the Nexus plane. Their architecture constantly shifts as it incorporates elements from other planes during Resonance Events.",
+      "values": [
+        {
+          "name": "Harmony",
+          "description": "Balancing the influences of all planes for the benefit of society.",
+          "importance": 9
+        },
+        {
+          "name": "Adaptability",
+          "description": "Embracing change brought by Resonance Events rather than fearing it.",
+          "importance": 8
+        },
+        {
+          "name": "Knowledge",
+          "description": "Understanding the patterns of Resonance to better predict and utilize them.",
+          "importance": 7
+        }
+      ],
+      "traditions": [
+        {
+          "name": "Attunement",
+          "description": "A ritual tattooing process that helps citizens maintain their identity during plane shifts. The tattoos contain geometric patterns representing all five planes.",
+          "occasion": "Coming of age (16 years)",
+          "significance": "Marks full citizenship and provides protection during Resonance Events."
+        },
+        {
+          "name": "Resonance Festival",
+          "description": "A celebration held during major predicted Resonance Events, with music, dance, and temporary markets for cross-planar goods.",
+          "occasion": "Major Resonance Events (5-7 times per year)",
+          "significance": "Celebrates the unique nature of their fractured world and the opportunities it presents."
+        }
+      ],
+      "language_style": "Formal with many technical terms related to planar phenomena. Contains words and sounds borrowed from all five planes.",
+      "naming_conventions": {
+        "male": "Melodic names with consonant pairs (Jaedin, Thaerol, Vestrian)",
+        "female": "Flowing names with multiple vowels (Aliora, Nyaeve, Seraphine)",
+        "places": "Often named after Resonance patterns or Luminary fragments (Harmonium, Echopoint, Luminfall)"
+      },
+      "common_traits": [
+        "Diplomatic",
+        "Studious",
+        "Pragmatic",
+        "Adaptable"
+      ]
+    },
+    "verdant": {
+      "id": "verdant",
+      "name": "The Verdant Collective",
+      "description": "A nature-focused society that primarily exists in the Verdant plane but maintains outposts on Nexus. Their societal roles are seasonal, with individuals changing their functions throughout the year.",
+      "values": [
+        {
+          "name": "Symbiosis",
+          "description": "Living in harmony with the natural world and each other.",
+          "importance": 10
+        },
+        {
+          "name": "Renewal",
+          "description": "Embracing the cycles of growth, death, and rebirth.",
+          "importance": 8
+        },
+        {
+          "name": "Community",
+          "description": "Prioritizing the needs of the collective over the individual.",
+          "importance": 7
+        }
+      ],
+      "traditions": [
+        {
+          "name": "Season Shifting",
+          "description": "A ceremony where individuals transition to new societal roles based on the changing seasons.",
+          "occasion": "Each solstice and equinox",
+          "significance": "Ensures that everyone experiences different aspects of their society and prevents stagnation."
+        },
+        {
+          "name": "Green Speech Initiation",
+          "description": "A ritual where new members learn the secret language of the collective, composed of plant growth patterns and pheromones.",
+          "occasion": "Upon joining the collective or coming of age",
+          "significance": "Allows communication that outsiders cannot decode, preserving the collective's secrets."
+        }
+      ],
+      "language_style": "Soft spoken verbal language with many metaphors drawn from plant and animal life. Green Speech is non-verbal and uses pheromones and subtle manipulation of nearby plants.",
+      "naming_conventions": {
+        "male": "Names derived from plant species or natural phenomena (Alder, Rowan, Brook)",
+        "female": "Names derived from flowers or natural elements (Willow, Laurel, Dawn)",
+        "places": "Named after ecological features (Deeproot, Sunmeadow, Mistcanopy)"
+      },
+      "common_traits": [
+        "Patient",
+        "Communal",
+        "Secretive with outsiders",
+        "Deeply intuitive"
+      ]
+    },
+    "crystalline": {
+      "id": "crystalline",
+      "name": "The Crystalline Consortium",
+      "description": "A highly ordered society with the most stable presence on the Crystalline plane and trading enclaves on Nexus. Personal worth is measured by one's contribution to mathematical and magical precision.",
+      "values": [
+        {
+          "name": "Order",
+          "description": "Maintaining structure, hierarchy, and predictability in all things.",
+          "importance": 9
+        },
+        {
+          "name": "Excellence",
+          "description": "Striving for perfection in one's specialized field.",
+          "importance": 8
+        },
+        {
+          "name": "Legacy",
+          "description": "Creating lasting works that will endure through time.",
+          "importance": 7
+        }
+      ],
+      "traditions": [
+        {
+          "name": "Faceting",
+          "description": "A coming-of-age ritual where adolescents receive geometric crystal implants that enhance specific mental abilities.",
+          "occasion": "Upon completing academic assessment (typically age 14-16)",
+          "significance": "Determines one's specialized role in society and enhances natural talents."
+        },
+        {
+          "name": "Calculation Contest",
+          "description": "Annual competition where individuals and teams solve increasingly complex mathematical and magical equations.",
+          "occasion": "Mid-winter",
+          "significance": "Elevates social standing and determines resource allocation for the coming year."
+        }
+      ],
+      "language_style": "Precise and technical with minimal use of metaphor or ambiguity. Mathematical formulae are often incorporated into everyday speech.",
+      "naming_conventions": {
+        "male": "Geometric or mineral-based names (Hexar, Obsidian, Quartz)",
+        "female": "Gemstone or crystalline structure names (Sapphira, Amethyst, Lattice)",
+        "places": "Named after mathematical concepts or crystal formations (Dodecahedron, Fibonacci, Geode)"
+      },
+      "common_traits": [
+        "Methodical",
+        "Reserved",
+        "Perfectionistic",
+        "Specialized"
+      ]
+    },
+    "ashen": {
+      "id": "ashen",
+      "name": "The Ashen Covenant",
+      "description": "Nomadic societies traveling the Ashen plane with temporary settlements on Nexus. Their culture focuses on impermanence and rebirth, with no permanent ownership as possessions rotate through the community.",
+      "values": [
+        {
+          "name": "Impermanence",
+          "description": "Accepting that all things eventually end and transform.",
+          "importance": 9
+        },
+        {
+          "name": "Memory",
+          "description": "Preserving the wisdom and stories of those who came before.",
+          "importance": 8
+        },
+        {
+          "name": "Transformation",
+          "description": "Embracing change and rebirth as natural and necessary.",
+          "importance": 8
+        }
+      ],
+      "traditions": [
+        {
+          "name": "Dust Keeping",
+          "description": "The practice of preserving the ashes of ancestors and using them in rituals to communicate with the dead.",
+          "occasion": "Death of community members and monthly remembrance ceremonies",
+          "significance": "Maintains connection with ancestors and their wisdom, while honoring the cycle of decay and rebirth."
+        },
+        {
+          "name": "Possession Exchange",
+          "description": "Periodic ceremony where all material goods are collected and redistributed among the community.",
+          "occasion": "New moon of each month",
+          "significance": "Reinforces the concept that nothing is permanently owned, teaches detachment from material possessions."
+        }
+      ],
+      "language_style": "Poetic with many euphemisms, especially regarding death and endings. Words often have multiple context-dependent meanings.",
+      "naming_conventions": {
+        "male": "Names related to fire or earth (Ember, Coal, Dust)",
+        "female": "Names related to transition or cycles (Twilight, Echo, Whisper)",
+        "places": "Temporary settlements named for events or omens (Ravenfall, Ashbloom, Veilbreak)"
+      },
+      "common_traits": [
+        "Philosophical",
+        "Detached",
+        "Spiritual",
+        "Resilient"
+      ]
+    },
+    "tempest": {
+      "id": "tempest",
+      "name": "The Tempest Flotilla",
+      "description": "A society constantly moving throughout the chaotic Tempest plane with harbors on Nexus during certain celestial alignments. They adapt rapidly to change with fluid social hierarchies that can transform daily.",
+      "values": [
+        {
+          "name": "Freedom",
+          "description": "The right to change and choose one's path without constraint.",
+          "importance": 10
+        },
+        {
+          "name": "Opportunity",
+          "description": "Seizing chances that arise from chaos and unexpected change.",
+          "importance": 8
+        },
+        {
+          "name": "Resilience",
+          "description": "Weathering storms both literal and metaphorical with flexibility and strength.",
+          "importance": 7
+        }
+      ],
+      "traditions": [
+        {
+          "name": "Storm Binding",
+          "description": "Capturing the essence of Tempest plane storms in tattoos that grant unpredictable magical abilities.",
+          "occasion": "When an individual successfully navigates their first major Tempest storm",
+          "significance": "Marks true membership in the Flotilla and bestows unique, often chaotic magical gifts."
+        },
+        {
+          "name": "Leadership Flux",
+          "description": "A daily ritual where leadership positions are reassigned based on needs and circumstances.",
+          "occasion": "Dawn of each day",
+          "significance": "Ensures that those best suited to current challenges take command, prevents power entrenchment."
+        }
+      ],
+      "language_style": "Fast-paced with many slang terms that change rapidly. Incorporates sounds mimicking wind and water. Tonal shifts indicate emotional context.",
+      "naming_conventions": {
+        "male": "Action-oriented names (Surge, Dash, Flint)",
+        "female": "Weather or energy-based names (Storm, Spark, Gale)",
+        "places": "Named after vessels or weather events (Thunderwake, Squallrider, Maelstrom)"
+      },
+      "common_traits": [
+        "Spontaneous",
+        "Bold",
+        "Adaptable",
+        "Unpredictable"
+      ]
+    }
+  },
+  "metadata": {
+    "version": "1.0.0",
+    "description": "Culture definitions for the RPG game world"
+  }
+}

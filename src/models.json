@@ -1,0 +1,65 @@
+{
+  "openai": [
+    {
+      "id": "gpt-4o",
+      "name": "GPT-4o",
+      "description": "OpenAI's most capable model, optimized for both chat and text completion"
+    },
+    {
+      "id": "gpt-4o-mini",
+      "name": "GPT-4o Mini",
+      "description": "More affordable version of GPT-4o for everyday tasks"
+    }
+  ],
+  "google": [
+    {
+      "id": "gemini-2.5-flash",
+      "name": "Gemini 2.5 Flash",
+      "description": "Google's advanced multimodal model with strong capabilities"
+    },
+    {
+      "id": "gemini-2.0-flash",
+      "name": "Gemini 2.0 Flash",
+      "description": "Google's advanced multimodal model with strong capabilities"
+    },
+    {
+      "id": "gemini-2.0-flash-lite",
+      "name": "Gemini 2.0 Flash Lite",
+      "description": "Faster, more efficient version of Gemini for everyday tasks"
+    }
+  ],
+  "openrouter": [
+    {
+      "id": "google/gemini-2.5-flash-preview-05-20",
+      "name": "Google Gemini 2.0 Flash Lite (Free)",
+      "description": "Free version of Google's Gemini 2.0 Flash model"
+    },
+    {
+      "id": "nousresearch/deephermes-3-llama-3-8b-preview:free",
+      "name": "DeepHermes 3 Llama 3 8B (Free)",
+      "description": "Free version of Nous Research's DeepHermes 3 model"
+    },
+    {
+      "id": "google/gemini-2.0-pro-exp-02-05:free",
+      "name": "Google Gemini 2.0 Pro (Free)",
+      "description": "Free version of Google's Gemini 2.0 Pro model"
+    },
+    {
+      "id": "mistralai/mistral-small-3.1-24b-instruct:free",
+      "name": "Mistral Small 3.1 24B (Free)",
+      "description": "Free version of Mistral AI's 24B parameter model"
+    },
+    {
+      "id": "deepseek/deepseek-chat-v3-0324:free",
+      "name": "Google Gemini 2.0 Flash (Free)",
+      "description": "Free version of Google's Gemini 2.0 Flash model"
+    }
+  ],
+  "ollama": [
+    {
+      "id": "llama3",
+      "name": "Llama 3 (Local)",
+      "apiKeyRequired": false
+    }
+  ]
+}

@@ -1,0 +1,239 @@
+{
+  "name": "Aetheris",
+  "description": "A world once unified that was fractured into five overlapping planes by The Shattering, a catastrophic magical event approximately 2,500 years ago.",
+  "current_year": 2500,
+  "eras": [
+    {
+      "name": "The Age of Harmony",
+      "start_year": -3000,
+      "end_year": 0,
+      "description": "The ancient era when Aetheris was a singular reality where all races existed in harmony under the watchful eye of the Luminaries - cosmic entities who maintained balance.",
+      "events": [
+        {
+          "year": -3000,
+          "title": "The First Settlements",
+          "description": "The earliest known civilizations of Aetheris form, following the seasonal magical currents across the unified world.",
+          "significance": "",
+          "affected_locations": [],
+          "affected_cultures": []
+        },
+        {
+          "year": -2500,
+          "title": "The Song of Creation",
+          "description": "The first documented use of Song Weaving magic, which becomes the primary magical practice of the era.",
+          "significance": "",
+          "affected_locations": [],
+          "affected_cultures": []
+        },
+        {
+          "year": -1500,
+          "title": "Formation of the Cipher Conclave",
+          "description": "A collective of the most powerful mages forms to study the fundamental nature of reality and the Luminaries.",
+          "significance": "",
+          "affected_locations": [],
+          "affected_cultures": []
+        },
+        {
+          "year": -500,
+          "title": "The Luminescent Age",
+          "description": "A period of unprecedented growth and prosperity as the Luminaries actively guide civilization.",
+          "significance": "",
+          "affected_locations": [],
+          "affected_cultures": []
+        },
+        {
+          "year": -100,
+          "title": "The Immortality Project",
+          "description": "The Cipher Conclave begins experiments to achieve immortality by tapping into the essence of the Luminaries.",
+          "significance": "",
+          "affected_locations": [],
+          "affected_cultures": []
+        }
+      ]
+    },
+    {
+      "name": "The Shattering",
+      "start_year": 0,
+      "end_year": 1,
+      "description": "The catastrophic event that tore reality apart, splitting the world into five overlapping planes and scattering the Luminaries.",
+      "events": [
+        {
+          "year": 0,
+          "title": "The Fatal Experiment",
+          "description": "The Cipher Conclave's attempt to harness immortality goes catastrophically wrong, tearing the fabric of reality.",
+          "significance": "",
+          "affected_locations": [],
+          "affected_cultures": []
+        },
+        {
+          "year": 0,
+          "title": "The Fracturing of the Planes",
+          "description": "The unified world splits into five distinct planes: Verdant, Crystalline, Ashen, Tempest, and Nexus.",
+          "significance": "",
+          "affected_locations": [],
+          "affected_cultures": []
+        },
+        {
+          "year": 0,
+          "title": "The Scattering of the Luminaries",
+          "description": "The cosmic entities that maintained balance are shattered, their essences fragmented across all planes.",
+          "significance": "",
+          "affected_locations": [],
+          "affected_cultures": []
+        },
+        {
+          "year": 1,
+          "title": "The First Resonance",
+          "description": "The initial overlap between planes occurs, causing confusion and fear among survivors.",
+          "significance": "",
+          "affected_locations": [],
+          "affected_cultures": []
+        }
+      ]
+    },
+    {
+      "name": "The Age of Isolation",
+      "start_year": 1,
+      "end_year": 1000,
+      "description": "A millennium when surviving populations adapted to their new isolated realities while experiencing the first Resonance Events.",
+      "events": [
+        {
+          "year": 50,
+          "title": "The Emergence of the Five Speakers",
+          "description": "Five individuals across different planes develop the ability to hear the \"voices\" of the fragmented Luminaries.",
+          "significance": "",
+          "affected_locations": [],
+          "affected_cultures": []
+        },
+        {
+          "year": 127,
+          "title": "The First Planar Adaptation",
+          "description": "Isolated populations begin developing distinct traits based on their planar environment.",
+          "significance": "",
+          "affected_locations": [],
+          "affected_cultures": []
+        },
+        {
+          "year": 345,
+          "title": "The Founding of Harmonia",
+          "description": "The first stable settlement is established on the Nexus plane, later becoming the capital of the Concordant Cities.",
+          "significance": "",
+          "affected_locations": [],
+          "affected_cultures": []
+        },
+        {
+          "year": 512,
+          "title": "The Resonance Calendar",
+          "description": "Early attempts to predict and catalogue Resonance Events lead to the creation of a new calendar system.",
+          "significance": "",
+          "affected_locations": [],
+          "affected_cultures": []
+        },
+        {
+          "year": 827,
+          "title": "The First Planar Bleed Zone",
+          "description": "An area where two planes permanently merged is discovered, leading to new theories about the nature of reality.",
+          "significance": "",
+          "affected_locations": [],
+          "affected_cultures": []
+        }
+      ]
+    },
+    {
+      "name": "The Age of Discovery",
+      "start_year": 1000,
+      "end_year": 2000,
+      "description": "A period when civilizations developed ways to predict and utilize Resonance Events, leading to the first intentional cross-plane settlements.",
+      "events": [
+        {
+          "year": 1024,
+          "title": "The Formation of the Harmonic Order",
+          "description": "Scholars from across the Nexus plane unite to study and catalogue plane interactions.",
+          "significance": "",
+          "affected_locations": [],
+          "affected_cultures": []
+        },
+        {
+          "year": 1156,
+          "title": "The First Controlled Crossing",
+          "description": "The Harmonic Order successfully predicts and utilizes a Resonance Event to deliberately travel between planes.",
+          "significance": "",
+          "affected_locations": [],
+          "affected_cultures": []
+        },
+        {
+          "year": 1378,
+          "title": "The Verdant Collective",
+          "description": "The formation of the first society to deliberately incorporate elements of the Verdant plane into their culture.",
+          "significance": "",
+          "affected_locations": [],
+          "affected_cultures": []
+        },
+        {
+          "year": 1591,
+          "title": "The Crystalline Breakthrough",
+          "description": "Facet Magic is developed, allowing for precise magical control through geometric crystal structures.",
+          "significance": "",
+          "affected_locations": [],
+          "affected_cultures": []
+        },
+        {
+          "year": 1842,
+          "title": "The Ghost Markets",
+          "description": "The mysterious trading network that appears only during specific Resonance Events is established by entities known as \"The Between.\"",
+          "significance": "",
+          "affected_locations": [],
+          "affected_cultures": []
+        }
+      ]
+    },
+    {
+      "name": "The Modern Age",
+      "start_year": 2000,
+      "end_year": 2500,
+      "description": "The current era where sophisticated societies have emerged that incorporate elements from multiple planes while facing new challenges.",
+      "events": [
+        {
+          "year": 2025,
+          "title": "The Concordant Charter",
+          "description": "The seven city-states of the Nexus plane form a unified government known as the Concordant Cities.",
+          "significance": "",
+          "affected_locations": [],
+          "affected_cultures": []
+        },
+        {
+          "year": 2142,
+          "title": "The Emergence of the Dissonant Path",
+          "description": "A faction forms that believes The Shattering was necessary evolution and actively opposes reunification efforts.",
+          "significance": "",
+          "affected_locations": [],
+          "affected_cultures": []
+        },
+        {
+          "year": 2287,
+          "title": "The Luminary Chess Game",
+          "description": "The Five Speakers begin a complex metaphysical game that corresponds to real-world events and Resonance patterns.",
+          "significance": "",
+          "affected_locations": [],
+          "affected_cultures": []
+        },
+        {
+          "year": 2398,
+          "title": "The Resonance Crisis Begins",
+          "description": "Resonance Events become more frequent and unpredictable, causing concern among scholars and leaders.",
+          "significance": "",
+          "affected_locations": [],
+          "affected_cultures": []
+        },
+        {
+          "year": 2489,
+          "title": "The Shifting Library",
+          "description": "The discovery of a repository of knowledge that exists simultaneously in all planes, containing potential records from before The Shattering.",
+          "significance": "",
+          "affected_locations": [],
+          "affected_cultures": []
+        }
+      ]
+    }
+  ]
+}

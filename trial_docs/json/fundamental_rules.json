@@ -1,0 +1,77 @@
+{
+  "name": "Laws of Aetheris",
+  "description": "The fundamental rules that govern how the world of Aetheris operates after The Shattering.",
+  "rules": [
+    {
+      "name": "The Fractured Reality",
+      "description": "Aetheris is split into five overlapping planes: Verdant (nature), Crystalline (order), Ashen (decay), Tempest (chaos), and Nexus (the central plane where most inhabitants now dwell).",
+      "category": "cosmology",
+      "effects": [
+        "Most sentient beings live on the Nexus plane, which serves as a crossroads between the other planes",
+        "The other planes can be accessed through special portals, during Resonance Events, or through specific magical techniques",
+        "Each plane has unique physical laws and resources that influence magic and technology",
+        "Time flows slightly differently in each plane, causing travelers to experience temporal distortion"
+      ]
+    },
+    {
+      "name": "Resonance Events",
+      "description": "Periodic and partly predictable occurrences where planes temporarily merge, causing landscapes, creatures, and cultures to blend before separating again.",
+      "category": "planar phenomenon",
+      "effects": [
+        "Minor Resonance Events are common and localized, affecting small areas",
+        "Major Resonance Events are rarer and can transform entire regions",
+        "The Resonance Calendar predicts many events, but anomalies are increasing",
+        "Beings caught during Resonance Events may be altered or merged with alternate versions of themselves",
+        "Some areas become 'Planar Bleed Zones' where the merger becomes permanent"
+      ]
+    },
+    {
+      "name": "The Luminaries",
+      "description": "Once-unified cosmic entities who maintained balance before The Shattering, now fragmented across the planes. Their fragments still influence reality.",
+      "category": "divine",
+      "effects": [
+        "Luminary fragments manifest as powerful artifacts with reality-altering properties",
+        "The Five Speakers can hear and interpret the will of specific Luminaries",
+        "Divine magic draws power from Luminary fragments rather than unified deities",
+        "Collecting multiple fragments increases power but risks instability",
+        "Some fragments have developed sentience and their own agendas"
+      ]
+    },
+    {
+      "name": "Planar Affinity",
+      "description": "All beings have natural affinities for specific planes, influencing their abilities, temperament, and magical talent.",
+      "category": "biology",
+      "effects": [
+        "Birth location and lineage determine initial planar affinity",
+        "Exposure to different planes can gradually shift one's affinity",
+        "Magic is easier to perform when aligned with one's planar affinity",
+        "Some individuals (Resonance-touched) have multiple affinities",
+        "Certain races evolved specific adaptations to their primary plane"
+      ]
+    },
+    {
+      "name": "Magical Resonance",
+      "description": "Magic in Aetheris is shaped by The Shattering, manifesting differently in each plane and requiring specific techniques based on planar alignment.",
+      "category": "magic",
+      "effects": [
+        "Traditional spellcasting is unreliable across planar boundaries",
+        "Song Weaving is the most ancient and stable form of cross-planar magic",
+        "Each plane has a signature magical style (e.g., Facet Magic in Crystalline)",
+        "Magical education typically focuses on a planar specialty",
+        "The most powerful magic often requires components from multiple planes"
+      ]
+    },
+    {
+      "name": "Planar Resources",
+      "description": "Each plane produces unique materials and resources essential for advanced magic, technology, and medicine.",
+      "category": "economy",
+      "effects": [
+        "Verdant Plane: Living materials, adaptive plant matter, medicinal components",
+        "Crystalline Plane: Perfect geometric minerals, resonance crystals, timekeeping devices",
+        "Ashen Plane: Memory metals, preservative compounds, spectral essences",
+        "Tempest Plane: Energy condensates, probability alloys, chaos crystals",
+        "Nexus Plane: Planar binding agents, stabilizing compounds, universal catalysts"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,1609 @@
+{
+  "magic_systems": {
+    "song_weaving": {
+      "id": "song_weaving",
+      "name": "Song Weaving",
+      "description": "The most ancient form of magic, predating The Shattering. Practitioners create effects through specific melodies and harmonies rather than formal spellcasting.",
+      "origin": "Song Weaving is the original form of magic used in Aetheris before The Shattering. It was taught directly by the Luminaries to the first inhabitants of the world, who discovered that certain melodies could tap into the natural magical currents that flowed through the land.",
+      "limitations": "Requires vocal ability and musical aptitude. Effects are weaker when performed solo rather than in a group. Cannot be performed silently. Some complex effects require specific musical instruments as foci.",
+      "practitioners": "Most commonly practiced among Elves, who have maintained the ancient traditions, and Maelstri, who naturally resonate with the harmonic frequencies. However, any race with sufficient musical talent can learn its basics.",
+      "cultural_significance": "Song Weaving is revered as the purest form of magic, especially among older cultures. Annual music festivals in the Concordant Cities often feature Song Weaving performances, and the most skilled practitioners are highly respected across all planes.",
+      "racial_affinities": {
+        "Elf": {
+          "affinity_level": "High",
+          "learning_difficulty": "Easy",
+          "natural_talent": true,
+          "bonus_effects": "10% increased potency of all Song Weaving spells"
+        },
+        "Maelstri": {
+          "affinity_level": "High",
+          "learning_difficulty": "Easy",
+          "natural_talent": true,
+          "bonus_effects": "Can maintain Song Weaving effects 25% longer than other races"
+        },
+        "Human": {
+          "affinity_level": "Medium",
+          "learning_difficulty": "Moderate",
+          "natural_talent": false,
+          "bonus_effects": null
+        },
+        "Halfling": {
+          "affinity_level": "Medium",
+          "learning_difficulty": "Moderate",
+          "natural_talent": false,
+          "bonus_effects": null
+        },
+        "Mycora": {
+          "affinity_level": "Medium",
+          "learning_difficulty": "Moderate",
+          "natural_talent": false,
+          "bonus_effects": null
+        },
+        "Dwarf": {
+          "affinity_level": "Low",
+          "learning_difficulty": "Hard",
+          "natural_talent": false,
+          "bonus_effects": null
+        },
+        "Orc": {
+          "affinity_level": "Low",
+          "learning_difficulty": "Hard",
+          "natural_talent": false,
+          "bonus_effects": null
+        },
+        "Prismal": {
+          "affinity_level": "Low",
+          "learning_difficulty": "Hard",
+          "natural_talent": false,
+          "bonus_effects": null
+        },
+        "Cinderspawn": {
+          "affinity_level": "Low",
+          "learning_difficulty": "Very Hard",
+          "natural_talent": false,
+          "bonus_effects": null
+        }
+      },
+      "class_affinities": {
+        "Mage": {
+          "affinity_level": "High",
+          "learning_difficulty": "Easy",
+          "required_stats": {
+            "INT": 12,
+            "CHA": 10
+          }
+        },
+        "Cleric": {
+          "affinity_level": "High",
+          "learning_difficulty": "Easy",
+          "required_stats": {
+            "WIS": 12,
+            "CHA": 10
+          }
+        },
+        "Wanderer": {
+          "affinity_level": "Medium",
+          "learning_difficulty": "Moderate",
+          "required_stats": {
+            "CHA": 12
+          }
+        },
+        "Ranger": {
+          "affinity_level": "Medium",
+          "learning_difficulty": "Moderate",
+          "required_stats": {
+            "WIS": 12,
+            "CHA": 8
+          }
+        },
+        "Rogue": {
+          "affinity_level": "Low",
+          "learning_difficulty": "Hard",
+          "required_stats": {
+            "CHA": 14
+          }
+        },
+        "Warrior": {
+          "affinity_level": "Very Low",
+          "learning_difficulty": "Very Hard",
+          "required_stats": {
+            "CHA": 14,
+            "INT": 10
+          }
+        }
+      },
+      "spells": {
+        "harmonic_healing": {
+          "id": "harmonic_healing",
+          "name": "Harmonic Healing",
+          "description": "A soothing melody that accelerates natural healing processes in the target.",
+          "mana_cost": 15,
+          "casting_time": "10 seconds",
+          "range": "5m",
+          "target": "single",
+          "effects": [
+            {
+              "target_type": "target",
+              "effect_type": "healing",
+              "value": 20.0,
+              "dice_notation": "2d6+8",
+              "duration": 0,
+              "description": "Immediate healing of wounds and ailments"
+            },
+            {
+              "target_type": "target",
+              "effect_type": "stat_modification",
+              "stat_affected": "HP Regeneration",
+              "value": 2.0,
+              "duration": 3,
+              "description": "Accelerated natural healing for a short duration"
+            }
+          ],
+          "level": 2,
+          "components": ["voice", "focus"],
+          "tags": ["healing", "regeneration", "restoration"]
+        },
+        "resonant_shield": {
+          "id": "resonant_shield",
+          "name": "Resonant Shield",
+          "description": "Creates a barrier of sound waves that deflects incoming attacks.",
+          "mana_cost": 20,
+          "casting_time": "1 action",
+          "range": "self",
+          "target": "self",
+          "effects": [
+            {
+              "target_type": "caster",
+              "effect_type": "stat_modification",
+              "stat_affected": "Defense",
+              "value": 5.0,
+              "duration": 5,
+              "description": "Sound waves deflect physical and magical attacks"
+            }
+          ],
+          "level": 2,
+          "components": ["voice", "gesture"],
+          "tags": ["protection", "defense", "sound"]
+        },
+        "chorus_of_clarity": {
+          "id": "chorus_of_clarity",
+          "name": "Chorus of Clarity",
+          "description": "A harmonizing melody that clears the mind and enhances perception.",
+          "mana_cost": 10,
+          "casting_time": "5 seconds",
+          "range": "10m",
+          "target": "multiple",
+          "effects": [
+            {
+              "target_type": "target",
+              "effect_type": "stat_modification",
+              "stat_affected": "INT",
+              "value": 2.0,
+              "duration": 10,
+              "description": "Temporarily enhances intellectual capabilities"
+            },
+            {
+              "target_type": "target",
+              "effect_type": "stat_modification",
+              "stat_affected": "WIS",
+              "value": 2.0,
+              "duration": 10,
+              "description": "Temporarily enhances perceptive capabilities"
+            }
+          ],
+          "level": 1,
+          "components": ["voice", "concentration"],
+          "tags": ["enhancement", "mind", "perception"]
+        },
+        "dirge_of_despair": {
+          "id": "dirge_of_despair",
+          "name": "Dirge of Despair",
+          "description": "A haunting melody that instills dread and weakens resolve.",
+          "mana_cost": 25,
+          "casting_time": "1 action",
+          "range": "15m",
+          "target": "area",
+          "effects": [
+            {
+              "target_type": "target",
+              "effect_type": "stat_modification",
+              "stat_affected": "CHA",
+              "value": -2.0,
+              "duration": 5,
+              "description": "Weakens social presence and confidence"
+            },
+            {
+              "target_type": "target",
+              "effect_type": "status_effect",
+              "status_effect": "Frightened",
+              "duration": 3,
+              "description": "Targets feel a deep sense of dread and fear"
+            }
+          ],
+          "level": 3,
+          "components": ["voice", "gesture", "concentration"],
+          "tags": ["debuff", "fear", "control"]
+        },
+        "planar_harmonization": {
+          "id": "planar_harmonization",
+          "name": "Planar Harmonization",
+          "description": "A complex melody that resonates with the natural frequencies of different planes, facilitating travel and communication between them.",
+          "mana_cost": 40,
+          "casting_time": "1 minute",
+          "range": "30m",
+          "target": "area",
+          "effects": [
+            {
+              "target_type": "target",
+              "effect_type": "stat_modification",
+              "stat_affected": "Planar Resonance",
+              "value": 10.0,
+              "duration": 30,
+              "description": "Enhances ability to perceive and interact with planar energies"
+            }
+          ],
+          "level": 5,
+          "components": ["voice", "instrument", "focus", "concentration"],
+          "tags": ["planar", "utility", "ritual"]
+        },
+        "song_of_mending": {
+          "id": "song_of_mending",
+          "name": "Song of Mending",
+          "description": "A gentle tune that repairs physical objects and mends broken items.",
+          "mana_cost": 15,
+          "casting_time": "30 seconds",
+          "range": "5m",
+          "target": "single",
+          "effects": [
+            {
+              "target_type": "target",
+              "effect_type": "healing",
+              "value": 30.0,
+              "duration": 0,
+              "description": "Repairs damage to a non-living object"
+            }
+          ],
+          "level": 2,
+          "components": ["voice", "focus"],
+          "tags": ["utility", "restoration", "crafting"]
+        }
+      }
+    },
+    "planar_anchoring": {
+      "id": "planar_anchoring",
+      "name": "Planar Anchoring",
+      "description": "The art of maintaining stability during Resonance Events. Practitioners can extend areas of stability or purposefully blur planar boundaries.",
+      "origin": "Planar Anchoring emerged shortly after The Shattering as a necessity for survival. The Harmonic Order developed these techniques to protect settlements when the planes would temporarily merge, preventing catastrophic destruction.",
+      "limitations": "Requires physical components from multiple planes. Creates significant mental strain on the caster, with prolonged use potentially causing 'planar sickness' - a condition where the practitioner begins to exist partially in multiple planes simultaneously.",
+      "practitioners": "Primarily used by the Harmonic Order as part of their duty to protect settlements during Resonance Events. It is also practiced by planar researchers and certain specialized mages who study the boundaries between realities.",
+      "cultural_significance": "Planar Anchors are highly respected in all societies, as they serve as protectors during dangerous Resonance Events. In the Concordant Cities, they hold positions of authority and are often consulted on matters of planar significance.",
+      "racial_affinities": {
+        "Human": {
+          "affinity_level": "High",
+          "learning_difficulty": "Moderate",
+          "natural_talent": true,
+          "bonus_effects": "Can maintain anchoring effects 20% longer than other races"
+        },
+        "Prismal": {
+          "affinity_level": "Very High",
+          "learning_difficulty": "Easy",
+          "natural_talent": true,
+          "bonus_effects": "15% reduced mana cost for planar anchoring spells"
+        },
+        "Maelstri": {
+          "affinity_level": "High",
+          "learning_difficulty": "Moderate",
+          "natural_talent": true,
+          "bonus_effects": "Can detect planar instabilities within 50m radius"
+        },
+        "Elf": {
+          "affinity_level": "Medium",
+          "learning_difficulty": "Moderate",
+          "natural_talent": false,
+          "bonus_effects": null
+        },
+        "Dwarf": {
+          "affinity_level": "Medium",
+          "learning_difficulty": "Hard",
+          "natural_talent": false,
+          "bonus_effects": null
+        },
+        "Mycora": {
+          "affinity_level": "Low",
+          "learning_difficulty": "Very Hard",
+          "natural_talent": false,
+          "bonus_effects": null
+        },
+        "Halfling": {
+          "affinity_level": "Low",
+          "learning_difficulty": "Hard",
+          "natural_talent": false,
+          "bonus_effects": null
+        },
+        "Orc": {
+          "affinity_level": "Low",
+          "learning_difficulty": "Very Hard",
+          "natural_talent": false,
+          "bonus_effects": null
+        },
+        "Cinderspawn": {
+          "affinity_level": "Low",
+          "learning_difficulty": "Very Hard",
+          "natural_talent": false,
+          "bonus_effects": null
+        }
+      },
+      "class_affinities": {
+        "Mage": {
+          "affinity_level": "Very High",
+          "learning_difficulty": "Moderate",
+          "required_stats": {
+            "INT": 14,
+            "WIS": 10
+          }
+        },
+        "Cleric": {
+          "affinity_level": "Medium",
+          "learning_difficulty": "Hard",
+          "required_stats": {
+            "WIS": 14,
+            "INT": 10
+          }
+        },
+        "Wanderer": {
+          "affinity_level": "Medium",
+          "learning_difficulty": "Hard",
+          "required_stats": {
+            "INT": 12,
+            "WIS": 12
+          }
+        },
+        "Ranger": {
+          "affinity_level": "Low",
+          "learning_difficulty": "Very Hard",
+          "required_stats": {
+            "WIS": 14,
+            "INT": 12
+          }
+        },
+        "Rogue": {
+          "affinity_level": "Low",
+          "learning_difficulty": "Very Hard",
+          "required_stats": {
+            "INT": 14,
+            "DEX": 14
+          }
+        },
+        "Warrior": {
+          "affinity_level": "Very Low",
+          "learning_difficulty": "Extremely Hard",
+          "required_stats": {
+            "INT": 14,
+            "CON": 14,
+            "WIS": 10
+          }
+        }
+      },
+      "spells": {
+        "stability_field": {
+          "id": "stability_field",
+          "name": "Stability Field",
+          "description": "Creates a field where planar fluctuations are suppressed, providing safety during Resonance Events.",
+          "mana_cost": 30,
+          "casting_time": "30 seconds",
+          "range": "20m radius",
+          "target": "area",
+          "effects": [
+            {
+              "target_type": "target",
+              "effect_type": "stat_modification",
+              "stat_affected": "Planar Stability",
+              "value": 15.0,
+              "duration": 30,
+              "description": "Maintains the current plane's physics and prevents planar bleeding"
+            },
+            {
+              "target_type": "target",
+              "effect_type": "stat_modification",
+              "stat_affected": "Defense",
+              "value": 3.0,
+              "duration": 30,
+              "description": "The stability field provides minor protection against normal attacks as well"
+            }
+          ],
+          "level": 3,
+          "components": ["gesture", "focus", "planar components"],
+          "tags": ["protection", "planar", "area effect"]
+        },
+        "reality_tether": {
+          "id": "reality_tether",
+          "name": "Reality Tether",
+          "description": "Anchors a person or object to their home plane, protecting them from planar shifts and dimensional effects.",
+          "mana_cost": 25,
+          "casting_time": "1 action",
+          "range": "touch",
+          "target": "single",
+          "effects": [
+            {
+              "target_type": "target",
+              "effect_type": "stat_modification",
+              "stat_affected": "Planar Resonance",
+              "value": -10.0,
+              "duration": 60,
+              "description": "Reduces susceptibility to planar effects and dimensional displacement"
+            }
+          ],
+          "level": 2,
+          "components": ["touch", "focus", "crystalline dust"],
+          "tags": ["protection", "planar", "anchoring"]
+        },
+        "planar_sight": {
+          "id": "planar_sight",
+          "name": "Planar Sight",
+          "description": "Grants the ability to see planar boundaries, resonance patterns, and entities from other planes that might otherwise be invisible.",
+          "mana_cost": 20,
+          "casting_time": "1 action",
+          "range": "self",
+          "target": "self",
+          "effects": [
+            {
+              "target_type": "caster",
+              "effect_type": "stat_modification",
+              "stat_affected": "Perception",
+              "value": 10.0,
+              "duration": 15,
+              "description": "Allows visibility of planar boundaries and cross-planar entities"
+            }
+          ],
+          "level": 2,
+          "components": ["gesture", "prismatic lens"],
+          "tags": ["divination", "planar", "perception"]
+        },
+        "boundary_distortion": {
+          "id": "boundary_distortion",
+          "name": "Boundary Distortion",
+          "description": "Temporarily weakens planar boundaries in a small area, allowing for partial merging of planes or extraction of planar energy.",
+          "mana_cost": 35,
+          "casting_time": "1 minute",
+          "range": "10m radius",
+          "target": "area",
+          "effects": [
+            {
+              "target_type": "target",
+              "effect_type": "stat_modification",
+              "stat_affected": "Planar Stability",
+              "value": -20.0,
+              "duration": 10,
+              "description": "Creates a controlled destabilization of planar boundaries"
+            }
+          ],
+          "level": 4,
+          "components": ["gesture", "focus", "components from target plane", "ritual circle"],
+          "tags": ["planar", "manipulation", "advanced"]
+        },
+        "resonance_shield": {
+          "id": "resonance_shield",
+          "name": "Resonance Shield",
+          "description": "Creates a personal barrier that absorbs planar energy and harmful resonance effects.",
+          "mana_cost": 25,
+          "casting_time": "1 action",
+          "range": "self",
+          "target": "self",
+          "effects": [
+            {
+              "target_type": "caster",
+              "effect_type": "stat_modification",
+              "stat_affected": "Planar Resistance",
+              "value": 15.0,
+              "duration": 20,
+              "description": "Provides immunity to harmful effects from planar resonance and instability"
+            },
+            {
+              "target_type": "caster",
+              "effect_type": "stat_modification",
+              "stat_affected": "Magic Resistance",
+              "value": 5.0,
+              "duration": 20,
+              "description": "The shield also provides some protection against conventional magic"
+            }
+          ],
+          "level": 3,
+          "components": ["gesture", "focus", "resonant crystal"],
+          "tags": ["protection", "planar", "defensive"]
+        },
+        "planar_transit": {
+          "id": "planar_transit",
+          "name": "Planar Transit",
+          "description": "Creates a stable corridor between planes, allowing safe passage for a short time. Only works between planes currently in resonance.",
+          "mana_cost": 50,
+          "casting_time": "5 minutes",
+          "range": "5m radius",
+          "target": "area",
+          "effects": [
+            {
+              "target_type": "target",
+              "effect_type": "status_effect",
+              "status_effect": "Planar Transit",
+              "duration": 10,
+              "description": "Creates a controlled passage between planes in resonance"
+            }
+          ],
+          "level": 5,
+          "components": ["gesture", "focus", "planar essence", "ritual circle", "resonance map"],
+          "tags": ["planar", "travel", "advanced", "ritual"]
+        }
+      }
+    },
+    "echo_binding": {
+      "id": "echo_binding",
+      "name": "Echo Binding",
+      "description": "The art of capturing 'echoes' - residual effects from other planes that linger after Resonance Events - and binding them to objects or people to grant temporary planar properties.",
+      "origin": "Echo Binding emerged from the opportunistic practices of scavengers who frequented areas after Resonance Events. They discovered that certain residual energies could be captured and preserved for later use, eventually developing sophisticated techniques to harness these 'echoes'.",
+      "limitations": "Requires fresh echoes from recent Resonance Events. Prolonged use can cause 'planar bleeding' - uncontrolled manifestations of other planes. The practice is somewhat unstable; effects can be unpredictable if not properly controlled.",
+      "practitioners": "Popular among independent magical practitioners, merchants specializing in unique magical items, and adventurers who need versatile magical effects without formal training. The Mercantile Chord employs many Echo Binders to create valuable cross-planar goods.",
+      "cultural_significance": "Viewed with mixed opinions across cultures. Some see it as a practical adaptation to the post-Shattering world, while others consider it dangerous tampering with forces that should be left alone. There's a growing black market for illegal echo harvesting, particularly from dangerous or forbidden planes.",
+      "racial_affinities": {
+        "Human": {
+          "affinity_level": "High",
+          "learning_difficulty": "Moderate",
+          "natural_talent": true,
+          "bonus_effects": "Can identify echo properties 25% more accurately than other races"
+        },
+        "Halfling": {
+          "affinity_level": "High",
+          "learning_difficulty": "Moderate",
+          "natural_talent": true,
+          "bonus_effects": "Echo bindings last 15% longer when created by Halflings"
+        },
+        "Maelstri": {
+          "affinity_level": "Very High",
+          "learning_difficulty": "Easy",
+          "natural_talent": true,
+          "bonus_effects": "Can naturally sense echoes within 30m radius"
+        },
+        "Elf": {
+          "affinity_level": "Medium",
+          "learning_difficulty": "Moderate",
+          "natural_talent": false,
+          "bonus_effects": null
+        },
+        "Prismal": {
+          "affinity_level": "Medium",
+          "learning_difficulty": "Moderate",
+          "natural_talent": false,
+          "bonus_effects": null
+        },
+        "Dwarf": {
+          "affinity_level": "Medium",
+          "learning_difficulty": "Hard",
+          "natural_talent": false,
+          "bonus_effects": null
+        },
+        "Mycora": {
+          "affinity_level": "Low",
+          "learning_difficulty": "Hard",
+          "natural_talent": false,
+          "bonus_effects": null
+        },
+        "Orc": {
+          "affinity_level": "Low",
+          "learning_difficulty": "Hard",
+          "natural_talent": false,
+          "bonus_effects": null
+        },
+        "Cinderspawn": {
+          "affinity_level": "Low",
+          "learning_difficulty": "Very Hard",
+          "natural_talent": false,
+          "bonus_effects": null
+        }
+      },
+      "class_affinities": {
+        "Rogue": {
+          "affinity_level": "Very High",
+          "learning_difficulty": "Easy",
+          "required_stats": {
+            "DEX": 12,
+            "INT": 10
+          }
+        },
+        "Mage": {
+          "affinity_level": "High",
+          "learning_difficulty": "Moderate",
+          "required_stats": {
+            "INT": 12,
+            "DEX": 10
+          }
+        },
+        "Wanderer": {
+          "affinity_level": "High",
+          "learning_difficulty": "Moderate",
+          "required_stats": {
+            "DEX": 12,
+            "INT": 10
+          }
+        },
+        "Ranger": {
+          "affinity_level": "Medium",
+          "learning_difficulty": "Hard",
+          "required_stats": {
+            "DEX": 12,
+            "WIS": 12
+          }
+        },
+        "Cleric": {
+          "affinity_level": "Low",
+          "learning_difficulty": "Very Hard",
+          "required_stats": {
+            "WIS": 14,
+            "INT": 12
+          }
+        },
+        "Warrior": {
+          "affinity_level": "Low",
+          "learning_difficulty": "Very Hard",
+          "required_stats": {
+            "STR": 14,
+            "DEX": 12
+          }
+        }
+      },
+      "spells": {
+        "echo_capture": {
+          "id": "echo_capture",
+          "name": "Echo Capture",
+          "description": "Captures a lingering planar echo and stores it temporarily for later use.",
+          "mana_cost": 15,
+          "casting_time": "30 seconds",
+          "range": "5m",
+          "target": "area",
+          "effects": [
+            {
+              "target_type": "target",
+              "effect_type": "status_effect",
+              "status_effect": "Echo Contained",
+              "duration": 60,
+              "description": "Captures a planar echo for later binding"
+            }
+          ],
+          "level": 1,
+          "components": ["gesture", "echo vessel", "focusing crystal"],
+          "tags": ["utility", "planar", "gathering"]
+        },
+        "bind_echo": {
+          "id": "bind_echo",
+          "name": "Bind Echo",
+          "description": "Binds a captured echo to an object or person, transferring its planar properties.",
+          "mana_cost": 20,
+          "casting_time": "1 minute",
+          "range": "touch",
+          "target": "single",
+          "effects": [
+            {
+              "target_type": "target",
+              "effect_type": "stat_modification",
+              "stat_affected": "Planar Essence",
+              "value": 10.0,
+              "duration": 120,
+              "description": "Transfers captured echo properties to the target"
+            }
+          ],
+          "level": 2,
+          "components": ["gesture", "captured echo", "binding agent"],
+          "tags": ["enchantment", "planar", "binding"]
+        },
+        "echo_sight": {
+          "id": "echo_sight",
+          "name": "Echo Sight",
+          "description": "Grants the ability to see lingering echoes and assess their properties and potential uses.",
+          "mana_cost": 10,
+          "casting_time": "1 action",
+          "range": "self",
+          "target": "self",
+          "effects": [
+            {
+              "target_type": "caster",
+              "effect_type": "stat_modification",
+              "stat_affected": "Echo Perception",
+              "value": 15.0,
+              "duration": 30,
+              "description": "Allows visibility of planar echoes and understanding of their properties"
+            }
+          ],
+          "level": 1,
+          "components": ["gesture", "residue sample"],
+          "tags": ["divination", "planar", "perception"]
+        },
+        "weapon_echo": {
+          "id": "weapon_echo",
+          "name": "Weapon Echo",
+          "description": "Binds a combat-oriented echo to a weapon, granting it planar offensive properties.",
+          "mana_cost": 25,
+          "casting_time": "1 minute",
+          "range": "touch",
+          "target": "single",
+          "effects": [
+            {
+              "target_type": "target",
+              "effect_type": "stat_modification",
+              "stat_affected": "Damage",
+              "value": 6.0,
+              "duration": 30,
+              "description": "Adds planar damage to weapon attacks"
+            },
+            {
+              "target_type": "target",
+              "effect_type": "status_effect",
+              "status_effect": "Planar Disruption",
+              "duration": 3,
+              "description": "Weapon attacks can disrupt planar abilities of targets"
+            }
+          ],
+          "level": 3,
+          "components": ["gesture", "combat echo", "binding agent", "weapon"],
+          "tags": ["combat", "enhancement", "planar"]
+        },
+        "echo_ward": {
+          "id": "echo_ward",
+          "name": "Echo Ward",
+          "description": "Creates a protective barrier using protective echoes, shielding against both physical and planar threats.",
+          "mana_cost": 30,
+          "casting_time": "1 minute",
+          "range": "touch",
+          "target": "single",
+          "effects": [
+            {
+              "target_type": "target",
+              "effect_type": "stat_modification",
+              "stat_affected": "Defense",
+              "value": 7.0,
+              "duration": 60,
+              "description": "Protects against physical attacks"
+            },
+            {
+              "target_type": "target",
+              "effect_type": "stat_modification",
+              "stat_affected": "Planar Resistance",
+              "value": 12.0,
+              "duration": 60,
+              "description": "Protects against planar effects and energies"
+            }
+          ],
+          "level": 3,
+          "components": ["gesture", "protective echo", "binding circle"],
+          "tags": ["protection", "defensive", "planar"]
+        },
+        "echo_mimicry": {
+          "id": "echo_mimicry",
+          "name": "Echo Mimicry",
+          "description": "Binds an entity echo to the caster, temporarily granting traits, abilities, or appearance of creatures from other planes.",
+          "mana_cost": 40,
+          "casting_time": "2 minutes",
+          "range": "self",
+          "target": "self",
+          "effects": [
+            {
+              "target_type": "caster",
+              "effect_type": "stat_modification",
+              "stat_affected": "Varied",
+              "value": 8.0,
+              "duration": 30,
+              "description": "Grants traits and abilities based on the specific echo bound"
+            },
+            {
+              "target_type": "caster",
+              "effect_type": "status_effect",
+              "status_effect": "Echo Transformation",
+              "duration": 30,
+              "description": "Physically transforms aspects of the caster to match the echo source"
+            }
+          ],
+          "level": 4,
+          "components": ["gesture", "entity echo", "binding agent", "personal focus"],
+          "tags": ["transformation", "planar", "mimicry"]
+        }
+      }
+    },
+    "facet_magic": {
+      "id": "facet_magic",
+      "name": "Facet Magic",
+      "description": "A precise form of magic developed by the Crystalline Consortium that uses geometric crystals to channel and focus magical energies with mathematical precision.",
+      "origin": "Facet Magic was developed in the Crystalline plane after The Shattering. The Prismals, with their natural crystalline bodies, discovered they could channel magical energies through precisely cut geometric forms, leading to a highly structured and mathematical approach to spellcasting.",
+      "limitations": "Requires precisely cut crystals as foci, with different shapes producing different effects. Demands mathematical precision and calculation. Less effective in chaotic environments or when crystals are damaged. Requires significant preparation and is difficult to use spontaneously.",
+      "practitioners": "Primarily used by members of the Crystalline Consortium, especially Prismals and mathematically-inclined humans and dwarves. Requires formal education in crystalline geometry and facet theory, making it inaccessible to those without proper training.",
+      "cultural_significance": "Facet Magic is seen as the most 'civilized' and scholarly form of magic within the Crystalline Consortium. Practitioners are viewed as elite intellectuals, and the precision of one's faceted crystals is a status symbol. Those who master this art often receive the honorific 'Facet' before their name.",
+      "racial_affinities": {
+        "Prismal": {
+          "affinity_level": "Very High",
+          "learning_difficulty": "Very Easy",
+          "natural_talent": true,
+          "bonus_effects": "20% reduced mana cost for all Facet Magic spells"
+        },
+        "Dwarf": {
+          "affinity_level": "High",
+          "learning_difficulty": "Moderate",
+          "natural_talent": true,
+          "bonus_effects": "Facet crystals crafted by Dwarves last 30% longer before needing recalibration"
+        },
+        "Human": {
+          "affinity_level": "Medium",
+          "learning_difficulty": "Hard",
+          "natural_talent": false,
+          "bonus_effects": null
+        },
+        "Elf": {
+          "affinity_level": "Medium",
+          "learning_difficulty": "Hard",
+          "natural_talent": false,
+          "bonus_effects": null
+        },
+        "Halfling": {
+          "affinity_level": "Low",
+          "learning_difficulty": "Very Hard",
+          "natural_talent": false,
+          "bonus_effects": null
+        },
+        "Mycora": {
+          "affinity_level": "Low",
+          "learning_difficulty": "Very Hard",
+          "natural_talent": false,
+          "bonus_effects": null
+        },
+        "Orc": {
+          "affinity_level": "Very Low",
+          "learning_difficulty": "Extremely Hard",
+          "natural_talent": false,
+          "bonus_effects": null
+        },
+        "Maelstri": {
+          "affinity_level": "Very Low",
+          "learning_difficulty": "Extremely Hard",
+          "natural_talent": false,
+          "bonus_effects": null
+        },
+        "Cinderspawn": {
+          "affinity_level": "Very Low",
+          "learning_difficulty": "Extremely Hard",
+          "natural_talent": false,
+          "bonus_effects": null
+        }
+      },
+      "class_affinities": {
+        "Mage": {
+          "affinity_level": "Very High",
+          "learning_difficulty": "Moderate",
+          "required_stats": {
+            "INT": 14
+          }
+        },
+        "Cleric": {
+          "affinity_level": "Medium",
+          "learning_difficulty": "Hard",
+          "required_stats": {
+            "INT": 12,
+            "WIS": 12
+          }
+        },
+        "Rogue": {
+          "affinity_level": "Medium",
+          "learning_difficulty": "Hard",
+          "required_stats": {
+            "INT": 12,
+            "DEX": 12
+          }
+        },
+        "Warrior": {
+          "affinity_level": "Low",
+          "learning_difficulty": "Very Hard",
+          "required_stats": {
+            "INT": 14,
+            "STR": 12
+          }
+        },
+        "Ranger": {
+          "affinity_level": "Low",
+          "learning_difficulty": "Very Hard",
+          "required_stats": {
+            "INT": 14,
+            "DEX": 12
+          }
+        },
+        "Wanderer": {
+          "affinity_level": "Low",
+          "learning_difficulty": "Very Hard",
+          "required_stats": {
+            "INT": 14
+          }
+        }
+      },
+      "spells": {
+        "prismatic_bolt": {
+          "id": "prismatic_bolt",
+          "name": "Prismatic Bolt",
+          "description": "Creates a beam of concentrated light energy that strikes with geometric precision.",
+          "mana_cost": 15,
+          "casting_time": "1 action",
+          "range": "30m",
+          "target": "single",
+          "effects": [
+            {
+              "target_type": "target",
+              "effect_type": "damage",
+              "value": 25.0,
+              "dice_notation": "3d8+4",
+              "description": "Pure light energy strikes the target with unerring accuracy"
+            }
+          ],
+          "level": 2,
+          "components": ["octahedral crystal", "gesture", "calculation"],
+          "tags": ["attack", "precision", "light"]
+        },
+        "crystalline_shield": {
+          "id": "crystalline_shield",
+          "name": "Crystalline Shield",
+          "description": "Forms a perfect geometric barrier of faceted energy that absorbs damage.",
+          "mana_cost": 20,
+          "casting_time": "1 action",
+          "range": "self",
+          "target": "self",
+          "effects": [
+            {
+              "target_type": "caster",
+              "effect_type": "stat_modification",
+              "stat_affected": "Defense",
+              "value": 8.0,
+              "duration": 10,
+              "description": "Creates a perfectly calculated defensive barrier"
+            }
+          ],
+          "level": 2,
+          "components": ["cubic crystal", "gesture"],
+          "tags": ["protection", "defensive", "barrier"]
+        },
+        "computational_enhancement": {
+          "id": "computational_enhancement",
+          "name": "Computational Enhancement",
+          "description": "Enhances mental faculties through crystalline resonance with the brain's natural patterns.",
+          "mana_cost": 25,
+          "casting_time": "1 minute",
+          "range": "touch",
+          "target": "single",
+          "effects": [
+            {
+              "target_type": "target",
+              "effect_type": "stat_modification",
+              "stat_affected": "INT",
+              "value": 4.0,
+              "duration": 30,
+              "description": "Temporarily boosts intellectual capacity and computational ability"
+            }
+          ],
+          "level": 3,
+          "components": ["dodecahedral crystal", "mental calculation", "touch"],
+          "tags": ["enhancement", "mental", "intellect"]
+        },
+        "perfect_analysis": {
+          "id": "perfect_analysis",
+          "name": "Perfect Analysis",
+          "description": "Uses crystalline resonance to perfectly analyze an object, creature, or phenomenon.",
+          "mana_cost": 15,
+          "casting_time": "1 minute",
+          "range": "5m",
+          "target": "single",
+          "effects": [
+            {
+              "target_type": "caster",
+              "effect_type": "stat_modification",
+              "stat_affected": "Knowledge",
+              "value": 20.0,
+              "duration": 5,
+              "description": "Grants precise information about the target's composition, properties, and nature"
+            }
+          ],
+          "level": 2,
+          "components": ["tetrahedral crystal", "concentration", "calculation"],
+          "tags": ["divination", "knowledge", "analysis"]
+        },
+        "geometric_restructuring": {
+          "id": "geometric_restructuring",
+          "name": "Geometric Restructuring",
+          "description": "Manipulates the physical structure of non-living matter by precisely realigning its internal geometry.",
+          "mana_cost": 30,
+          "casting_time": "5 minutes",
+          "range": "touch",
+          "target": "single",
+          "effects": [
+            {
+              "target_type": "target",
+              "effect_type": "healing",
+              "value": 40.0,
+              "duration": 0,
+              "description": "Repairs and restructures non-living matter according to precise calculations"
+            }
+          ],
+          "level": 3,
+          "components": ["icosahedral crystal", "geometric diagram", "touch", "calculation"],
+          "tags": ["transmutation", "repair", "crafting"]
+        },
+        "crystal_prison": {
+          "id": "crystal_prison",
+          "name": "Crystal Prison",
+          "description": "Encases the target in a perfect crystalline structure that restricts movement.",
+          "mana_cost": 35,
+          "casting_time": "1 action",
+          "range": "15m",
+          "target": "single",
+          "effects": [
+            {
+              "target_type": "target",
+              "effect_type": "status_effect",
+              "status_effect": "Restrained",
+              "duration": 5,
+              "description": "Target is encased in a precisely calculated crystalline structure"
+            },
+            {
+              "target_type": "target",
+              "effect_type": "stat_modification",
+              "stat_affected": "DEX",
+              "value": -5.0,
+              "duration": 5,
+              "description": "Crystal severely restricts movement"
+            }
+          ],
+          "level": 4,
+          "components": ["cubic crystal", "gesture", "calculation"],
+          "tags": ["control", "restraint", "crystal"]
+        }
+      }
+    },
+    "ash_walking": {
+      "id": "ash_walking",
+      "name": "Ash Walking",
+      "description": "A unique form of magic from the Ashen plane that allows practitioners to temporarily transfer their consciousness into the Ashen plane for communication, espionage, and retrieving lost knowledge.",
+      "origin": "Ash Walking developed among the nomadic societies of the Ashen plane as a means of maintaining communication across vast distances. After The Shattering, the Cinderspawn refined these techniques into a formal magical practice that allows consciousness to slip between the boundaries of physical existence.",
+      "limitations": "Extended use causes physical body to gradually turn to ash. Risk of becoming lost in the Ashen plane increases with duration. Requires absolute concentration, making it vulnerable to interruption. Cannot interact physically with the material world while consciousness is transferred.",
+      "practitioners": "Primarily practiced by members of the Ashen Covenant, especially Cinderspawn who have a natural affinity for the practice. Some secretive groups like assassins guilds have adopted modified versions for espionage purposes.",
+      "cultural_significance": "Among the Ashen Covenant, Ash Walking is considered sacred, used in important ceremonies to commune with ancestors. Outside these communities, it is often viewed with suspicion or fear, associated with death magic and necromancy, though this is a misunderstanding of its true nature.",
+      "racial_affinities": {
+        "Cinderspawn": {
+          "affinity_level": "Very High",
+          "learning_difficulty": "Very Easy",
+          "natural_talent": true,
+          "bonus_effects": "Can maintain Ash Walking 50% longer without physical degradation"
+        },
+        "Orc": {
+          "affinity_level": "Medium",
+          "learning_difficulty": "Hard",
+          "natural_talent": true,
+          "bonus_effects": "15% increased perception while Ash Walking"
+        },
+        "Human": {
+          "affinity_level": "Medium",
+          "learning_difficulty": "Very Hard",
+          "natural_talent": false,
+          "bonus_effects": null
+        },
+        "Elf": {
+          "affinity_level": "Low",
+          "learning_difficulty": "Very Hard",
+          "natural_talent": false,
+          "bonus_effects": null
+        },
+        "Dwarf": {
+          "affinity_level": "Very Low",
+          "learning_difficulty": "Extremely Hard",
+          "natural_talent": false,
+          "bonus_effects": null
+        },
+        "Halfling": {
+          "affinity_level": "Low",
+          "learning_difficulty": "Very Hard",
+          "natural_talent": false,
+          "bonus_effects": null
+        },
+        "Mycora": {
+          "affinity_level": "Very Low",
+          "learning_difficulty": "Extremely Hard",
+          "natural_talent": false,
+          "bonus_effects": null
+        },
+        "Prismal": {
+          "affinity_level": "Very Low",
+          "learning_difficulty": "Extremely Hard",
+          "natural_talent": false,
+          "bonus_effects": null
+        },
+        "Maelstri": {
+          "affinity_level": "Very Low",
+          "learning_difficulty": "Extremely Hard",
+          "natural_talent": false,
+          "bonus_effects": null
+        }
+      },
+      "class_affinities": {
+        "Rogue": {
+          "affinity_level": "Very High",
+          "learning_difficulty": "Moderate",
+          "required_stats": {
+            "DEX": 12,
+            "WIS": 12
+          }
+        },
+        "Mage": {
+          "affinity_level": "High",
+          "learning_difficulty": "Hard",
+          "required_stats": {
+            "INT": 14,
+            "WIS": 12
+          }
+        },
+        "Wanderer": {
+          "affinity_level": "Medium",
+          "learning_difficulty": "Hard",
+          "required_stats": {
+            "WIS": 14
+          }
+        },
+        "Cleric": {
+          "affinity_level": "Medium",
+          "learning_difficulty": "Hard",
+          "required_stats": {
+            "WIS": 14,
+            "CON": 12
+          }
+        },
+        "Ranger": {
+          "affinity_level": "Low",
+          "learning_difficulty": "Very Hard",
+          "required_stats": {
+            "WIS": 14,
+            "DEX": 12
+          }
+        },
+        "Warrior": {
+          "affinity_level": "Very Low",
+          "learning_difficulty": "Extremely Hard",
+          "required_stats": {
+            "WIS": 14,
+            "CON": 14
+          }
+        }
+      },
+      "spells": {
+        "minor_projection": {
+          "id": "minor_projection",
+          "name": "Minor Projection",
+          "description": "Temporarily transfers a small portion of consciousness into the Ashen plane, allowing limited perception beyond physical barriers.",
+          "mana_cost": 10,
+          "casting_time": "30 seconds",
+          "range": "50m",
+          "target": "self",
+          "effects": [
+            {
+              "target_type": "caster",
+              "effect_type": "status_effect",
+              "status_effect": "Ash Perception",
+              "duration": 5,
+              "description": "Allows perception through solid objects within range"
+            }
+          ],
+          "level": 1,
+          "components": ["pinch of ash", "concentration"],
+          "tags": ["perception", "divination", "espionage"]
+        },
+        "ashen_transit": {
+          "id": "ashen_transit",
+          "name": "Ashen Transit",
+          "description": "Fully transfers consciousness into the Ashen plane, leaving the physical body in a trance-like state.",
+          "mana_cost": 25,
+          "casting_time": "1 minute",
+          "range": "self",
+          "target": "self",
+          "effects": [
+            {
+              "target_type": "caster",
+              "effect_type": "status_effect",
+              "status_effect": "Ash Walking",
+              "duration": 15,
+              "description": "Consciousness fully transfers to the Ashen plane"
+            },
+            {
+              "target_type": "caster",
+              "effect_type": "stat_modification",
+              "stat_affected": "Physical Defense",
+              "value": -10.0,
+              "duration": 15,
+              "description": "Physical body is vulnerable while consciousness is elsewhere"
+            }
+          ],
+          "level": 3,
+          "components": ["handful of ashes", "ritual circle", "concentration"],
+          "tags": ["transportation", "planar", "espionage"]
+        },
+        "whispers_of_ash": {
+          "id": "whispers_of_ash",
+          "name": "Whispers of Ash",
+          "description": "Allows communication through the Ashen plane to another individual, regardless of distance, so long as both parties have access to ash from the same source.",
+          "mana_cost": 15,
+          "casting_time": "1 minute",
+          "range": "unlimited",
+          "target": "single",
+          "effects": [
+            {
+              "target_type": "caster",
+              "effect_type": "status_effect",
+              "status_effect": "Ash Communication",
+              "duration": 10,
+              "description": "Establishes a mental link through the Ashen plane"
+            }
+          ],
+          "level": 2,
+          "components": ["shared ash source", "concentration"],
+          "tags": ["communication", "utility", "social"]
+        },
+        "ashen_knowledge": {
+          "id": "ashen_knowledge",
+          "name": "Ashen Knowledge",
+          "description": "Accesses the collective memory of the Ashen plane to retrieve lost or forgotten knowledge about a specific subject or location.",
+          "mana_cost": 30,
+          "casting_time": "10 minutes",
+          "range": "self",
+          "target": "self",
+          "effects": [
+            {
+              "target_type": "caster",
+              "effect_type": "stat_modification",
+              "stat_affected": "Knowledge",
+              "value": 15.0,
+              "duration": 1,
+              "description": "Grants specific knowledge about a subject from the collective memory of the Ashen plane"
+            }
+          ],
+          "level": 4,
+          "components": ["ash from location or subject", "ritual circle", "concentration", "meditation"],
+          "tags": ["knowledge", "divination", "history"]
+        },
+        "ash_veil": {
+          "id": "ash_veil",
+          "name": "Ash Veil",
+          "description": "Creates a cloud of animate ash that obscures vision and can be mentally controlled by the caster.",
+          "mana_cost": 20,
+          "casting_time": "1 action",
+          "range": "15m radius",
+          "target": "area",
+          "effects": [
+            {
+              "target_type": "target",
+              "effect_type": "stat_modification",
+              "stat_affected": "Perception",
+              "value": -10.0,
+              "duration": 5,
+              "description": "Reduces visibility and sensory perception in the affected area"
+            }
+          ],
+          "level": 2,
+          "components": ["handful of ashes", "gesture"],
+          "tags": ["concealment", "control", "defense"]
+        },
+        "ashen_body": {
+          "id": "ashen_body",
+          "name": "Ashen Body",
+          "description": "Temporarily transforms the caster's physical form into ash, allowing them to flow through small openings and resist physical damage.",
+          "mana_cost": 35,
+          "casting_time": "1 action",
+          "range": "self",
+          "target": "self",
+          "effects": [
+            {
+              "target_type": "caster",
+              "effect_type": "status_effect",
+              "status_effect": "Ashen Form",
+              "duration": 5,
+              "description": "Physical body becomes partially incorporeal ash"
+            },
+            {
+              "target_type": "caster",
+              "effect_type": "stat_modification",
+              "stat_affected": "Physical Resistance",
+              "value": 10.0,
+              "duration": 5,
+              "description": "Significantly reduces damage from physical attacks"
+            }
+          ],
+          "level": 4,
+          "components": ["ritual ashes", "gesture", "concentration"],
+          "tags": ["transformation", "defense", "movement"]
+        }
+      }
+    },
+    "divine_healing": {
+      "id": "divine_healing",
+      "name": "Divine Healing",
+      "description": "A sacred form of magic that channels divine energy to heal wounds, cure ailments, and restore life force. While healing effects can be achieved through other magical systems, Divine Healing is specifically focused on restoration and protection through spiritual connection.",
+      "origin": "Divine Healing predates The Shattering, stemming from the earliest spiritual practices across all planes. After the cosmic trauma of The Shattering, these healing traditions became even more vital, with practitioners developing formalized methods to channel divine energies from fragmented Luminaries.",
+      "limitations": "Requires genuine spiritual conviction or connection. Effectiveness is reduced when used for selfish purposes. Cannot typically restore life to the truly dead. More severe injuries require greater spiritual energy and preparation. Some ailments require specific divine connections or rituals.",
+      "practitioners": "Most commonly practiced by clerics and spiritual leaders, though anyone with sufficient faith and training can learn its basics. The most powerful practitioners are those who maintain a deep connection with the fragmented Luminaries or other divine entities.",
+      "cultural_significance": "Healing practitioners are highly respected in all societies, often serving both spiritual and medical roles in their communities. In many cultures, significant healing rituals mark important life transitions and community events. The ability to heal is seen as one of the most noble uses of magic.",
+      "racial_affinities": {
+        "Mycora": {
+          "affinity_level": "Very High",
+          "learning_difficulty": "Easy",
+          "natural_talent": true,
+          "bonus_effects": "Healing spells are 25% more effective when cast by Mycora"
+        },
+        "Human": {
+          "affinity_level": "High",
+          "learning_difficulty": "Moderate",
+          "natural_talent": true,
+          "bonus_effects": "Can sense injuries and ailments within 10m radius"
+        },
+        "Elf": {
+          "affinity_level": "High",
+          "learning_difficulty": "Moderate",
+          "natural_talent": true,
+          "bonus_effects": "Can maintain healing effects 20% longer than other races"
+        },
+        "Dwarf": {
+          "affinity_level": "Medium",
+          "learning_difficulty": "Moderate",
+          "natural_talent": false,
+          "bonus_effects": null
+        },
+        "Halfling": {
+          "affinity_level": "Medium",
+          "learning_difficulty": "Moderate",
+          "natural_talent": false,
+          "bonus_effects": null
+        },
+        "Orc": {
+          "affinity_level": "Medium",
+          "learning_difficulty": "Hard",
+          "natural_talent": false,
+          "bonus_effects": null
+        },
+        "Prismal": {
+          "affinity_level": "Low",
+          "learning_difficulty": "Very Hard",
+          "natural_talent": false,
+          "bonus_effects": null
+        },
+        "Cinderspawn": {
+          "affinity_level": "Low",
+          "learning_difficulty": "Very Hard",
+          "natural_talent": false,
+          "bonus_effects": null
+        },
+        "Maelstri": {
+          "affinity_level": "Low",
+          "learning_difficulty": "Very Hard",
+          "natural_talent": false,
+          "bonus_effects": null
+        }
+      },
+      "class_affinities": {
+        "Cleric": {
+          "affinity_level": "Very High",
+          "learning_difficulty": "Very Easy",
+          "required_stats": {
+            "WIS": 10
+          }
+        },
+        "Wanderer": {
+          "affinity_level": "Medium",
+          "learning_difficulty": "Moderate",
+          "required_stats": {
+            "WIS": 12,
+            "CHA": 10
+          }
+        },
+        "Ranger": {
+          "affinity_level": "Medium",
+          "learning_difficulty": "Hard",
+          "required_stats": {
+            "WIS": 12
+          }
+        },
+        "Mage": {
+          "affinity_level": "Low",
+          "learning_difficulty": "Very Hard",
+          "required_stats": {
+            "WIS": 14,
+            "INT": 12
+          }
+        },
+        "Warrior": {
+          "affinity_level": "Low",
+          "learning_difficulty": "Very Hard",
+          "required_stats": {
+            "WIS": 14,
+            "CHA": 12
+          }
+        },
+        "Rogue": {
+          "affinity_level": "Very Low",
+          "learning_difficulty": "Extremely Hard",
+          "required_stats": {
+            "WIS": 14,
+            "CHA": 12
+          }
+        }
+      },
+      "spells": {
+        "healing_touch": {
+          "id": "healing_touch",
+          "name": "Healing Touch",
+          "description": "Channels divine energy through the caster's hands to heal wounds and injuries.",
+          "mana_cost": 15,
+          "casting_time": "1 action",
+          "range": "touch",
+          "target": "single",
+          "effects": [
+            {
+              "target_type": "target",
+              "effect_type": "healing",
+              "value": 25.0,
+              "dice_notation": "2d8+10",
+              "duration": 0,
+              "description": "Immediate healing of physical wounds and injuries"
+            }
+          ],
+          "level": 2,
+          "components": ["touch", "prayer", "focus"],
+          "tags": ["healing", "restoration", "touch"]
+        },
+        "purify_body": {
+          "id": "purify_body",
+          "name": "Purify Body",
+          "description": "Cleanses the body of disease, poison, and other harmful substances through divine intervention.",
+          "mana_cost": 20,
+          "casting_time": "1 minute",
+          "range": "touch",
+          "target": "single",
+          "effects": [
+            {
+              "target_type": "target",
+              "effect_type": "status_effect",
+              "status_effect": "Purified",
+              "duration": 0,
+              "description": "Removes disease, poison, and other harmful conditions"
+            },
+            {
+              "target_type": "target",
+              "effect_type": "stat_modification",
+              "stat_affected": "CON",
+              "value": 2.0,
+              "duration": 10,
+              "description": "Temporarily enhances physical resilience"
+            }
+          ],
+          "level": 3,
+          "components": ["touch", "prayer", "holy water", "focus"],
+          "tags": ["purification", "restoration", "protection"]
+        },
+        "divine_restoration": {
+          "id": "divine_restoration",
+          "name": "Divine Restoration",
+          "description": "A powerful healing spell that mends severe injuries, regenerates damaged tissue, and restores vitality.",
+          "mana_cost": 35,
+          "casting_time": "5 minutes",
+          "range": "touch",
+          "target": "single",
+          "effects": [
+            {
+              "target_type": "target",
+              "effect_type": "healing",
+              "value": 50.0,
+              "dice_notation": "4d10+20",
+              "duration": 0,
+              "description": "Comprehensive healing of major wounds and injuries"
+            },
+            {
+              "target_type": "target",
+              "effect_type": "stat_modification",
+              "stat_affected": "HP Regeneration",
+              "value": 5.0,
+              "duration": 10,
+              "description": "Enhances natural healing for a period of time"
+            }
+          ],
+          "level": 4,
+          "components": ["touch", "ritual prayer", "holy symbol", "focus", "sacred herbs"],
+          "tags": ["healing", "restoration", "regeneration"]
+        },
+        "circle_of_healing": {
+          "id": "circle_of_healing",
+          "name": "Circle of Healing",
+          "description": "Creates a sacred circle that radiates healing energy to all within its bounds.",
+          "mana_cost": 30,
+          "casting_time": "1 minute",
+          "range": "10m radius",
+          "target": "area",
+          "effects": [
+            {
+              "target_type": "target",
+              "effect_type": "healing",
+              "value": 15.0,
+              "dice_notation": "2d6+5",
+              "duration": 0,
+              "description": "Immediate healing to all within the circle"
+            },
+            {
+              "target_type": "target",
+              "effect_type": "stat_modification",
+              "stat_affected": "HP Regeneration",
+              "value": 2.0,
+              "duration": 5,
+              "description": "Enhances natural healing while within the circle"
+            }
+          ],
+          "level": 3,
+          "components": ["ritual circle", "group prayer", "holy symbol"],
+          "tags": ["healing", "area effect", "support"]
+        },
+        "protective_blessing": {
+          "id": "protective_blessing",
+          "name": "Protective Blessing",
+          "description": "Invokes divine protection to shield the target from harm and enhance their resilience.",
+          "mana_cost": 25,
+          "casting_time": "1 action",
+          "range": "touch",
+          "target": "single",
+          "effects": [
+            {
+              "target_type": "target",
+              "effect_type": "stat_modification",
+              "stat_affected": "Defense",
+              "value": 5.0,
+              "duration": 15,
+              "description": "Divine energy creates a protective barrier against harm"
+            },
+            {
+              "target_type": "target",
+              "effect_type": "stat_modification",
+              "stat_affected": "Magic Resistance",
+              "value": 5.0,
+              "duration": 15,
+              "description": "Enhances resistance to harmful magical effects"
+            }
+          ],
+          "level": 3,
+          "components": ["touch", "prayer", "holy symbol"],
+          "tags": ["protection", "defensive", "blessing"]
+        },
+        "revitalize": {
+          "id": "revitalize",
+          "name": "Revitalize",
+          "description": "Restores energy and vitality to the exhausted, removing fatigue and granting renewed strength.",
+          "mana_cost": 20,
+          "casting_time": "1 minute",
+          "range": "touch",
+          "target": "single",
+          "effects": [
+            {
+              "target_type": "target",
+              "effect_type": "status_effect",
+              "status_effect": "Revitalized",
+              "duration": 60,
+              "description": "Removes exhaustion and fatigue"
+            },
+            {
+              "target_type": "target",
+              "effect_type": "stat_modification",
+              "stat_affected": "Stamina",
+              "value": 10.0,
+              "duration": 30,
+              "description": "Enhances physical endurance and energy"
+            }
+          ],
+          "level": 2,
+          "components": ["touch", "prayer", "holy water"],
+          "tags": ["restoration", "enhancement", "recovery"]
+        }
+      }
+    }
+  },
+  "metadata": {
+    "version": "1.0.0",
+    "description": "Magic system definitions for the RPG game world"
+  }
+}
