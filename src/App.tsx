@@ -20,6 +20,8 @@ import {
   X,
   ChevronLeft,
   ChevronRight,
+  Copy,
+  Download,
 } from 'lucide-react'
 import { useSettingsState } from './hooks/useSettingsState'
 import { useFileState } from './hooks/useFileState'
@@ -192,6 +194,84 @@ export const App: FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const timerIntervalRef = useRef<number | null>(null);
   const dropVideoRef = useRef<HTMLVideoElement>(null);
+
+  const getMessageTextContent = useCallback((index: number): string => {
+    const container = chatHistoryRef.current?.querySelectorAll('.message-container')[index] as HTMLElement | undefined;
+    if (!container) return '';
+    const markupEl = container.querySelector('.message-markup') as HTMLElement | null;
+    if (markupEl) {
+      return markupEl.innerText || '';
+    }
+    const contentEl = container.querySelector('.message-content') as HTMLElement | null;
+    return contentEl?.innerText || '';
+  }, []);
+
+  const handleCopyMessage = useCallback(async (index: number) => {
+    const text = getMessageTextContent(index);
+    try {
+      if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+      }
+    } catch (err) {
+      console.error('Failed to copy message:', err);
+    }
+  }, [getMessageTextContent]);
+
+  const handleDownloadMessage = useCallback(async (index: number) => {
+    const text = getMessageTextContent(index);
+    const defaultName = `message-${index + 1}.txt`;
+
+    // Try File System Access API first
+    const anyWindow = window as any;
+    if (anyWindow.showSaveFilePicker) {
+      try {
+        const opts: any = {
+          suggestedName: defaultName,
+          types: [
+            {
+              description: 'Text File',
+              accept: { 'text/plain': ['.txt'] },
+            },
+          ],
+        };
+        // Prefer starting in the last opened directory if available
+        if (rootDirectoryHandle) {
+          opts.startIn = rootDirectoryHandle as any;
+        }
+        const handle = await anyWindow.showSaveFilePicker(opts);
+        const writable = await handle.createWritable();
+        await writable.write(text);
+        await writable.close();
+        return;
+      } catch (err) {
+        // User might have cancelled; fall back to anchor method if different error
+        if ((err as Error)?.name === 'AbortError') return;
+        console.warn('showSaveFilePicker failed, falling back to anchor download:', err);
+      }
+    }
+
+    // Fallback: trigger a download via anchor
+    try {
+      const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = defaultName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Failed to download message:', err);
+    }
+  }, [getMessageTextContent, rootDirectoryHandle]);
 
   useEffect(() => {
     saveSettings(appSettings);
@@ -1021,6 +1101,12 @@ export const App: FC = () => {
                     )}
                   </div>
                   <div className="message-actions">
+                    <button onClick={() => handleCopyMessage(index)} title="Copy message to clipboard" className="message-action-button">
+                      <Copy size={14} />
+                    </button>
+                    <button onClick={() => handleDownloadMessage(index)} title="Download message as .txt" className="message-action-button">
+                      <Download size={14} />
+                    </button>
                     {msg.role === 'user' && (
                       <button onClick={() => handleRedo(index)} title="Redo query" className="message-action-button" disabled={isLoading || isEmbedding}>
                         <RefreshCw size={14} />
