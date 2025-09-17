@@ -83,6 +83,7 @@ export async function runDeepAnalysis(opts: {
   // Utility: wrapped generateContent with parallel execution, retry logic, and token accumulation
   let totalPrompt = 0;
   let totalCompletion = 0;
+  let llmCallCount = 0;
   const llm = async (content: string, retryCount = 0): Promise<any> => {
     const maxRetries = 10;
     const delays = [1000, 5000, 10000]; // 1s, 5s, 10s, then 10s repeatedly
@@ -91,6 +92,7 @@ export async function runDeepAnalysis(opts: {
       const resp = await generateContent(opts.model, opts.apiKey, [{ role: 'user', content }]);
       totalPrompt += resp.usage.promptTokens;
       totalCompletion += resp.usage.completionTokens;
+      llmCallCount += 1;
       return resp;
     } catch (error) {
       if (retryCount >= maxRetries) {
@@ -204,6 +206,25 @@ export async function runDeepAnalysis(opts: {
       } catch {}
     }
 
+    // Entity-aware boost: if the query contains capitalized entities, soft-boost chunks near their mentions
+    try {
+      const entityCandidates = Array.from(new Set((query.match(/\b([A-Z][A-Za-zÀ-ÖØ-öø-ÿ'\-]+(?:\s+[A-Z][A-Za-zÀ-ÖØ-öø-ÿ'\-]+)*)\b/g) || []).map(s => s.trim().toLowerCase())));
+      if (entityCandidates.length > 0 && typeof vectorStore.getEntityMentions === 'function') {
+        const boosted = ranked.map(r => {
+          const mentions = entityCandidates.flatMap(e => vectorStore.getEntityMentions(r.id, e));
+          let nearest = Infinity;
+          for (const m of mentions) {
+            const dist = Math.min(Math.abs(m - r.start), Math.abs(m - r.end));
+            if (dist < nearest) nearest = dist;
+          }
+          const bonus = Number.isFinite(nearest) ? Math.max(0, 1 - Math.min(nearest, 3000) / 3000) * 0.1 : 0; // up to +0.1
+          return { ...r, similarity: r.similarity + bonus } as SearchResult;
+        });
+        boosted.sort((a,b)=>b.similarity - a.similarity);
+        ranked = boosted;
+      }
+    } catch {}
+
     // Coverage-aware selection with near-duplicate clustering and span quotas
     const byDoc = new Map<string, SearchResult[]>();
     for (const r of ranked) {
@@ -230,8 +251,45 @@ export async function runDeepAnalysis(opts: {
       // Take the best from each cluster by similarity
       const clusterHeads = clusters.map(c => c.sort((a, b) => b.similarity - a.similarity)[0]);
       clusterHeads.sort((a, b) => b.similarity - a.similarity);
+
+      // Span-aware quota: distribute picks across early/middle/late windows
+      const span = vectorStore.getDocSpan ? vectorStore.getDocSpan(docId) : undefined;
       const quota = Math.min(maxPerDoc, Math.max(1, sec.maxBullets - 1));
-      selected.push(...clusterHeads.slice(0, quota));
+      if (span) {
+        const { minStart, maxEnd } = span;
+        const w1 = minStart + (maxEnd - minStart) / 3;
+        const w2 = minStart + 2 * (maxEnd - minStart) / 3;
+        const early: SearchResult[] = [];
+        const middle: SearchResult[] = [];
+        const late: SearchResult[] = [];
+        for (const ch of clusterHeads) {
+          if (ch.start <= w1) early.push(ch);
+          else if (ch.start <= w2) middle.push(ch);
+          else late.push(ch);
+        }
+        // Sort each bin by similarity
+        early.sort((a,b)=>b.similarity-a.similarity);
+        middle.sort((a,b)=>b.similarity-a.similarity);
+        late.sort((a,b)=>b.similarity-a.similarity);
+        const bins = [early, middle, late];
+        // Round-robin take from bins until quota
+        const picks: SearchResult[] = [];
+        let bi = 0;
+        while (picks.length < quota && (early.length || middle.length || late.length)) {
+          const bin = bins[bi % bins.length];
+          if (bin.length) picks.push(bin.shift()!);
+          bi++;
+          if (bi > 100) break; // safety
+        }
+        // If still short, fill from remaining clusterHeads
+        if (picks.length < quota) {
+          const remainingCH = clusterHeads.filter(h => !picks.some(p => p.start===h.start && p.end===h.end));
+          picks.push(...remainingCH.slice(0, quota - picks.length));
+        }
+        selected.push(...picks);
+      } else {
+        selected.push(...clusterHeads.slice(0, quota));
+      }
     }
 
     // If we still have room, fill with MMR globally
@@ -333,53 +391,77 @@ export async function runDeepAnalysis(opts: {
   // 4.5) Build citations index (unique ids) for composer; unionResults already computed above
   const uniqueDocIds = Array.from(new Set(unionResults.map(r => r.id)));
 
-  // 5) Relation-driven refinement (one pass): propose related questions to improve sufficiency
-  let refinedOnce = false;
+  // 5) Multi-iteration refinement with budgets
   const summarizeClaims = (claims: Claim[]) => claims.slice(0, 30).map((c, i) => `(${i + 1}) ${c.text} [ev: ${c.evidence.map(e => e.id).join(', ')}]`).join('\n');
-  const maybeRefine = async () => {
+  const startTime = Date.now();
+  const MAX_ITERATIONS = 2;
+  const MAX_ELAPSED_MS = 120000; // 2 minutes
+  const MAX_LLM_CALLS = 40; // conservative cap per job
+
+  let iterations = 0;
+  let sufficient = false;
+
+  const evaluateSufficiency = async () => {
     const specTxt = JSON.stringify(answerSpec);
     const claimsTxt = summarizeClaims(allClaims);
     const evalPrompt = `Given the Answer Spec and current claims, decide if this is sufficient to satisfy the user's intent.\nReturn strict JSON: {\n  \"sufficient\": boolean,\n  \"missing_dimensions\": string[],\n  \"proposed_questions\": string[] // up to 4 targeted questions to explore relations (X->Y) and close gaps\n}\nAnswer Spec:\n${specTxt}\nCurrent Claims (sample):\n${claimsTxt}`;
-    try {
-      const r = await llm(evalPrompt);
-      const dec = JSON.parse(r.text.replace(/^```json\n?|```$/g, '').trim()) as { sufficient: boolean; missing_dimensions: string[]; proposed_questions: string[] };
-      if (!dec.sufficient && !refinedOnce && dec.proposed_questions?.length) {
-        refinedOnce = true;
-        // Run targeted follow-ups IN PARALLEL
-        const followUps = dec.proposed_questions.slice(0, 3);
-        const followUpTasks = followUps.map(async (q) => {
-          try {
-            const emb = await embedSafe(q); // serialize due to single resolver design
-            const k = Math.min(40, Math.max(15, (opts.settings.numInitialCandidates || 20)));
-            const res = vectorStore.search(emb, k) || [];
-            // Optional rerank
-            let ranked = res;
-            if (opts.rerank) {
-              try { ranked = await rerankSafe(q, res.map(r => ({ chunk: r.chunk, id: r.id, start: r.start, end: r.end }))); } catch {}
-            }
-            const picked = ranked.slice(0, 10);
-            // Extract more claims for this targeted question
-            const ctx = picked.map((r, i) => `[#${i + 1}] id:${r.id} start:${r.start} end:${r.end}\n${r.chunk}`).join('\n\n');
-            const morePrompt = `Extract additional claims relevant to: \"${q}\". Return strict JSON array of claim objects as previously specified.\nContext:\n${ctx}`;
-            const more = await llm(morePrompt);
-            const json = more.text.replace(/^```json\n?|```$/g, '').trim();
-            const parsed = JSON.parse(json) as Claim[];
-            if (Array.isArray(parsed)) {
-              for (const c of parsed) allClaims.push(c);
-            }
-            // Merge picked into union (safely)
-            picked.forEach(r => unionMap.set(key(r), r));
-          } catch {}
-        });
-        await Promise.all(followUpTasks);
-        unionResults = Array.from(unionMap.values());
-      }
-    } catch {}
+    const r = await llm(evalPrompt);
+    const dec = JSON.parse(r.text.replace(/^```json\n?|```$/g, '').trim()) as { sufficient: boolean; missing_dimensions: string[]; proposed_questions: string[] };
+    return dec;
   };
-  await maybeRefine();
 
-  // 6) Sufficiency evaluation already executed in maybeRefine() for one pass; set level accordingly
-  let finalLevel: 2 | 3 = opts.level === 3 || refinedOnce ? 3 : 2;
+  while (iterations < MAX_ITERATIONS && (Date.now() - startTime) < MAX_ELAPSED_MS && llmCallCount < MAX_LLM_CALLS) {
+    let dec: { sufficient: boolean; missing_dimensions: string[]; proposed_questions: string[] };
+    try {
+      dec = await evaluateSufficiency();
+    } catch {
+      break; // if evaluator fails, stop iterating
+    }
+    if (dec.sufficient) { sufficient = true; break; }
+    if (!dec.proposed_questions || dec.proposed_questions.length === 0) break;
+
+    // Enhanced VoI scoring: prioritize questions that address missing dimensions and known entities
+    const knownEntities = new Set<string>();
+    for (const c of allClaims) (c.entities || []).forEach(e => knownEntities.add(e.toLowerCase()));
+    const followUpsRaw = dec.proposed_questions.slice(0, 6);
+    const scored = followUpsRaw.map(q => {
+      const ql = q.toLowerCase();
+      let dimScore = 0;
+      for (const d of (dec.missing_dimensions || [])) if (ql.includes(String(d).toLowerCase())) dimScore += 1;
+      let entScore = 0;
+      knownEntities.forEach(e => { if (e && ql.includes(e)) entScore += 1; });
+      const score = 2*dimScore + 1*entScore;
+      return { q, score };
+    }).sort((a,b)=>b.score - a.score).slice(0,3);
+    const followUps = scored.map(s => s.q);
+
+    // Execute follow-ups in parallel (LLM), coordinator ops serialized inside helpers
+    const followUpTasks = followUps.map(async (q) => {
+      try {
+        const emb = await embedSafe(q);
+        const k = Math.min(40, Math.max(15, (opts.settings.numInitialCandidates || 20)));
+        const res = vectorStore.search(emb, k) || [];
+        let ranked = res;
+        if (opts.rerank) {
+          try { ranked = await rerankSafe(q, res.map(r => ({ chunk: r.chunk, id: r.id, start: r.start, end: r.end }))); } catch {}
+        }
+        const picked = ranked.slice(0, 10);
+        const ctx = picked.map((r, i) => `[#${i + 1}] id:${r.id} start:${r.start} end:${r.end}\n${r.chunk}`).join('\n\n');
+        const morePrompt = `Extract additional claims relevant to: \"${q}\". Return strict JSON array of claim objects as previously specified.\nContext:\n${ctx}`;
+        const more = await llm(morePrompt);
+        const json = more.text.replace(/^```json\n?|```$/g, '').trim();
+        const parsed = JSON.parse(json) as Claim[];
+        if (Array.isArray(parsed)) { for (const c of parsed) allClaims.push(c); }
+        picked.forEach(r => unionMap.set(key(r), r));
+      } catch {}
+    });
+    await Promise.all(followUpTasks);
+    unionResults = Array.from(unionMap.values());
+    iterations += 1;
+  }
+
+  // 6) Final level based on whether we iterated
+  let finalLevel: 2 | 3 = opts.level === 3 || iterations > 0 ? 3 : 2;
 
   // 7) Compose final answer from claims and Answer Spec; include citation index to force id-based citations
   const claimsForComposer = JSON.stringify(allClaims.slice(0, 120));

@@ -58,6 +58,8 @@ export class VectorStore {
   }[] = [];
   // Holds the large, contextual parent chunks, indexed by document ID and then by index
   private parentChunkStore: Map<string, DocumentChunk[]> = new Map();
+  // Lightweight entity index: per docId -> entity -> { count, positions }
+  private entityIndex: Map<string, Map<string, { count: number; positions: number[] }>> = new Map();
 
   addChunkEmbedding(chunk: DocumentChunk, id: string, embedding: number[]) {
     // This is the legacy path for standard chunking. The parent chunk is the chunk itself.
@@ -91,6 +93,32 @@ export class VectorStore {
 
   addParentChunks(id: string, parentChunks: DocumentChunk[]) { // Use file ID
     this.parentChunkStore.set(id, parentChunks); // Use file ID
+    // Build a lightweight entity index for this doc
+    try {
+      const entityMap = new Map<string, { count: number; positions: number[] }>();
+      // Join text or scan each chunk to track positions
+      for (const pc of parentChunks) {
+        const text = pc.text;
+        // Simple heuristic: capitalized tokens or multi-word capitalized sequences
+        const entityRegex = /\b([A-Z][A-Za-zÀ-ÖØ-öø-ÿ'\-]+(?:\s+[A-Z][A-Za-zÀ-ÖØ-öø-ÿ'\-]+)*)\b/g;
+        let match: RegExpExecArray | null;
+        while ((match = entityRegex.exec(text)) !== null) {
+          const entity = match[1].trim();
+          // Filter trivial/common words
+          if (entity.length < 2) continue;
+          const lower = entity.toLowerCase();
+          if (['the', 'and', 'or', 'a', 'an', 'of', 'to', 'in', 'on', 'for', 'with', 'by'].includes(lower)) continue;
+          const pos = pc.start + (match.index || 0);
+          if (!entityMap.has(lower)) entityMap.set(lower, { count: 0, positions: [] });
+          const rec = entityMap.get(lower)!;
+          rec.count += 1;
+          rec.positions.push(pos);
+        }
+      }
+      this.entityIndex.set(id, entityMap);
+    } catch (e) {
+      console.warn('[VectorStore] Failed to build entity index for', id, e);
+    }
   }
 
   search(queryEmbedding: number[], topK = 20, docId?: string): { chunk: string; similarity: number, id: string, start: number, end: number }[] { // Use docId
@@ -171,6 +199,24 @@ export class VectorStore {
   // New helpers for span-aware selection
   getParentChunks(id: string): DocumentChunk[] | undefined {
     return this.parentChunkStore.get(id);
+  }
+
+  // Entity index APIs
+  getTopEntities(id: string, minCount = 2, max = 50): { entity: string; count: number }[] {
+    const m = this.entityIndex.get(id);
+    if (!m) return [];
+    return Array.from(m.entries())
+      .filter(([_, v]) => v.count >= minCount)
+      .map(([k, v]) => ({ entity: k, count: v.count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, max);
+  }
+
+  getEntityMentions(id: string, entity: string): number[] {
+    const m = this.entityIndex.get(id);
+    if (!m) return [];
+    const rec = m.get(entity.toLowerCase());
+    return rec ? rec.positions : [];
   }
 
   getDocSpan(id: string): { minStart: number; maxEnd: number } | undefined {
