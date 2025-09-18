@@ -262,6 +262,9 @@ export class VectorStore {
   clear() {
     this.childVectors = [];
     this.parentChunkStore.clear();
+    // Also clear related indexes to avoid stale metadata
+    this.entityIndex.clear();
+    this.structureIndex.clear();
   }
 
   // New helpers for span-aware selection
@@ -306,6 +309,9 @@ export class VectorStore {
   removeDocument(id: string) { // Use id
     this.childVectors = this.childVectors.filter(v => v.id !== id); // Use v.id
     this.parentChunkStore.delete(id); // Use id
+    // Ensure indexes are also cleared for this document
+    this.entityIndex.delete(id);
+    this.structureIndex.delete(id);
   }
 
   getEmbeddingCount(): number {

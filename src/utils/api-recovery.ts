@@ -108,6 +108,23 @@ class RecoveryStateManager {
 
 export const recoveryStateManager = new RecoveryStateManager();
 
+// Global model update signaling so long-running processes can react to UI choices
+export type ModelUpdate = { model: Model; apiKey?: string };
+const modelUpdateListeners: ((update: ModelUpdate) => void)[] = [];
+export function onGlobalModelUpdate(listener: (update: ModelUpdate) => void): () => void {
+  modelUpdateListeners.push(listener);
+  return () => {
+    const idx = modelUpdateListeners.indexOf(listener);
+    if (idx >= 0) modelUpdateListeners.splice(idx, 1);
+  };
+}
+export function emitGlobalModelUpdate(update: ModelUpdate): void {
+  // Call listeners defensively to avoid interference
+  for (const l of modelUpdateListeners.slice()) {
+    try { l(update); } catch (e) { console.warn('[Recovery] Model update listener error:', e); }
+  }
+}
+
 // API Error classification
 export function classifyError(error: Error | any): RecoveryState['lastError']['type'] {
   const errorMessage = error?.message?.toLowerCase() || '';
@@ -239,17 +256,28 @@ async function handleUserRecovery<T>(
                 resolve(retryResult);
                 break;
                 
-              case 'switch_model':
+              case 'switch_model': {
                 // Update the LLM call with new model/key and retry
                 console.log('[Recovery] Switching model and retrying...');
-                // The actual model switching should be handled by the caller
-                // This is just a signal to try again with updated parameters
+                try {
+                  if (decision.newModel || decision.newApiKey) {
+                    // Notify any in-flight orchestrators to update their model/apiKey
+                    emitGlobalModelUpdate({
+                      model: (decision.newModel || (state.preservedData?.model)) as Model,
+                      apiKey: decision.newApiKey
+                    });
+                  }
+                } catch (e) {
+                  console.warn('[Recovery] Failed to emit global model update:', e);
+                }
+                // This is just a signal to try again; caller will pick up new parameters via listener
                 state.failureCount = 0;
                 recoveryStateManager.saveState(recoveryId, state);
                 resolve(await callLLMWithRecovery(
                   recoveryId, stepName, llmCall, options, state.preservedData
                 ));
                 break;
+              }
                 
               case 'resume':
                 // Skip failed step and continue (if possible)

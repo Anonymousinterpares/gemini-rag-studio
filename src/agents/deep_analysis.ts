@@ -87,7 +87,8 @@ export async function runDeepAnalysis(opts: {
   const {
     callLLMWithRecovery,
     createRecoveryContext,
-    finalizeRecovery
+    finalizeRecovery,
+    onGlobalModelUpdate
   } = await import('../utils/api-recovery');
   
   // Create recovery context for this deep analysis session
@@ -135,6 +136,14 @@ export async function runDeepAnalysis(opts: {
     currentModel = newModel;
     if (newApiKey) currentApiKey = newApiKey;
   };
+
+  // Subscribe to global model updates from Recovery UI decisions
+  const unsubscribeModelUpdate = onGlobalModelUpdate(({ model, apiKey }) => {
+    try {
+      updateModelSettings(model as any, apiKey);
+      if (settings.isLoggingEnabled) console.info('[Deep Analysis] Model updated via Recovery UI:', model.provider, model.name);
+    } catch {}
+  });
   
   // Parallel execution helper with concurrency limit
   const executeInParallel = async <T, R>(items: T[], fn: (item: T) => Promise<R>, concurrency = 8): Promise<R[]> => {
@@ -478,7 +487,7 @@ export async function runDeepAnalysis(opts: {
     // Provide context with explicit IDs to the model
     const context = results.map((r, i) => `[#${i + 1}] id:${r.id} start:${r.start} end:${r.end}\n${r.chunk}`).join('\n\n');
     const summarizerPrompt = `Summarize evidence for section \"${sec.name}\". Produce up to ${sec.maxBullets} bullets. For each fact, cite using [Source: id] where id is the \"id\" of the numbered context item (e.g., [#3] -> [Source: id-of-item-3]). Do NOT cite by number. Context:\n${context}`;
-    const resp = await generateContent(model, apiKey, [{ role: 'user', content: summarizerPrompt }]);
+    const resp = await llm(summarizerPrompt, 'section_summarizer');
 
     // Post-process: if the model returned numeric citations, convert them to [Source: id]
     let text = resp.text;
@@ -509,10 +518,9 @@ export async function runDeepAnalysis(opts: {
     coverage[sec.name] = Math.min(1, uniqueIds / Math.max(2, sec.maxBullets));
   }
 
-  // 4) Claim extraction per induced dimension (investigator-style, structured)
+  // 4) Claim extraction per induced dimension (investigator-style, structured) with capped LLM concurrency
   const allClaims: Claim[] = [];
-  // PARALLEL claim extraction per section
-  const claimExtractionTasks = plan.sections.map(async (sec) => {
+  const extractClaimsForSection = async (sec: PlanSection): Promise<Claim[]> => {
     const picked = perSectionResults[sec.name] || [];
     if (picked.length === 0) return [] as Claim[];
     const context = picked.map((r, i) => `[#${i + 1}] id:${r.id} start:${r.start} end:${r.end}\n${r.chunk}`).join('\n\n');
@@ -526,8 +534,8 @@ export async function runDeepAnalysis(opts: {
       }
     } catch {}
     return [] as Claim[];
-  });
-  const claimsBySection = await Promise.all(claimExtractionTasks);
+  };
+  const claimsBySection = await executeInParallel(plan.sections, extractClaimsForSection, 3);
   for (const list of claimsBySection) allClaims.push(...list);
   
 
@@ -626,7 +634,8 @@ export async function runDeepAnalysis(opts: {
     const idx = parseInt(n, 10) - 1; const id = uniqueDocIds[idx]; return id ? `[Source: ${id}]` : `[Source: ${n}]`;
   });
 
-  // Clean up recovery state
+  // Clean up subscriptions and recovery state
+  try { unsubscribeModelUpdate(); } catch {}
   finalizeRecovery(recoveryId);
 
   // Logging (final level and basic stats)
