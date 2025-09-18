@@ -10,6 +10,11 @@ export interface DocumentChunk {
   parentChunkIndex?: number; // Optional: Link to parent for child chunks
 }
 
+export interface DocumentStructureMap {
+  chapters: { name: string; start: number; end: number }[];
+  paragraphs: { start: number; end: number }[];
+}
+
 export async function chunkDocument(text: string, chunkSize = 1000, overlap = 200): Promise<DocumentChunk[]> {
   console.log("Applying chunking strategy.");
 
@@ -60,6 +65,8 @@ export class VectorStore {
   private parentChunkStore: Map<string, DocumentChunk[]> = new Map();
   // Lightweight entity index: per docId -> entity -> { count, positions }
   private entityIndex: Map<string, Map<string, { count: number; positions: number[] }>> = new Map();
+  // Document structure (chapters/paragraphs)
+  private structureIndex: Map<string, DocumentStructureMap> = new Map();
 
   addChunkEmbedding(chunk: DocumentChunk, id: string, embedding: number[]) {
     // This is the legacy path for standard chunking. The parent chunk is the chunk itself.
@@ -118,6 +125,67 @@ export class VectorStore {
       this.entityIndex.set(id, entityMap);
     } catch (e) {
       console.warn('[VectorStore] Failed to build entity index for', id, e);
+    }
+
+    // Build document structure (chapters + paragraphs)
+    try {
+      const chapters: { name: string; start: number; end: number }[] = [];
+      const paragraphs: { start: number; end: number }[] = [];
+      if (parentChunks.length > 0) {
+        // Detect candidate chapters via heading-like lines
+        const headingRegex = /^(?:\s*(?:chapter|rozdzia[łl])\b[\s\.:\-]*[\wIVXLCDM\-\.\d]*)\s*$/i;
+        const numberedRegex = /^\s*(?:[IVXLCDM]+|\d+)\s*(?:\.|\-|:)\s*[\w\-\']{0,40}\s*$/;
+        const potential: { name: string; start: number }[] = [];
+        for (const pc of parentChunks) {
+          const lines = pc.text.split(/\r?\n/);
+          let offset = 0;
+          for (const line of lines) {
+            const absPos = pc.start + offset;
+            const trimmed = line.trim();
+            if (trimmed.length > 0 && trimmed.length < 80 && (headingRegex.test(trimmed) || numberedRegex.test(trimmed))) {
+              potential.push({ name: trimmed, start: absPos });
+            }
+            offset += line.length + 1; // +1 for newline
+          }
+        }
+        potential.sort((a,b)=>a.start-b.start);
+        const docStart = parentChunks[0].start;
+        const docEnd = parentChunks[parentChunks.length-1].end;
+        if (potential.length >= 3) {
+          for (let i=0;i<potential.length;i++) {
+            const start = potential[i].start;
+            const end = i+1<potential.length ? potential[i+1].start : docEnd;
+            const name = potential[i].name;
+            chapters.push({ name, start, end });
+          }
+        } else {
+          // Fallback to windowing (8 windows)
+          const windows = 8;
+          const span = docEnd - docStart;
+          for (let i=0;i<windows;i++) {
+            const start = docStart + Math.floor((i)*span/windows);
+            const end = i+1<windows ? docStart + Math.floor((i+1)*span/windows) : docEnd;
+            chapters.push({ name: `Section ${i+1}`, start, end });
+          }
+        }
+        // Paragraphs: split by blank lines within parent chunks
+        for (const pc of parentChunks) {
+          const txt = pc.text;
+          let idx = 0;
+          const parts = txt.split(/\n\s*\n+/);
+          for (const part of parts) {
+            const localStart = txt.indexOf(part, idx);
+            if (localStart === -1) { idx += part.length; continue; }
+            const absStart = pc.start + localStart;
+            const absEnd = absStart + part.length;
+            paragraphs.push({ start: absStart, end: absEnd });
+            idx = localStart + part.length;
+          }
+        }
+      }
+      this.structureIndex.set(id, { chapters, paragraphs });
+    } catch (e) {
+      console.warn('[VectorStore] Failed to build structure map for', id, e);
     }
   }
 
@@ -229,6 +297,10 @@ export class VectorStore {
       if (p.end > maxEnd) maxEnd = p.end;
     }
     return { minStart, maxEnd };
+  }
+
+  getStructure(id: string): DocumentStructureMap | undefined {
+    return this.structureIndex.get(id);
   }
 
   removeDocument(id: string) { // Use id

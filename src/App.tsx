@@ -43,6 +43,7 @@ import EmbeddingCacheModal from './components/EmbeddingCacheModal'
 import SummaryModal from './components/SummaryModal'
 import { summaryCache } from './cache/summaryCache'
 import { SpeechBubble, DigestParticles, FloatingArrows, RejectionBubble } from './components/Monster'
+import RecoveryDialogContainer from './components/RecoveryDialogContainer'
 import './style.css'
 import './progress-bar.css'
 import './Modal.css'
@@ -1253,6 +1254,19 @@ export const App: FC = () => {
           }
           addFilesAndEmbed(filesToEmbed);
           setIsExplorerOpen(false);
+        }}
+      />
+      
+      {/* API Recovery Dialog */}
+      <RecoveryDialogContainer
+        availableModels={modelsList}
+        currentModel={selectedModel}
+        apiKeys={apiKeys}
+        onModelChange={(model, apiKey) => {
+          setSelectedModel(model);
+          if (apiKey) {
+            setApiKeys(prev => ({ ...prev, [model.provider]: apiKey }));
+          }
         }}
       />
     </div>
