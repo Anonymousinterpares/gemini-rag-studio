@@ -64,24 +64,7 @@ export async function runDeepAnalysis(opts: {
   rerank?: (query: string, docs: { chunk: string; id: string; start: number; end: number }[]) => Promise<SearchResult[]>;
   level: 1 | 2 | 3;
 }): Promise<DeepAnalysisResult> {
-  const { query, vectorStore, model, apiKey, settings, embedQuery, level } = opts;
-
-  // 1) Quick horizon scan via pre-retrieval
-  const qEmb = await embedQuery(query);
-  const initialK = Math.min(30, Math.max(10, Math.floor((settings.numInitialCandidates || 20) * 1.5)));
-  const pre = vectorStore.search(qEmb, initialK);
-
-  // 2) Planner (simple baseline plan)
-  const plannerPrompt = `You are a planning agent. Given the user's query and the type of content available, propose a set of sections (3-8) to cover the topic thoroughly. Output JSON with {"sections":[{"name":"...","objective":"...","maxBullets":N}],"targetWordCount":number}. Query: ${query}`;
-  let plan: Plan = { sections: [{ name: 'Overview', objective: 'Overview of findings', maxBullets: 5 }], targetWordCount: 600 };
-  try {
-    const resp = await llm(plannerPrompt, 'planner');
-    const text = resp.text.trim();
-    const json = JSON.parse(text.replace(/^```json\n?|```$/g, '')) as Plan;
-    if (json.sections?.length) plan = json;
-  } catch {
-    // keep baseline plan
-  }
+  const { query, vectorStore, settings, embedQuery, level } = opts;
 
   // Import recovery utilities
   const {
@@ -90,7 +73,7 @@ export async function runDeepAnalysis(opts: {
     finalizeRecovery,
     onGlobalModelUpdate
   } = await import('../utils/api-recovery');
-  
+
   // Create recovery context for this deep analysis session
   const recoveryId = createRecoveryContext(
     'deep_analysis',
@@ -102,14 +85,14 @@ export async function runDeepAnalysis(opts: {
       settings: opts.settings
     }
   );
-  
-  // Utility: wrapped generateContent with recovery system and token accumulation
+
+  // Utility variables for tracking
   let totalPrompt = 0;
   let totalCompletion = 0;
   let llmCallCount = 0;
   let currentModel = opts.model;
   let currentApiKey = opts.apiKey;
-  
+
   const llm = async (content: string, stepName: string = 'llm_call'): Promise<any> => {
     return callLLMWithRecovery(
       recoveryId,
@@ -130,8 +113,25 @@ export async function runDeepAnalysis(opts: {
       }
     );
   };
-  
-  // Function to update model/key when user switches during recovery
+
+  // 1) Quick horizon scan via pre-retrieval
+  const qEmb = await embedQuery(query);
+  const initialK = Math.min(30, Math.max(10, Math.floor((settings.numInitialCandidates || 20) * 1.5)));
+  const pre = vectorStore.search(qEmb, initialK);
+
+  // 2) Planner (simple baseline plan)
+  const plannerPrompt = `You are a planning agent. Given the user's query and the type of content available, propose a set of sections (3-8) to cover the topic thoroughly. Output JSON with {"sections":[{"name":"...","objective":"...","maxBullets":N}],"targetWordCount":number}. Query: ${query}`;
+  let plan: Plan = { sections: [{ name: 'Overview', objective: 'Overview of findings', maxBullets: 5 }], targetWordCount: 600 };
+  try {
+    const resp = await llm(plannerPrompt, 'planner');
+    const text = resp.text.trim();
+    const json = JSON.parse(text.replace(/^```json\n?|```$/g, '')) as Plan;
+    if (json.sections?.length) plan = json;
+  } catch {
+    // keep baseline plan
+  }
+
+  // Function to update model/settings when user switches during recovery
   const updateModelSettings = (newModel: any, newApiKey?: string) => {
     currentModel = newModel;
     if (newApiKey) currentApiKey = newApiKey;
@@ -140,8 +140,8 @@ export async function runDeepAnalysis(opts: {
   // Subscribe to global model updates from Recovery UI decisions
   const unsubscribeModelUpdate = onGlobalModelUpdate(({ model, apiKey }) => {
     try {
-      updateModelSettings(model as any, apiKey);
-      if (settings.isLoggingEnabled) console.info('[Deep Analysis] Model updated via Recovery UI:', model.provider, model.name);
+      updateModelSettings(model as any, apiKey as string);
+      if (settings.isLoggingEnabled) console.info('[Deep Analysis] Model updated via Recovery UI:', (model as any).provider, (model as any).name);
     } catch {}
   });
   
@@ -235,7 +235,7 @@ export async function runDeepAnalysis(opts: {
     for (const r of pre) { if (!seenDoc.has(r.id)) { seenDoc.add(r.id); preDocOrder.push(r.id); } }
 
     const qEmbedding = qEmb;
-    const entityCandidates = Array.from(new Set((query.match(/\b([A-Z][A-Za-zÀ-ÖØ-öø-ÿ'\-]+(?:\s+[A-Z][A-Za-zÀ-ÖØ-öø-ÿ'\-]+)*)\b/g) || []).map(s => s.trim().toLowerCase())));
+    const entityCandidates = Array.from(new Set((query.match(/\b([Z][A-Za-zÀ-ÖØ-öø-ÿ'\-]+(?:\s+[A-Z][A-Za-zÀ-ÖØ-öø-ÿ'\-]+)*)\b/g) || []).map(s => s.trim().toLowerCase())));
 
     for (const docId of preDocOrder.slice(0, MAX_DOCS)) {
       const structure = opts.vectorStore.getStructure ? opts.vectorStore.getStructure(docId) : undefined;
@@ -274,23 +274,23 @@ export async function runDeepAnalysis(opts: {
 
         // MMR within chapter
         const lambda = 0.7;
-        const windowSize = Math.max(1000, Math.floor((ch.end - ch.start)/6));
-        const chosen: { para: {start:number; end:number}; score:number }[] = [];
+        const windowSize = Math.max(1000, Math.floor((ch.end - ch.start) / 6));
+        const chosen: { para: { start: number; end: number }; score: number }[] = [];
         const cand = scored.slice();
         while (chosen.length < PER_CHAPTER_SAMPLES && cand.length > 0) {
           let bestI = 0; let bestS = -Infinity;
-          for (let i=0;i<cand.length;i++) {
+          for (let i = 0; i < cand.length; i++) {
             const c = cand[i];
             const rel = c.score;
             let red = 0;
             for (const sel of chosen) {
-              const dist = Math.abs(((sel.para.start+sel.para.end)/2) - ((c.para.start+c.para.end)/2));
+              const dist = Math.abs(((sel.para.start + sel.para.end) / 2) - ((c.para.start + c.para.end) / 2));
               red = Math.max(red, Math.max(0, (windowSize - dist) / windowSize));
             }
-            const s = lambda*rel - (1-lambda)*red;
+            const s = lambda * rel - (1 - lambda) * red;
             if (s > bestS) { bestS = s; bestI = i; }
           }
-          chosen.push(cand.splice(bestI,1)[0]);
+          chosen.push(cand.splice(bestI, 1)[0]);
         }
 
         for (const sel of chosen) {
@@ -449,6 +449,7 @@ export async function runDeepAnalysis(opts: {
     const picked = selected.slice(0, target);
     const remaining = ranked.filter(r => !picked.some(p => p.id === r.id && p.start === r.start && p.end === r.end));
     const lambda = 0.7;
+    const windowSize = 1500;
     while (picked.length < target && remaining.length > 0) {
       let bestIdx = 0; let bestScore = -Infinity;
       for (let i = 0; i < remaining.length; i++) {
@@ -480,29 +481,8 @@ export async function runDeepAnalysis(opts: {
     perSectionResults[name] = results;
   }
 
-  // 4) Summarize each section (strict citations)
-  let sections: SectionSummary[] = [];
-  const coverage: { [section: string]: number } = {};
-  const summarizeSection = async (sec: PlanSection, results: SearchResult[]): Promise<SectionSummary> => {
-    // Provide context with explicit IDs to the model
-    const context = results.map((r, i) => `[#${i + 1}] id:${r.id} start:${r.start} end:${r.end}\n${r.chunk}`).join('\n\n');
-    const summarizerPrompt = `Summarize evidence for section \"${sec.name}\". Produce up to ${sec.maxBullets} bullets. For each fact, cite using [Source: id] where id is the \"id\" of the numbered context item (e.g., [#3] -> [Source: id-of-item-3]). Do NOT cite by number. Context:\n${context}`;
-    const resp = await llm(summarizerPrompt, 'section_summarizer');
-
-    // Post-process: if the model returned numeric citations, convert them to [Source: id]
-    let text = resp.text;
-    text = text.replace(/\[Source:\s*(\d+)\]/g, (_, n) => {
-      const idx = parseInt(n, 10) - 1; const id = results[idx]?.id; return id ? `[Source: ${id}]` : `[Source: ${n}]`;
-    });
-    text = text.replace(/\[Source:\s*([\d\s,]+)\]/g, (m, group) => {
-      const ids = group.split(',').map(s => parseInt(s.trim(), 10) - 1).map(i => results[i]?.id).filter(Boolean);
-      return ids.length ? `[Source: ${ids.join(', ')}]` : m;
-    });
-
-    return { section: sec.name, bullets: [{ text, citations: [] }] };
-  };
-
   // Compile global evidence pool (union) and prepare coverage stats
+  const coverage: { [section: string]: number } = {};
   const key = (r: SearchResult) => `${r.id}:${r.start}:${r.end}`;
   const unionMap = new Map<string, SearchResult>();
   for (const sec of plan.sections) {
@@ -613,9 +593,6 @@ export async function runDeepAnalysis(opts: {
     iterations += 1;
   }
 
-  // 6) Final level based on whether we iterated
-  let finalLevel: 2 | 3 = opts.level === 3 || iterations > 0 ? 3 : 2;
-
   // 7) Compose final answer from claims and Answer Spec; include evaluation context and citation index
   const claimsForComposer = JSON.stringify(allClaims.slice(0, 120));
   const citationSheet = uniqueDocIds.map((id, i) => `[#${i + 1}] id:${id}`).join('\n');
@@ -630,7 +607,7 @@ export async function runDeepAnalysis(opts: {
   const compResp = await llm(composerPrompt, 'final_composer');
   let compText = compResp.text;
   // Safety: strip any stray numeric [Source: N] to ids if they leaked (map by index order above)
-  compText = compText.replace(/\[Source:\s*(\d+)\]/g, (_, n) => {
+  compText = compText.replace(/\[Source:\s*(\d+)\]/g, (_: string, n: string) => {
     const idx = parseInt(n, 10) - 1; const id = uniqueDocIds[idx]; return id ? `[Source: ${id}]` : `[Source: ${n}]`;
   });
 
@@ -642,10 +619,9 @@ export async function runDeepAnalysis(opts: {
   try {
     if (opts.settings.isLoggingEnabled) {
       const docCount = new Set(unionResults.map(r => r.id)).size;
-      console.info(`[Deep Analysis] Final Level: L${finalLevel} | Evidence: ${unionResults.length} chunks from ${docCount} docs | Claims: ${allClaims.length}.`);
+      console.info(`[Deep Analysis] Final Level: L${opts.level === 3 || iterations > 0 ? 3 : 2} | Evidence: ${unionResults.length} chunks from ${docCount} docs | Claims: ${allClaims.length}.`);
     }
   } catch {}
 
   return { plan, sections: [], finalText: compText, usedResults: unionResults, coverage, llmTokens: { promptTokens: totalPrompt, completionTokens: totalCompletion } };
 }
-

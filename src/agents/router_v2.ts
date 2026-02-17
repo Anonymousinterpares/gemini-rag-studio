@@ -57,15 +57,19 @@ export async function decideRouteV2(opts: {
   // Small classifier to determine complexity (general-purpose, domain-agnostic)
   let complexity: 'factoid' | 'overview' | 'synthesis' | 'comparison' | 'reasoning' | 'unknown' = 'unknown';
   try {
+    const historyText = history.slice(-5).map(m => `${m.role}: ${m.content}`).join('\n');
     const cls = await generateContent(model, apiKey, [
-      { role: 'user', content: `Classify the task type for this user query:
+      { role: 'user', content: `Classify the task type for this user query.
+Context History:
+${historyText}
+
 Query: ${query}
 Categories: factoid, overview, synthesis, comparison, reasoning
 Return only one word.` },
     ]);
     const t = cls.text.trim().toLowerCase();
     if (['factoid', 'overview', 'synthesis', 'comparison', 'reasoning'].includes(t)) {
-      complexity = t as typeof complexity;
+      complexity = t as any;
     }
   } catch {
     // ignore; keep unknown
@@ -81,18 +85,19 @@ Return only one word.` },
   }
 
   // Decide depth by complexity; do not rely on keywords
-  switch (complexity) {
-    case 'factoid':
-      return { mode: 'RAG', reason: 'Factoid task with evidence present.', preResults };
-    case 'overview':
-      return { mode: 'RAG', reason: 'Overview task; RAG is sufficient.', preResults };
-    case 'comparison':
-    case 'reasoning':
-      return { mode: 'DEEP_ANALYSIS_L2', reason: 'Reasoning/comparison; sectioned analysis needed.', preResults };
-    case 'synthesis':
-    default:
-      // Prefer sectioned analysis for synthesis
-      return { mode: 'DEEP_ANALYSIS_L2', reason: 'Synthesis task; sectioned deep analysis selected.', preResults };
+  if (complexity === 'factoid') {
+    return { mode: 'RAG', reason: 'Factoid task with evidence present.', preResults };
   }
+  if (complexity === 'overview') {
+    return { mode: 'RAG', reason: 'Overview task; RAG is sufficient.', preResults };
+  }
+  if (complexity === 'comparison' || complexity === 'reasoning') {
+    return { mode: 'DEEP_ANALYSIS_L2', reason: 'Reasoning/comparison; sectioned analysis needed.', preResults };
+  }
+  if (complexity === 'synthesis') {
+    return { mode: 'DEEP_ANALYSIS_L2', reason: 'Synthesis task; sectioned deep analysis selected.', preResults };
+  }
+  // default (including 'unknown')
+  return { mode: 'RAG', reason: 'Complexity unknown or low-confidence; defaulting to RAG.', preResults };
 }
 

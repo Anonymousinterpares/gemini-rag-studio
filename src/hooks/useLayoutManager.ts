@@ -46,7 +46,7 @@ export const useLayoutManager = ({ coordinator, selectedFile, appSettings }: Use
       if (appSettings.isLoggingEnabled) console.log(`[${new Date().toISOString()}] [useLayoutManager DIAGNOSTIC] selectedFile.layoutStatus is '${selectedFile.layoutStatus || 'undefined'}' for ${selectedFile.id}. Setting status to 'LOADING'.`);
       setStatus('LOADING');
     }
-  }, [selectedFile, coordinator, ]);
+  }, [selectedFile, coordinator, appSettings.isLoggingEnabled]);
 
   // This effect will handle prioritizing the layout when a file is selected
   useEffect(() => {
