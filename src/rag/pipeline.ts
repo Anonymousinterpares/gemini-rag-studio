@@ -107,7 +107,7 @@ export class VectorStore {
       for (const pc of parentChunks) {
         const text = pc.text;
         // Simple heuristic: capitalized tokens or multi-word capitalized sequences
-        const entityRegex = /\b([A-Z][A-Za-zÀ-ÖØ-öø-ÿ'\-]+(?:\s+[A-Z][A-Za-zÀ-ÖØ-öø-ÿ'\-]+)*)\b/g;
+        const entityRegex = /\b([A-Z][A-Za-zÀ-ÖØ-öø-ÿ'-]+(?:\s+[A-Z][A-Za-zÀ-ÖØ-öø-ÿ'-]+)*)\b/g;
         let match: RegExpExecArray | null;
         while ((match = entityRegex.exec(text)) !== null) {
           const entity = match[1].trim();
@@ -133,8 +133,8 @@ export class VectorStore {
       const paragraphs: { start: number; end: number }[] = [];
       if (parentChunks.length > 0) {
         // Detect candidate chapters via heading-like lines
-        const headingRegex = /^(?:\s*(?:chapter|rozdzia[łl])\b[\s\.:\-]*[\wIVXLCDM\-\.\d]*)\s*$/i;
-        const numberedRegex = /^\s*(?:[IVXLCDM]+|\d+)\s*(?:\.|\-|:)\s*[\w\-\']{0,40}\s*$/;
+        const headingRegex = /^(?:\s*(?:chapter|rozdzia[łl])\b[\s.:-]*[\wIVXLCDM.\d-]*)\s*$/i;
+        const numberedRegex = /^\s*(?:[IVXLCDM]+|\d+)\s*(?:\.|-|:)\s*[\w-']{0,40}\s*$/;
         const potential: { name: string; start: number }[] = [];
         for (const pc of parentChunks) {
           const lines = pc.text.split(/\r?\n/);
@@ -277,7 +277,7 @@ export class VectorStore {
     const m = this.entityIndex.get(id);
     if (!m) return [];
     return Array.from(m.entries())
-      .filter(([_, v]) => v.count >= minCount)
+      .filter(([_unused, v]) => v.count >= minCount)
       .map(([k, v]) => ({ entity: k, count: v.count }))
       .sort((a, b) => b.count - a.count)
       .slice(0, max);

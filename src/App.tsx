@@ -230,10 +230,16 @@ export const App: FC = () => {
     const defaultName = `message-${index + 1}.txt`;
 
     // Try File System Access API first
-    const anyWindow = window as any;
+    const anyWindow = window as unknown as {
+      showSaveFilePicker?: (options: {
+        suggestedName: string;
+        types: { description: string; accept: Record<string, string[]> }[];
+        startIn?: FileSystemHandle;
+      }) => Promise<FileSystemFileHandle>;
+    };
     if (anyWindow.showSaveFilePicker) {
       try {
-        const opts: any = {
+        const opts = {
           suggestedName: defaultName,
           types: [
             {
@@ -241,11 +247,8 @@ export const App: FC = () => {
               accept: { 'text/plain': ['.txt'] },
             },
           ],
+          startIn: (rootDirectoryHandle as unknown as FileSystemHandle) || undefined,
         };
-        // Prefer starting in the last opened directory if available
-        if (rootDirectoryHandle) {
-          opts.startIn = rootDirectoryHandle as any;
-        }
         const handle = await anyWindow.showSaveFilePicker(opts);
         const writable = await handle.createWritable();
         await writable.write(text);
@@ -482,7 +485,7 @@ export const App: FC = () => {
           });
           backgrounds.push(imagePath);
         } catch {
-          // If image fails to load, we've likely reached the end
+          // End of background images reached
           break;
         }
       }

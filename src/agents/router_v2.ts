@@ -69,7 +69,7 @@ Return only one word.` },
     ]);
     const t = cls.text.trim().toLowerCase();
     if (['factoid', 'overview', 'synthesis', 'comparison', 'reasoning'].includes(t)) {
-      complexity = t as any;
+      complexity = t as 'factoid' | 'overview' | 'synthesis' | 'comparison' | 'reasoning';
     }
   } catch {
     // ignore; keep unknown

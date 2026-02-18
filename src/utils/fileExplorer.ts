@@ -7,11 +7,13 @@ export interface FileSystemItem {
 
 export async function readDirectoryContents(directoryHandle: FileSystemDirectoryHandle, currentPath: string = ''): Promise<FileSystemItem[]> {
   const items: FileSystemItem[] = [];
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  for await (const [name, handle] of (directoryHandle as any).entries()) {
+  
+  const entries = (directoryHandle as unknown as { values: () => AsyncIterable<FileSystemHandle> }).values();
+  for await (const handle of entries) {
+    const name = handle.name;
     const path = currentPath ? `${currentPath}/${name}` : name;
     if (handle.kind === 'file') {
-      items.push({ name, kind: 'file', path, fileHandle: handle });
+      items.push({ name, kind: 'file', path, fileHandle: handle as FileSystemFileHandle });
     } else if (handle.kind === 'directory') {
       items.push({ name, kind: 'directory', path });
     }
@@ -28,19 +30,6 @@ export async function getFileFromHandle(fileHandle: FileSystemFileHandle): Promi
     return await fileHandle.getFile();
   } catch (error) {
     console.error('Error getting file from handle:', error);
-    return null;
-  }
-}
-
-export async function getDirectoryHandle(): Promise<FileSystemDirectoryHandle | null> { // eslint-disable-line @typescript-eslint/no-unused-vars
-  try {
-    // This function is a placeholder. In a real scenario, you'd need to store
-    // and retrieve the handle from a persistent storage or re-request it.
-    // For this task, we'll assume the root handle is passed or re-obtained.
-    console.warn('getDirectoryHandle is a placeholder. Direct access to arbitrary paths is not possible without user interaction.');
-    return null;
-  } catch (error) {
-    console.error('Error getting directory handle:', error);
     return null;
   }
 }

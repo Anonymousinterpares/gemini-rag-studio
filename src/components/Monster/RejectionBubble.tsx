@@ -7,7 +7,7 @@ interface RejectionBubbleProps {
 export const RejectionBubble: React.FC<RejectionBubbleProps> = ({ show }) => {
   const [currentMessage, setCurrentMessage] = useState('');
 
-  const rejectionMessages = [
+  const rejectionMessages = React.useMemo(() => [
     "🚫 I can't digest that!",
     "❌ That's not my type of food!",
     "🙅‍♂️ I don't eat that kind of file!",
@@ -23,18 +23,18 @@ export const RejectionBubble: React.FC<RejectionBubbleProps> = ({ show }) => {
     "🔴 File type rejected!",
     "🚨 Incompatible format!",
     "🤒 That makes me feel sick!"
-  ];
+  ], []);
 
-  const getRandomRejectionMessage = () => {
+  const getRandomRejectionMessage = React.useCallback(() => {
     return rejectionMessages[Math.floor(Math.random() * rejectionMessages.length)];
-  };
+  }, [rejectionMessages]);
 
   // Set message when component becomes visible
   useEffect(() => {
     if (show) {
       setCurrentMessage(getRandomRejectionMessage());
     }
-  }, [show]);
+  }, [show, getRandomRejectionMessage]);
 
   if (!show) return null;
 

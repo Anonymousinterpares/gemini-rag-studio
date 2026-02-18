@@ -27,7 +27,6 @@ export const RecoveryDialog: React.FC<RecoveryDialogProps> = ({
   stepName,
   error,
   state,
-  options,
   onDecision,
   onClose,
   availableModels,

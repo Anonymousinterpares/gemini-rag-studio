@@ -13,10 +13,10 @@ export const SpeechBubble: React.FC<SpeechBubbleProps> = ({
 }) => {
   const [currentMessage, setCurrentMessage] = useState('');
   const [currentEmoji, setCurrentEmoji] = useState('');
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const intervalRef = useRef<number | undefined | null>(null);
   const lastStateRef = useRef('');
 
-  const messageVariants = {
+  const messageVariants = React.useMemo(() => ({
     idle: [
       "Feed me some documents!",
       "I'm hungry for knowledge!",
@@ -67,21 +67,21 @@ export const SpeechBubble: React.FC<SpeechBubbleProps> = ({
       "Fully loaded and ready!",
       "Knowledge tank is full!"
     ]
-  };
+  }), []);
 
-  const getRandomMessage = (messages: string[]) => {
+  const getRandomMessage = React.useCallback((messages: string[]) => {
     return messages[Math.floor(Math.random() * messages.length)];
-  };
+  }, []);
 
-  const getCurrentState = () => {
+  const getCurrentState = React.useCallback(() => {
     if (isProcessing || isEmbedding) return 'processing';
     if (filesCount === 0) return 'idle';
     if (filesCount <= 5) return 'partial';
     if (filesCount <= 10) return 'almostFull';
     return 'full';
-  };
+  }, [isProcessing, isEmbedding, filesCount]);
 
-  const getEmoji = (state: string) => {
+  const getEmoji = React.useCallback((state: string) => {
     switch (state) {
       case 'processing': return "🤔";
       case 'idle': return "😋";
@@ -90,7 +90,7 @@ export const SpeechBubble: React.FC<SpeechBubbleProps> = ({
       case 'full': return "🤪";
       default: return "😋";
     }
-  };
+  }, []);
 
   // Update message when state changes (action-based)
   useEffect(() => {
@@ -104,7 +104,7 @@ export const SpeechBubble: React.FC<SpeechBubbleProps> = ({
       setCurrentMessage(getRandomMessage(messages));
       setCurrentEmoji(getEmoji(currentState));
     }
-  }, [isProcessing, isEmbedding, filesCount]);
+  }, [getCurrentState, getRandomMessage, getEmoji, filesCount, messageVariants]);
 
   // Set up idle cycling (only for idle state)
   useEffect(() => {
@@ -112,24 +112,24 @@ export const SpeechBubble: React.FC<SpeechBubbleProps> = ({
     
     if (currentState === 'idle') {
       // Cycle through idle messages every 10 seconds
-      intervalRef.current = setInterval(() => {
+      intervalRef.current = window.setInterval(() => {
         setCurrentMessage(getRandomMessage(messageVariants.idle));
       }, 10000);
     } else {
       // Clear interval for non-idle states
       if (intervalRef.current) {
-        clearInterval(intervalRef.current);
+        window.clearInterval(intervalRef.current);
         intervalRef.current = null;
       }
     }
 
     return () => {
       if (intervalRef.current) {
-        clearInterval(intervalRef.current);
+        window.clearInterval(intervalRef.current);
         intervalRef.current = null;
       }
     };
-  }, [isProcessing, isEmbedding, filesCount]);
+  }, [getCurrentState, getRandomMessage, messageVariants.idle]);
 
   // Initialize message on mount
   useEffect(() => {
@@ -138,7 +138,7 @@ export const SpeechBubble: React.FC<SpeechBubbleProps> = ({
     setCurrentMessage(getRandomMessage(messages));
     setCurrentEmoji(getEmoji(currentState));
     lastStateRef.current = `${currentState}-${filesCount}`;
-  }, []);
+  }, [getCurrentState, getRandomMessage, getEmoji, filesCount, messageVariants]);
 
   return (
     <div className="speech-bubble">

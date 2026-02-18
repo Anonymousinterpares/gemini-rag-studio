@@ -203,11 +203,13 @@ User Query: "${query}"`;
             if (appSettings.docOnlyMode && vectorStore?.current) {
                 try {
                     const preEmbedPromise = new Promise<number[]>((resolve) => { if (queryEmbeddingResolver) queryEmbeddingResolver.current = resolve; });
-                    coordinator.current.addJob('Embed Query (Doc-first precheck)', [{
-                        id: `precheck-${Date.now()}`,
-                        priority: TaskPriority.P1_Primary,
-                        payload: { type: TaskType.EmbedQuery, query }
-                    }]);
+                    if (coordinator.current) {
+                        coordinator.current.addJob('Embed Query (Doc-first precheck)', [{
+                            id: `precheck-${Date.now()}`,
+                            priority: TaskPriority.P1_Primary,
+                            payload: { type: TaskType.EmbedQuery, query }
+                        }]);
+                    }
                     const preEmbedding = await preEmbedPromise;
                     const preCandidates = vectorStore.current.search(preEmbedding, 5) ?? [];
                     forcedDocSearch = preCandidates.length > 0;
@@ -226,7 +228,9 @@ User Query: "${query}"`;
                     const { decideRouteV2 } = await import('../agents/router_v2');
                     const embedQueryFn = async (q: string) => {
                         const p = new Promise<number[]>((resolve) => { if (queryEmbeddingResolver) queryEmbeddingResolver.current = resolve; });
-                        coordinator.current.addJob('Embed Query (RouterV2)', [{ id: `router-v2-${Date.now()}`, priority: TaskType.P1_Primary, payload: { type: TaskType.EmbedQuery, query: q } }]);
+                        if (coordinator.current) {
+                            coordinator.current.addJob('Embed Query (RouterV2)', [{ id: `router-v2-${Date.now()}`, priority: TaskPriority.P1_Primary, payload: { type: TaskType.EmbedQuery, query: q } }]);
+                        }
                         return await p;
                     };
                     const route = await decideRouteV2({
@@ -255,7 +259,6 @@ User Query: "${query}"`;
                             embedQuery: embedQueryFn,
                             // Rerank per section using the existing ML reranker if enabled
                             rerank: appSettings.isRerankingEnabled ? async (rerankQuery, docs) => {
-                                const R = (await import('../types')).SearchResult;
                                 const tasks: Omit<ComputeTask, 'jobId'>[] = [];
                                 const docsPerBatch = Math.max(1, Math.ceil(docs.length / Math.max(1, appSettings.numMlWorkers)));
                                 for (let i = 0; i < docs.length; i += docsPerBatch) {
@@ -263,18 +266,20 @@ User Query: "${query}"`;
                                     const payload: RerankPayload = { type: TaskType.Rerank, query: rerankQuery, documents: batch };
                                     tasks.push({ id: `da-rerank-${i}-${Date.now()}`, priority: TaskPriority.P1_Primary, payload });
                                 }
-                                const rerankPromise = new Promise<import('../types').SearchResult[]>((resolve) => {
+                                const rerankPromise = new Promise<SearchResult[]>((resolve) => {
                                     if (rerankPromiseResolver) rerankPromiseResolver.current = { resolve, jobId: '', taskResults: [] };
                                 });
-                                const jobId = coordinator.current.addJob(`Rerank (DA): ${rerankQuery.slice(0, 24)}...`, tasks);
-                                if (rerankPromiseResolver?.current) rerankPromiseResolver.current.jobId = jobId;
+                                if (coordinator.current) {
+                                    const jobId = coordinator.current.addJob(`Rerank (DA): ${rerankQuery.slice(0, 24)}...`, tasks);
+                                    if (rerankPromiseResolver?.current) rerankPromiseResolver.current.jobId = jobId;
+                                }
                                 const results = await rerankPromise;
                                 return results;
                             } : undefined,
                             level,
                         });
                         const elapsedTime = Date.now() - startTime;
-                        const daUsage = (da as any).llmTokens || { promptTokens: 0, completionTokens: 0 };
+                        const daUsage = (da as { llmTokens?: TokenUsage }).llmTokens || { promptTokens: 0, completionTokens: 0 };
                         const messageUsage: TokenUsage = {
                             promptTokens: perRequestTokenUsage.promptTokens + daUsage.promptTokens,
                             completionTokens: perRequestTokenUsage.completionTokens + daUsage.completionTokens,
@@ -364,11 +369,13 @@ Return only the translated query.`;
                 const preliminaryEmbeddingPromise = new Promise<number[]>((resolve) => {
                     if (queryEmbeddingResolver) queryEmbeddingResolver.current = resolve;
                 });
-                coordinator.current.addJob('Embed Query for Sub-questions', [{
-                    id: `prelim-query-${Date.now()}`,
-                    priority: TaskPriority.P1_Primary,
-                    payload: { type: TaskType.EmbedQuery, query: currentQuery }
-                }]);
+                if (coordinator.current) {
+                    coordinator.current.addJob('Embed Query for Sub-questions', [{
+                        id: `prelim-query-${Date.now()}`,
+                        priority: TaskPriority.P1_Primary,
+                        payload: { type: TaskType.EmbedQuery, query: currentQuery }
+                    }]);
+                }
                 const preliminaryEmbedding = await preliminaryEmbeddingPromise;
                 const preliminaryCandidates = vectorStore.current.search(preliminaryEmbedding, 5) ?? [];
                 const relevantDocIds = Array.from(new Set(preliminaryCandidates.map(c => c.id)));
@@ -427,14 +434,16 @@ Based on the user's query and the provided summaries, generate ${appSettings.num
                 const queryEmbeddingPromise = new Promise<number[]>((resolve) => {
                     if (queryEmbeddingResolver) queryEmbeddingResolver.current = resolve;
                 });
-                coordinator.current.addJob('Embed Query', [{
-                    id: `query-${Date.now()}`,
-                    priority: TaskPriority.P1_Primary,
-                    payload: {
-                        type: TaskType.EmbedQuery,
-                        query: q,
-                    }
-                }]);
+                if (coordinator.current) {
+                    coordinator.current.addJob('Embed Query', [{
+                        id: `query-${Date.now()}`,
+                        priority: TaskPriority.P1_Primary,
+                        payload: {
+                            type: TaskType.EmbedQuery,
+                            query: q,
+                        }
+                    }]);
+                }
                 const queryEmbedding = await queryEmbeddingPromise;
                 if (appSettings.isLoggingEnabled) console.log(`[DIAGNOSTIC] Received query embedding for: "${q}"`);
 
@@ -507,11 +516,13 @@ Based on the user's query and the provided summaries, generate ${appSettings.num
                     if (rerankPromiseResolver) rerankPromiseResolver.current = { resolve, jobId: '', taskResults: [] };
                 });
                 
-                const actualJobId = coordinator.current.addJob(`Rerank Query: ${query.slice(0, 20)}...`, rerankTasks);
+                if (coordinator.current) {
+                    const actualJobId = coordinator.current.addJob(`Rerank Query: ${query.slice(0, 20)}...`, rerankTasks);
 
-                if (actualJobId && rerankPromiseResolver?.current) {
-                    rerankPromiseResolver.current.jobId = actualJobId;
-                    if (appSettings.isLoggingEnabled) console.log(`[${new Date().toISOString()}] [App DEBUG] Rerank job ${actualJobId} added to coordinator. Awaiting promise resolution.`);
+                    if (actualJobId && rerankPromiseResolver?.current) {
+                        rerankPromiseResolver.current.jobId = actualJobId;
+                        if (appSettings.isLoggingEnabled) console.log(`[${new Date().toISOString()}] [App DEBUG] Rerank job ${actualJobId} added to coordinator. Awaiting promise resolution.`);
+                    }
                 }
 
                 searchResults = await rerankPromise;
@@ -639,11 +650,17 @@ Based on the user's query and the provided summaries, generate ${appSettings.num
                 const file = files.find((f) => f.id === fileId);
                 if (file) {
                     try {
-                        let chunks: { id: string; start: number; end: number; similarity?: number }[] = [];
+                        let chunks: SearchResult[] = [];
                         if (chunksJSON) {
                             chunks = JSON.parse(chunksJSON);
                         } else if (startAttr && endAttr) {
-                            chunks = [{ id: fileId, start: parseInt(startAttr, 10), end: parseInt(endAttr, 10) }];
+                            chunks = [{ 
+                                id: fileId, 
+                                start: parseInt(startAttr, 10), 
+                                end: parseInt(endAttr, 10),
+                                chunk: '', // Default or placeholder if not provided
+                                similarity: 1
+                            }];
                         }
                         setActiveSource({ file, chunks });
                         setIsModalOpen(true);
@@ -712,27 +729,27 @@ Based on the user's query and the provided summaries, generate ${appSettings.num
         const idPickCursor: Record<string, number> = {};
 
         // Accept [Source: <id>] or [Source: n] or [Source: n, m] or [Source: id1, id2]
-        const finalHtml = (rawHtml as string).replace(/\[Source:\s*([^\]]+)\]/g, (match, inside) => {
+        const finalHtml = (rawHtml as string).replace(/\[Source:\s*([^\]]+)\]/g, (match: string, inside: string) => {
             const raw = inside.trim();
             // If the content is comma-separated numbers, map each number N to searchResults[N-1]
-            const tokens = raw.split(',').map(t => t.trim()).filter(Boolean);
-            const allNumeric = tokens.length > 0 && tokens.every(t => /^\d+$/.test(t));
+            const tokens = raw.split(',').map((t: string) => t.trim()).filter(Boolean);
+            const allNumeric = tokens.length > 0 && tokens.every((t: string) => /^\d+$/.test(t));
 
             if (allNumeric && searchResults.length > 0) {
-                const items = tokens.map((tok) => {
+                const items = tokens.map((tok: string) => {
                     const nVal = parseInt(tok, 10);
                     if (Number.isNaN(nVal) || nVal < 1 || nVal > searchResults.length) return '';
                     const sr = searchResults[nVal - 1];
                     if (!sr) return '';
                     const file = files.find(f => f.id === sr.id);
                     const fileName = file ? file.name : sr.id;
-                    const safeTitle = (fileName || '').replace(/\"/g, '&quot;');
+                    const safeTitle = (fileName || '').replace(/"/g, '&quot;');
                     const docNo = getDocNumber(sr.id);
                     const fragLetter = getFragLetter(sr);
-                    const esc = (s: string) => s.replace(/[&<>\"]/g, (m) => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'} as any)[m]);
+                    const esc = (s: string) => s.replace(/[&<>"]/g, (m: string) => (({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'} as Record<string, string>)[m]));
                     const preview = esc((sr.chunk || '').slice(0, 120).replace(/\n/g, ' '));
-                    const attrs = `data-file-id=\"${sr.id}\" data-start=\"${sr.start}\" data-end=\"${sr.end}\"`;
-                    return `<button class=\"source-link citation-bubble\" ${attrs} title=\"Doc #${docNo} — ${safeTitle} • Fragment ${fragLetter}: ${preview}\"><span class=\"bubble-number\">${docNo}</span><sup class=\"frag-letter\">${fragLetter}</sup></button><span class=\"jump-to-badge\" ${attrs} title=\"Jump to Doc #${docNo} — ${safeTitle} • Fragment ${fragLetter}: ${preview}\">↦</span>`;
+                    const attrs = `data-file-id="${sr.id}" data-start="${sr.start}" data-end="${sr.end}"`;
+                    return `<button class="source-link citation-bubble" ${attrs} title="Doc #${docNo} — ${safeTitle} • Fragment ${fragLetter}: ${preview}"><span class="bubble-number">${docNo}</span><sup class="frag-letter">${fragLetter}</sup></button><span class="jump-to-badge" ${attrs} title="Jump to Doc #${docNo} — ${safeTitle} • Fragment ${fragLetter}: ${preview}">↦</span>`;
                 }).filter(Boolean);
                 const MAX_VISIBLE = 8;
                 const visible = items.slice(0, MAX_VISIBLE).join('');
@@ -740,15 +757,15 @@ Based on the user's query and the provided summaries, generate ${appSettings.num
                 let overflow = '';
                 if (overflowCount > 0) {
                     const hidden = items.slice(MAX_VISIBLE).join('');
-                    overflow = `<button class=\"citation-overflow-toggle\">+${overflowCount} more</button><div class=\"citation-overflow-popover\">${hidden}</div>`;
+                    overflow = `<button class="citation-overflow-toggle">+${overflowCount} more</button><div class="citation-overflow-popover">${hidden}</div>`;
                 }
                 const group = `${visible}${overflow}`;
-                return items.length ? `<span class=\"citation-group\">${group}</span>&thinsp;` : match;
+                return items.length ? `<span class="citation-group">${group}</span>&thinsp;` : match;
             }
 
             // Otherwise, treat each token as an ID and render multiple bubbles
             const idTokens = tokens.length > 0 ? tokens : [raw];
-            const items = idTokens.map((tid) => {
+            const items = idTokens.map((tid: string) => {
                 const trimmedFileId = tid;
                 const matches = searchResults.filter(sr => sr.id === trimmedFileId);
                 if (matches.length === 0) return '';
@@ -757,13 +774,13 @@ Based on the user's query and the provided summaries, generate ${appSettings.num
                 idPickCursor[trimmedFileId] = cursor + 1;
                 const file = files.find(f => f.id === trimmedFileId);
                 const fileName = file ? file.name : trimmedFileId;
-                const safeTitle = (fileName || '').replace(/\"/g, '&quot;');
+                const safeTitle = (fileName || '').replace(/"/g, '&quot;');
                 const docNo = getDocNumber(sr.id);
                 const fragLetter = getFragLetter(sr);
-                const esc = (s: string) => s.replace(/[&<>\"]/g, (m) => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'} as any)[m]);
+                const esc = (s: string) => s.replace(/[&<>"]/g, (m: string) => (({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'} as Record<string, string>)[m]));
                 const preview = esc((sr.chunk || '').slice(0, 120).replace(/\n/g, ' '));
-                const attrs = `data-file-id=\"${sr.id}\" data-start=\"${sr.start}\" data-end=\"${sr.end}\"`;
-                return `<button class=\"source-link citation-bubble\" ${attrs} title=\"Doc #${docNo} — ${safeTitle} • Fragment ${fragLetter}: ${preview}\"><span class=\"bubble-number\">${docNo}</span><sup class=\"frag-letter\">${fragLetter}</sup></button><span class=\"jump-to-badge\" ${attrs} title=\"Jump to Doc #${docNo} — ${safeTitle} • Fragment ${fragLetter}: ${preview}\">↦</span>`;
+                const attrs = `data-file-id="${sr.id}" data-start="${sr.start}" data-end="${sr.end}"`;
+                return `<button class="source-link citation-bubble" ${attrs} title="Doc #${docNo} — ${safeTitle} • Fragment ${fragLetter}: ${preview}"><span class="bubble-number">${docNo}</span><sup class="frag-letter">${fragLetter}</sup></button><span class="jump-to-badge" ${attrs} title="Jump to Doc #${docNo} — ${safeTitle} • Fragment ${fragLetter}: ${preview}">↦</span>`;
             }).filter(Boolean);
             const MAX_VISIBLE = 8;
             const visible = items.slice(0, MAX_VISIBLE).join('');
@@ -771,10 +788,10 @@ Based on the user's query and the provided summaries, generate ${appSettings.num
             let overflow = '';
             if (overflowCount > 0) {
                 const hidden = items.slice(MAX_VISIBLE).join('');
-                overflow = `<button class=\"citation-overflow-toggle\">+${overflowCount} more</button><div class=\"citation-overflow-popover\">${hidden}</div>`;
+                overflow = `<button class="citation-overflow-toggle">+${overflowCount} more</button><div class="citation-overflow-popover">${hidden}</div>`;
             }
             const group = `${visible}${overflow}`;
-            return items.length ? `<span class=\"citation-group\">${group}</span>&thinsp;` : match;
+            return items.length ? `<span class="citation-group">${group}</span>&thinsp;` : match;
         });
 
         // As a final clean-up, strip any remaining raw [Source: ...] tags (unproductive references)
