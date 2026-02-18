@@ -7,9 +7,9 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-public\models
-models
-node_modules
+public/models/
+models/
+node_modules/
 dist
 dist-ssr
 *.local
