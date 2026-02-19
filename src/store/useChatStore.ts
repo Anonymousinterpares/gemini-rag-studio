@@ -1,0 +1,52 @@
+import { create } from 'zustand';
+import { ChatMessage, TokenUsage } from '../types';
+
+interface ChatState {
+  chatHistory: ChatMessage[];
+  userInput: string;
+  pendingQuery: string | null;
+  tokenUsage: TokenUsage;
+  isLoading: boolean;
+  
+  // Actions
+  setChatHistory: (updater: ChatMessage[] | ((prev: ChatMessage[]) => ChatMessage[])) => void;
+  setUserInput: (input: string) => void;
+  setPendingQuery: (query: string | null) => void;
+  setTokenUsage: (updater: TokenUsage | ((prev: TokenUsage) => TokenUsage)) => void;
+  setIsLoading: (loading: boolean) => void;
+  clearHistory: (initialHistory: ChatMessage[]) => void;
+}
+
+export const useChatStore = create<ChatState>((set) => ({
+  chatHistory: [
+    {
+      role: 'model',
+      content: "Hello! Drop your files or a project folder on the left to get started. I'll create a knowledge base from them, and you can ask me anything about their content.",
+    },
+  ],
+  userInput: '',
+  pendingQuery: null,
+  tokenUsage: { promptTokens: 0, completionTokens: 0 },
+  isLoading: false,
+
+  setChatHistory: (updater) => set((state) => ({
+    chatHistory: typeof updater === 'function' ? updater(state.chatHistory) : updater
+  })),
+
+  setUserInput: (input) => set({ userInput: input }),
+  
+  setPendingQuery: (query) => set({ pendingQuery: query }),
+  
+  setTokenUsage: (updater) => set((state) => ({
+    tokenUsage: typeof updater === 'function' ? updater(state.tokenUsage) : updater
+  })),
+
+  setIsLoading: (loading) => set({ isLoading: loading }),
+
+  clearHistory: (initialHistory) => set({
+    chatHistory: initialHistory,
+    tokenUsage: { promptTokens: 0, completionTokens: 0 },
+    userInput: '',
+    pendingQuery: null
+  }),
+}));

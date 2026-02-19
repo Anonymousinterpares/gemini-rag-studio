@@ -1,6 +1,7 @@
 import { memo, useCallback } from 'react';
 import { FileText, Folder, CheckCircle, XCircle, Loader } from 'lucide-react';
-import { AppFile, FileTree, JobProgress, JobTimer, SummaryStatus } from '../types';
+import { AppFile, FileTree, SummaryStatus } from '../types';
+import { useFileStore, useComputeStore } from '../store';
 
 const SummaryStatusIndicator = ({ status, onClick }: { status: SummaryStatus, onClick: () => void }) => {
     switch (status) {
@@ -17,24 +18,18 @@ const SummaryStatusIndicator = ({ status, onClick }: { status: SummaryStatus, on
 
 interface FileTreeViewProps {
   tree: FileTree;
-  selectedFile: AppFile | null;
-  onSelectFile: (file: AppFile) => void;
-  onRemoveFile: (file: AppFile) => void;
-  jobProgress: Record<string, JobProgress>;
-  jobTimers: Record<string, JobTimer>;
-  onShowSummary: (file: AppFile) => void;
   pathPrefix?: string;
+  onShowSummary: (file: AppFile) => void;
 }
 
-const MemoizedFileTreeView = memo(function FileTreeView({ tree, selectedFile, onSelectFile, onRemoveFile, jobProgress, jobTimers, onShowSummary, pathPrefix = '' }: FileTreeViewProps) {
-  const handleSummaryClick = useCallback((file: AppFile) => {
-    onShowSummary(file);
-  }, [onShowSummary]);
+const FileTreeView = memo(function FileTreeView({ tree, pathPrefix = '', onShowSummary }: FileTreeViewProps) {
+  const { selectedFile, setSelectedFile, removeFile } = useFileStore();
+  const { jobProgress, jobTimers } = useComputeStore();
 
   const handleRemoveClick = useCallback((e: React.MouseEvent, file: AppFile) => {
     e.stopPropagation();
-    onRemoveFile(file);
-  }, [onRemoveFile]);
+    removeFile(file.id);
+  }, [removeFile]);
 
   return (
     <ul>
@@ -42,36 +37,28 @@ const MemoizedFileTreeView = memo(function FileTreeView({ tree, selectedFile, on
         .sort(([aKey, aValue], [bKey, bValue]) => {
           const aIsDir = !(aValue as AppFile).path
           const bIsDir = !(bValue as AppFile).path
-          if (aIsDir !== bIsDir) return aIsDir ? -1 : 1 // Dirs first
+          if (aIsDir !== bIsDir) return aIsDir ? -1 : 1
           return aKey.localeCompare(bKey)
         })
         .map(([name, item]) => {
           const isFile = !!(item as AppFile).path
           if (isFile) {
             const file = item as AppFile
-            const isSelected = selectedFile?.path === file.path
-            const jobName = `Ingestion: ${file.path}`;
+            const isSelected = selectedFile?.id === file.id
+            const jobName = `Ingestion: ${file.id}`;
             const progress = jobProgress[jobName];
             const timer = jobTimers[jobName];
             const isComplete = progress && progress.progress === progress.total;
 
             return (
-              <li key={file.path}>
-                <div
-                  className={isSelected ? 'selected' : ''}
-                  onClick={() => onSelectFile(file)}
-                  title={file.path}
-                >
+              <li key={file.id}>
+                <div className={isSelected ? 'selected' : ''} onClick={() => setSelectedFile(file)} title={file.path}>
                     <div className="file-item-main-line">
                         <FileText size={16} />{' '}
                         <span className='file-item-name'>{name}</span>
                         <div className="file-item-details">
-                            {file.language !== 'unknown' && (
-                                <span className="language-indicator" title={`Detected language: ${file.language}`}>
-                                    {file.language}
-                                </span>
-                            )}
-                            <SummaryStatusIndicator status={file.summaryStatus} onClick={() => handleSummaryClick(file)} />
+                            {file.language !== 'unknown' && <span className="language-indicator">{file.language}</span>}
+                            <SummaryStatusIndicator status={file.summaryStatus} onClick={() => onShowSummary(file)} />
                         </div>
                         <button className="remove-file-btn" onClick={(e) => handleRemoveClick(e, file)}>x</button>
                     </div>
@@ -80,30 +67,15 @@ const MemoizedFileTreeView = memo(function FileTreeView({ tree, selectedFile, on
                       <progress value={progress.progress} max={progress.total}></progress>
                     </div>
                   )}
-                  {timer && (
-                    <span className="job-timer">
-                      {(timer.elapsed / 1000).toFixed(1)}s
-                    </span>
-                  )}
+                  {timer && <span className="job-timer">{(timer.elapsed / 1000).toFixed(1)}s</span>}
                 </div>
               </li>
             )
           } else {
             return (
               <li key={pathPrefix + name} className='folder-item'>
-                <div>
-                  <Folder size={16} /> <span>{name}</span>
-                </div>
-                <MemoizedFileTreeView
-                  tree={item as FileTree}
-                  selectedFile={selectedFile}
-                  onSelectFile={onSelectFile}
-                  onRemoveFile={onRemoveFile}
-                  jobProgress={jobProgress}
-                  jobTimers={jobTimers}
-                  onShowSummary={onShowSummary}
-                  pathPrefix={pathPrefix + name + '/'}
-                />
+                <div><Folder size={16} /> <span>{name}</span></div>
+                <FileTreeView tree={item as FileTree} pathPrefix={pathPrefix + name + '/'} onShowSummary={onShowSummary} />
               </li>
             )
           }
@@ -112,4 +84,4 @@ const MemoizedFileTreeView = memo(function FileTreeView({ tree, selectedFile, on
   )
 });
 
-export default MemoizedFileTreeView;
+export default FileTreeView;
