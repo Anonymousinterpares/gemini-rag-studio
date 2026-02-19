@@ -9,6 +9,7 @@ import {
   ParagraphLayout,
   Line,
 } from './types';
+import type { IndexDocumentResult } from './types';
 
 // --- Canvas and Caching ---
 const canvas = new OffscreenCanvas(1, 1);
@@ -95,8 +96,19 @@ async function executeTask(task: ComputeTask) {
     switch (taskPayload.type) {
       case TaskType.CalculateLayout: {
         if (isLoggingEnabled) console.log(`[GP Worker ${workerId}] Starting layout calculation for: ${taskPayload.docId}`);
-        const { docContent, containerWidth, fontSize, fontFamily } = taskPayload;
+        const { docContent: payloadContent, file, containerWidth, fontSize, fontFamily } = taskPayload;
         
+        let docContent = payloadContent;
+        if (!docContent && file) {
+            if (isLoggingEnabled) console.log(`[GP Worker ${workerId}] No content provided, reading from file for: ${taskPayload.docId}`);
+            // GP worker can read File/Blob
+            docContent = await file.text();
+        }
+
+        if (!docContent) {
+            throw new Error(`[GP Worker] No content or file provided for layout calculation of ${taskPayload.docId}`);
+        }
+
         context.font = `${fontSize}em ${fontFamily}`;
         localWordWidthCache.clear();
 
@@ -229,6 +241,89 @@ async function executeTask(task: ComputeTask) {
             language: languageCode,
         };
         if (isLoggingEnabled) console.log(`[GP Worker ${workerId}] Finished language detection for: ${taskPayload.docId}. Detected: ${languageCode}`, { result });
+        break;
+      }
+      case TaskType.IndexDocument: {
+        const { docId, parentChunks } = taskPayload;
+        if (isLoggingEnabled) console.log(`[GP Worker ${workerId}] Starting indexing for: ${docId}`);
+
+        // 1. Entity Indexing
+        const entities: Record<string, { count: number; positions: number[] }> = {};
+        for (const pc of parentChunks) {
+          const text = pc.text;
+          const entityRegex = /\b([A-Z][A-Za-zÀ-ÖØ-öø-ÿ'-]+(?:\s+[A-Z][A-Za-zÀ-ÖØ-öø-ÿ'-]+)*)\b/g;
+          let match: RegExpExecArray | null;
+          while ((match = entityRegex.exec(text)) !== null) {
+            const entity = match[1].trim();
+            if (entity.length < 2) continue;
+            const lower = entity.toLowerCase();
+            if (['the', 'and', 'or', 'a', 'an', 'of', 'to', 'in', 'on', 'for', 'with', 'by'].includes(lower)) continue;
+            const pos = pc.start + (match.index || 0);
+            if (!entities[lower]) entities[lower] = { count: 0, positions: [] };
+            entities[lower].count += 1;
+            entities[lower].positions.push(pos);
+          }
+        }
+
+        // 2. Structure Indexing
+        const chapters: { name: string; start: number; end: number }[] = [];
+        const paragraphs: { start: number; end: number }[] = [];
+        if (parentChunks.length > 0) {
+          const headingRegex = /^(?:\s*(?:chapter|rozdzia[łl])\b[\s.:-]*[\wIVXLCDM.\d-]*)\s*$/i;
+          const numberedRegex = /^\s*(?:[IVXLCDM]+|\d+)\s*(?:\.|-|:)\s*[\w-']{0,40}\s*$/;
+          const potential: { name: string; start: number }[] = [];
+          for (const pc of parentChunks) {
+            const lines = pc.text.split(/\r?\n/);
+            let offset = 0;
+            for (const line of lines) {
+              const absPos = pc.start + offset;
+              const trimmed = line.trim();
+              if (trimmed.length > 0 && trimmed.length < 80 && (headingRegex.test(trimmed) || numberedRegex.test(trimmed))) {
+                potential.push({ name: trimmed, start: absPos });
+              }
+              offset += line.length + 1;
+            }
+          }
+          potential.sort((a, b) => a.start - b.start);
+          const docStart = parentChunks[0].start;
+          const docEnd = parentChunks[parentChunks.length - 1].end;
+          if (potential.length >= 3) {
+            for (let i = 0; i < potential.length; i++) {
+              const start = potential[i].start;
+              const end = i + 1 < potential.length ? potential[i + 1].start : docEnd;
+              const name = potential[i].name;
+              chapters.push({ name, start, end });
+            }
+          } else {
+            const windows = 8;
+            const span = docEnd - docStart;
+            for (let i = 0; i < windows; i++) {
+              const start = docStart + Math.floor((i) * span / windows);
+              const end = i + 1 < windows ? docStart + Math.floor((i + 1) * span / windows) : docEnd;
+              chapters.push({ name: `Section ${i + 1}`, start, end });
+            }
+          }
+          for (const pc of parentChunks) {
+            const txt = pc.text;
+            let idx = 0;
+            const parts = txt.split(/\n\s*\n+/);
+            for (const part of parts) {
+              const localStart = txt.indexOf(part, idx);
+              if (localStart === -1) { idx += part.length; continue; }
+              const absStart = pc.start + localStart;
+              const absEnd = absStart + part.length;
+              paragraphs.push({ start: absStart, end: absEnd });
+              idx = localStart + part.length;
+            }
+          }
+        }
+
+        result = {
+          docId,
+          entities,
+          structure: { chapters, paragraphs },
+        } as IndexDocumentResult;
+        if (isLoggingEnabled) console.log(`[GP Worker ${workerId}] Finished indexing for: ${docId}`);
         break;
       }
       default: {

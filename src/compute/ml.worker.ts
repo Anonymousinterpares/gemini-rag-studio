@@ -9,10 +9,16 @@ import {
   HierarchicalChunkResult,
   EmbedChildChunkPayload,
   EmbedChildChunkResult,
+  StreamChunkPayload,
+  StreamChunkResult,
+  CompleteStreamPayload,
 } from './types';
-import { hierarchicalChunker } from '../rag/hierarchical-splitter';
+import { hierarchicalChunker, StreamingHierarchicalChunker } from '../rag/hierarchical-splitter';
 
 let isLoggingEnabled = true; // Default to true
+
+// Maintain state for streaming ingestion
+const streamChunkers = new Map<string, StreamingHierarchicalChunker>();
 
 // --- Embedding Pipeline ---
 class EmbeddingPipeline {
@@ -242,6 +248,52 @@ async function executeTask(task: ComputeTask) {
           size: payload.size,
         } as EmbedChildChunkResult;
         // if (isLoggingEnabled) console.log(`[ML Worker ${workerId}] Finished child chunk embedding for: ${taskId}`);
+        break;
+      }
+      case TaskType.StreamChunk: {
+        const payload = taskPayload as StreamChunkPayload;
+        if (payload.isFirst || !streamChunkers.has(payload.docId)) {
+            // Defaulting to 1000/200 for now. The coordinator can pass these if needed.
+            streamChunkers.set(payload.docId, new StreamingHierarchicalChunker(1000, 200));
+        }
+        const chunker = streamChunkers.get(payload.docId)!;
+        const { parentChunks, childChunks } = await chunker.processChunk(payload.chunkText, false);
+        
+        const embeddings: number[][] = [];
+        if (childChunks.length > 0) {
+            const embedder = await EmbeddingPipeline.getInstance();
+            for (const child of childChunks) {
+                const embeddingResult = await embedder(child.text, { pooling: 'mean', normalize: true });
+                embeddings.push(Array.from(embeddingResult.data));
+            }
+        }
+
+        result = {
+            docId: payload.docId,
+            parentChunks,
+            childChunks,
+            embeddings,
+        } as StreamChunkResult;
+        break;
+      }
+      case TaskType.CompleteStream: {
+        const payload = taskPayload as CompleteStreamPayload;
+        const chunker = streamChunkers.get(payload.docId);
+        if (!chunker) {
+            throw new Error(`[ML Worker] Received CompleteStream for ${payload.docId} but no chunker found.`);
+        }
+        const { parentChunks, childChunks } = await chunker.processChunk("", true);
+        streamChunkers.delete(payload.docId);
+
+        // We return these as a HierarchicalChunkResult so the coordinator can reuse existing logic
+        result = {
+            docId: payload.docId,
+            parentChunks,
+            childChunks,
+            name: payload.name,
+            lastModified: payload.lastModified,
+            size: payload.size,
+        } as HierarchicalChunkResult;
         break;
       }
       default: {

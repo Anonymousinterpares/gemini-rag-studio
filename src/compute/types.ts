@@ -1,3 +1,6 @@
+import { SearchResult, Model, TokenUsage } from "../types";
+import { DocumentChunk } from "../rag/pipeline";
+
 // The different types of computation the engine can perform
 export enum TaskType {
   EmbedDocumentChunk,
@@ -10,6 +13,9 @@ export enum TaskType {
   DetectLanguage,
   HierarchicalChunk,
   EmbedChildChunk,
+  IndexDocument,
+  StreamChunk,
+  CompleteStream,
 }
 
 // Task priorities, from highest to lowest
@@ -17,6 +23,28 @@ export enum TaskPriority {
   P0_UserView,      // User is actively waiting for this layout
   P1_Primary,       // High priority background work (embedding, reranking)
   P2_Background,    // Proactive background layout calculation
+}
+
+// Specific payload for a chunk of data from a stream
+export interface StreamChunkPayload {
+  type: TaskType.StreamChunk;
+  docId: string;
+  chunkText: string;
+  isFirst: boolean;
+  name: string;
+  lastModified: number;
+  size: number;
+}
+
+// Specific payload for signaling completion of a stream
+export interface CompleteStreamPayload {
+  type: TaskType.CompleteStream;
+  docId: string;
+  name: string;
+  lastModified: number;
+  size: number;
+  chunkSize: number;
+  chunkOverlap: number;
 }
 
 // Specific payload for embedding a document chunk
@@ -35,7 +63,8 @@ export interface EmbedDocumentChunkPayload {
 export interface CalculateLayoutPayload {
   type: TaskType.CalculateLayout;
   docId: string;
-  docContent: string;
+  docContent?: string;
+  file?: File;
   containerWidth: number;
   fontSize: number;
   fontFamily: string;
@@ -136,7 +165,16 @@ export type ComputeTaskPayload =
   | ExecuteRAGForSummaryPayload
   | DetectLanguagePayload
   | HierarchicalChunkPayload
-  | EmbedChildChunkPayload;
+  | EmbedChildChunkPayload
+  | IndexDocumentPayload
+  | StreamChunkPayload
+  | CompleteStreamPayload;
+
+export interface IndexDocumentPayload {
+  type: TaskType.IndexDocument;
+  docId: string;
+  parentChunks: DocumentChunk[];
+}
 
 // A task as it exists in the coordinator's queue, combining payload with metadata
 export interface ComputeTask {
@@ -180,20 +218,18 @@ export interface EmbedChildChunkResult {
 
 export type EmbedQueryResult = number[];
 
-import { SearchResult, Model } from "../types";
-import { DocumentChunk } from "../rag/pipeline";
-
 export type RerankResult = SearchResult[];
 
 export interface IngestionJobPayload {
   name: string;
   lastModified: number;
   size: number;
-  embeddings: (number[] | undefined)[];
+  embeddings: number[][]; // Now always a dynamic array
   chunks?: DocumentChunk[]; // Legacy path: standard chunks
   parentChunks?: DocumentChunk[]; // New path: parent chunks
   childChunks?: DocumentChunk[]; // New path: child chunks to be embedded
   language: string;
+  isStreaming?: boolean;
 }
 
 export interface CalculateLayoutResult {
@@ -202,8 +238,6 @@ export interface CalculateLayoutResult {
   // by the useTextLayout hook and its cache.
     layout: ParagraphLayout[];
   }
-
-import { TokenUsage } from "../types";
 
 export interface SummarizeResult {
   docId: string;
@@ -245,17 +279,28 @@ export interface HierarchicalChunkResult {
   }
   
   
-  export type TaskResult =
-        | EmbedDocumentChunkResult
-      | EmbedQueryResult
-      | RerankResult
-      | CalculateLayoutResult
-      | SummarizeResult
-      | GenerateSummaryQueryResult
-      | ExecuteRAGForSummaryResult
-      | DetectLanguageResult
-      | HierarchicalChunkResult
-      | EmbedChildChunkResult;
+  export interface StreamChunkResult {
+  docId: string;
+  // If the chunk resulted in any finalized parent/child chunks, return them.
+  parentChunks: DocumentChunk[];
+  childChunks: DocumentChunk[];
+  // If we have embeddings for those child chunks, return them.
+  embeddings: number[][];
+}
+
+export type TaskResult =
+  | EmbedDocumentChunkResult
+  | EmbedQueryResult
+  | RerankResult
+  | CalculateLayoutResult
+  | SummarizeResult
+  | GenerateSummaryQueryResult
+  | ExecuteRAGForSummaryResult
+  | DetectLanguageResult
+  | HierarchicalChunkResult
+  | EmbedChildChunkResult
+  | IndexDocumentResult
+  | StreamChunkResult;
 
 
 // --- Message Contracts ---
@@ -390,6 +435,14 @@ export interface TokenUsageUpdateMessage {
     usage: TokenUsage;
 }
 
+export interface StreamChunkAddedMessage {
+    type: 'stream_chunk_added';
+    docId: string;
+    parentChunks: DocumentChunk[];
+    childChunks: DocumentChunk[];
+    embeddings: number[][];
+}
+
 export interface CoordinatorEventMap {
   'task_complete': TaskCompleteMessage;
   'job_complete': JobCompleteMessage;
@@ -400,4 +453,5 @@ export interface CoordinatorEventMap {
   'summary_generation_completed': SummaryGenerationCompletedMessage;
   'summary_generation_failed': SummaryGenerationFailedMessage;
   'token_usage_update': TokenUsageUpdateMessage;
+  'stream_chunk_added': StreamChunkAddedMessage;
 }

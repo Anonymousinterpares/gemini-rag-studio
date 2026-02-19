@@ -94,6 +94,14 @@ describe('pipeline', () => {
       ];
       store.addParentChunks(docId, parentChunks);
       
+      const mockEntities = {
+        'apple': { count: 2, positions: [0, 37] },
+        'microsoft': { count: 1, positions: [10] }
+      };
+      const mockStructure = { chapters: [], paragraphs: [] };
+      
+      store.setIndexes(docId, mockEntities, mockStructure);
+      
       const entities = store.getTopEntities(docId, 1);
       const entityNames = entities.map(e => e.entity);
       expect(entityNames).toContain('apple');

@@ -27,7 +27,7 @@ export const createFileTasks = async (
                 payload: {
                     type: TaskType.DetectLanguage,
                     docId: file.id,
-                    content: file.content.slice(0, 2000),
+                    content: file.content ? file.content.slice(0, 2000) : (file.name.slice(0, 500)),
                     model: selectedModel,
                     apiKey: apiKeys[selectedProvider],
                 }
@@ -41,7 +41,7 @@ export const createFileTasks = async (
                     payload: {
                         type: TaskType.HierarchicalChunk,
                         docId: file.id,
-                        docContent: file.content,
+                        docContent: file.content || "",
                         name: file.name,
                         lastModified: file.lastModified,
                         size: file.size,
@@ -49,10 +49,21 @@ export const createFileTasks = async (
                         chunkOverlap: 200,
                     }
                 });
-            } else {
+            } else if (file.content) {
                 console.log(`[DEBUG] createTaskFactory: Adding legacy EmbedDocumentChunk tasks.`);
                 const chunks = await chunkDocument(file.content);
                 coordinator.prewarmEmbeddingResults(file.id, file.name, file.lastModified, file.size, chunks.length);
+                
+                tasks.push({
+                    id: `${file.id}-index-${taskIdCounter++}`,
+                    priority: TaskPriority.P1_Primary,
+                    payload: {
+                        type: TaskType.IndexDocument,
+                        docId: file.id,
+                        parentChunks: chunks,
+                    }
+                });
+
                 chunks.forEach((chunk, index) => {
                     tasks.push({
                         id: `${file.id}-embed-${taskIdCounter++}`,
@@ -74,7 +85,17 @@ export const createFileTasks = async (
             break;
         }
         case 'summary': {
-            const firstTwoChunks = file.content.slice(0, 2000);
+            let firstTwoChunks = "";
+            if (file.content) {
+                firstTwoChunks = file.content.slice(0, 2000);
+            } else {
+                // For streaming files, we can try to get the first parent chunk from the vector store
+                const parentChunks = coordinator.getVectorStore().getParentChunks(file.id);
+                if (parentChunks && parentChunks.length > 0) {
+                    firstTwoChunks = parentChunks[0].text.slice(0, 2000);
+                }
+            }
+            
             tasks.push({
                 id: `${file.id}-summarize-${taskIdCounter++}`,
                 priority: TaskPriority.P2_Background,
@@ -95,7 +116,7 @@ export const createFileTasks = async (
                 payload: {
                     type: TaskType.DetectLanguage,
                     docId: file.id,
-                    content: file.content.slice(0, 2000),
+                    content: file.content ? file.content.slice(0, 2000) : "",
                     model: selectedModel,
                     apiKey: apiKeys[selectedProvider],
                 }
@@ -112,6 +133,7 @@ export const createFileTasks = async (
                     type: TaskType.CalculateLayout,
                     docId: file.id,
                     docContent: file.content,
+                    file: file.file,
                     containerWidth: defaultWidth - (2 * 16),
                     fontSize: docFontSize,
                     fontFamily: "'Fira Code', 'Courier New', monospace",

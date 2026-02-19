@@ -83,17 +83,21 @@ export const useCompute = (docFontSize: number) => {
 
                 if (fileResult.parentChunks && fileResult.childChunks) {
                     const { parentChunks, childChunks } = fileResult;
-                    vectorStore.current?.addParentChunks(docPath, parentChunks);
-                    for (let i = 0; i < childChunks.length; i++) {
-                        const child = childChunks[i];
-                        vectorStore.current?.addChildChunkEmbedding(docPath, finalEmbeddings[i], {
-                            ...child,
-                            parentChunkIndex: child.parentChunkIndex ?? -1,
-                        });
+                    // For streaming, these might have been added incrementally already, 
+                    // but for non-streaming (HierarchicalChunk task), they are added here.
+                    if (!fileResult.isStreaming) {
+                        vectorStore.current?.addParentChunks(docPath, parentChunks);
+                        for (let i = 0; i < childChunks.length; i++) {
+                            const child = childChunks[i];
+                            vectorStore.current?.addChildChunkEmbedding(docPath, finalEmbeddings[i], {
+                                ...child,
+                                parentChunkIndex: child.parentChunkIndex ?? -1,
+                            });
+                        }
                     }
                     setTotalEmbeddingsCount(vectorStore.current?.getEmbeddingCount() || 0);
                 } else {
-                    const chunks = fileResult.chunks ?? await chunkDocument(file.content);
+                    const chunks = fileResult.chunks ?? (file.content ? await chunkDocument(file.content) : []);
                     for (let i = 0; i < chunks.length; i++) {
                         vectorStore.current?.addChunkEmbedding(chunks[i], docPath, finalEmbeddings[i]);
                     }
@@ -110,10 +114,13 @@ export const useCompute = (docFontSize: number) => {
                     language: file.language || 'unknown',
                     parentChunks: fileResult.parentChunks,
                     childChunks: fileResult.childChunks,
+                    entities: vectorStore.current?.getEntities(docPath),
+                    structure: vectorStore.current?.getStructure(docPath),
                 });
 
                 if (coordinator.current && file && file.summaryStatus === 'missing') {
                     setFiles((prev: AppFile[]) => prev.map((f: AppFile) => f.id === docPath ? { ...f, summaryStatus: 'in_progress' } : f));
+                    // For streaming files, we can use the first few parent chunks for the summary query
                     const summaryTasks = await createFileTasks(file, 'summary', coordinator.current, docFontSize, selectedModel, selectedProvider, apiKeys, appSettings);
                     coordinator.current.addJob(`Summary: ${docPath}`, summaryTasks);
                 }
@@ -192,6 +199,21 @@ export const useCompute = (docFontSize: number) => {
             setFiles((prev: AppFile[]) => prev.map((f: AppFile) => f.id === message.docId ? { ...f, layoutStatus: 'ready' } : f));
         };
 
+        const handleStreamChunkAdded = (message: import('../compute/types').StreamChunkAddedMessage) => {
+            const { docId, parentChunks, childChunks, embeddings } = message;
+            if (vectorStore.current) {
+                vectorStore.current.addParentChunks(docId, [...(vectorStore.current.getParentChunks(docId) || []), ...parentChunks]);
+                for (let i = 0; i < childChunks.length; i++) {
+                    const child = childChunks[i];
+                    vectorStore.current.addChildChunkEmbedding(docId, embeddings[i], {
+                        ...child,
+                        parentChunkIndex: child.parentChunkIndex ?? -1,
+                    });
+                }
+                setTotalEmbeddingsCount(vectorStore.current.getEmbeddingCount());
+            }
+        };
+
         if (coordinator.current) {
             coordinator.current.on('task_complete', handleTaskComplete);
             coordinator.current.on('job_complete', handleJobComplete);
@@ -201,6 +223,7 @@ export const useCompute = (docFontSize: number) => {
             coordinator.current.on('summary_generation_completed', handleSummaryCompleted);
             coordinator.current.on('summary_generation_failed', handleSummaryFailed);
             coordinator.current.on('layout_updated', handleLayoutUpdated);
+            coordinator.current.on('stream_chunk_added', handleStreamChunkAdded);
         }
 
         return () => {
@@ -213,6 +236,7 @@ export const useCompute = (docFontSize: number) => {
                 coordinator.current.off('summary_generation_completed', handleSummaryCompleted);
                 coordinator.current.off('summary_generation_failed', handleSummaryFailed);
                 coordinator.current.off('layout_updated', handleLayoutUpdated);
+                coordinator.current.off('stream_chunk_added', handleStreamChunkAdded);
             }
         };
     }, [appSettings, files, setFiles, apiKeys, docFontSize, selectedModel, selectedProvider, setIsEmbedding, setJobProgress, setRerankProgress, setJobTimers, setComputeDevice, setMlWorkerCount, setActiveJobCount, setTotalEmbeddingsCount]);

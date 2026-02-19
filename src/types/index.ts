@@ -13,7 +13,8 @@ export interface AppFile {
   id: string; // Unique identifier for the file
   path: string
   name: string
-  content: string
+  content?: string
+  file?: File
   lastModified: number
   size: number
   summaryStatus: SummaryStatus;
@@ -69,7 +70,7 @@ export interface TokenUsage {
   completionTokens: number;
 }
 
-import { DocumentChunk } from "../rag/pipeline";
+import { DocumentChunk, DocumentStructureMap } from "../rag/pipeline";
 
 export interface CachedEmbedding {
   id: string; // Use file ID for cache key
@@ -81,4 +82,6 @@ export interface CachedEmbedding {
   language: string;
   parentChunks?: DocumentChunk[];
   childChunks?: DocumentChunk[];
+  entities?: Record<string, { count: number; positions: number[] }>;
+  structure?: DocumentStructureMap;
 }

@@ -1,5 +1,5 @@
 import { AppSettings } from '../config';
-import { ComputeTask, TaskPriority, WorkerToCoordinatorMessage, TaskType, JobCompleteMessage, CoordinatorEventMap, ComputeDevice, JobProgressMessage, ParagraphLayout, CalculateLayoutResult, SummarizeResult, HierarchicalChunkResult, EmbedChildChunkResult } from './types';
+import { ComputeTask, TaskPriority, WorkerToCoordinatorMessage, TaskType, JobCompleteMessage, CoordinatorEventMap, ComputeDevice, JobProgressMessage, ParagraphLayout, CalculateLayoutResult, SummarizeResult, HierarchicalChunkResult, EmbedChildChunkResult, IndexDocumentResult } from './types';
 import { VectorStore } from '../rag/pipeline';
 
 type Listener<T> = (payload: T) => void;
@@ -34,6 +34,7 @@ export class ComputeCoordinator {
   private workerDeviceStatuses = new Map<string, ComputeDevice>();
   private layoutCache = new Map<string, ParagraphLayout[]>();
   private embeddingResults = new Map<string, import('./types').IngestionJobPayload>();
+  private workerPins = new Map<string, string>(); // docId -> workerId
   private nextJobId = 0;
   private nextMlWorkerIndex = 0;
   private isLoggingEnabled = true;
@@ -148,7 +149,11 @@ export class ComputeCoordinator {
             const embedResult = result as import('./types').EmbedDocumentChunkResult;
             const fileResult = this.embeddingResults.get(embedResult.docId);
             if (fileResult) {
-              fileResult.embeddings[embedResult.chunkIndex] = Array.from(embedResult.embedding);
+              if (fileResult.isStreaming) {
+                fileResult.embeddings.push(Array.from(embedResult.embedding));
+              } else {
+                fileResult.embeddings[embedResult.chunkIndex] = Array.from(embedResult.embedding);
+              }
             }
             break;
           }
@@ -156,8 +161,12 @@ export class ComputeCoordinator {
             const embedResult = result as EmbedChildChunkResult;
             const fileResult = this.embeddingResults.get(embedResult.docId);
             if (fileResult) {
-              // The embeddings array now corresponds to the child chunks
-              fileResult.embeddings[embedResult.childChunkIndex] = Array.from(embedResult.embedding);
+              if (fileResult.isStreaming) {
+                fileResult.embeddings.push(Array.from(embedResult.embedding));
+              } else {
+                // The embeddings array now corresponds to the child chunks
+                fileResult.embeddings[embedResult.childChunkIndex] = Array.from(embedResult.embedding);
+              }
             }
             break;
           }
@@ -241,6 +250,103 @@ export class ComputeCoordinator {
 
             if (this.isLoggingEnabled) console.log(`[${new Date().toISOString()}] [Coordinator DEBUG] Creating ${embedTasks.length} EmbedChildChunk tasks for ${chunkResult.docId}.`);
             this.addTasksToJob(jobId, embedTasks);
+
+            // Also create an indexing task for entities and structure.
+            const indexTask: Omit<ComputeTask, 'jobId'> = {
+              id: `${chunkResult.docId}-index`,
+              priority: TaskPriority.P1_Primary,
+              payload: {
+                type: TaskType.IndexDocument,
+                docId: chunkResult.docId,
+                parentChunks: chunkResult.parentChunks,
+              },
+            };
+            this.addTasksToJob(jobId, [indexTask]);
+            break;
+          }
+          case TaskType.IndexDocument: {
+            const { docId, entities, structure } = result as IndexDocumentResult;
+            if (this.isLoggingEnabled) console.log(`[${new Date().toISOString()}] [Coordinator] Indexing for ${docId} complete.`);
+            this.vectorStore.setIndexes(docId, entities, structure);
+            break;
+          }
+          case TaskType.StreamChunk: {
+            const streamResult = result as import('./types').StreamChunkResult;
+            const { docId, parentChunks, childChunks, embeddings } = streamResult;
+
+            let fileResult = this.embeddingResults.get(docId);
+            if (!fileResult) {
+                // Initialize if not present (this handles the first chunk)
+                const taskPayload = (this.jobRegistry.get(jobId)?.tasks.find(t => t.id === taskId)?.payload as import('./types').StreamChunkPayload);
+                fileResult = {
+                    name: taskPayload.name,
+                    lastModified: taskPayload.lastModified,
+                    size: taskPayload.size,
+                    embeddings: [],
+                    parentChunks: [],
+                    childChunks: [],
+                    language: 'unknown',
+                    isStreaming: true,
+                };
+                this.embeddingResults.set(docId, fileResult);
+            }
+
+            // Append new chunks and embeddings
+            fileResult.parentChunks = [...(fileResult.parentChunks || []), ...parentChunks];
+            fileResult.childChunks = [...(fileResult.childChunks || []), ...childChunks];
+            fileResult.embeddings.push(...embeddings);
+
+            if (this.isLoggingEnabled) console.log(`[${new Date().toISOString()}] [Coordinator] Incremental stream chunk for ${docId}: ${parentChunks.length} parents, ${childChunks.length} children.`);
+            
+            // Emit special event for incremental UI updates
+            this.emit('stream_chunk_added', {
+                type: 'stream_chunk_added',
+                docId,
+                parentChunks,
+                childChunks,
+                embeddings,
+            });
+            break;
+          }
+          case TaskType.CompleteStream: {
+            const completeResult = result as HierarchicalChunkResult;
+            const docId = completeResult.docId;
+            if (this.isLoggingEnabled) console.log(`[${new Date().toISOString()}] [Coordinator] Stream complete for ${docId}. Unpinning worker.`);
+            this.workerPins.delete(docId);
+
+            // The worker might have returned some final chunks. Add them.
+            const fileResult = this.embeddingResults.get(docId);
+            if (fileResult) {
+                fileResult.parentChunks = [...(fileResult.parentChunks || []), ...completeResult.parentChunks];
+                fileResult.childChunks = [...(fileResult.childChunks || []), ...completeResult.childChunks];
+                // Embeddings should have been sent already or if worker embeds in CompleteStream, 
+                // we'd need them here. But our worker sends them in StreamChunk.
+                // Wait, if CompleteStream returns chunks, they might not have embeddings yet.
+                // Let's re-use the HierarchicalChunk logic to create embedding tasks if needed.
+                
+                if (completeResult.childChunks.length > 0) {
+                     if (this.isLoggingEnabled) console.log(`[${new Date().toISOString()}] [Coordinator] Stream completion returned ${completeResult.childChunks.length} additional child chunks. Creating embedding tasks.`);
+                     const embedTasks: Omit<ComputeTask, 'jobId'>[] = completeResult.childChunks.map((child, i) => {
+                         const childIndex = fileResult.childChunks!.length - completeResult.childChunks.length + i;
+                         return {
+                             id: `${docId}-embed-final-${childIndex}`,
+                             priority: TaskPriority.P1_Primary,
+                             payload: {
+                                 type: TaskType.EmbedChildChunk,
+                                 docId: docId,
+                                 childChunkIndex: childIndex,
+                                 childChunkText: child.text,
+                                 parentChunkIndex: child.parentChunkIndex ?? -1,
+                                 name: fileResult.name,
+                                 lastModified: fileResult.lastModified,
+                                 size: fileResult.size,
+                                 totalChunks: -1, // Unknown total
+                             },
+                         };
+                     });
+                     this.addTasksToJob(jobId, embedTasks);
+                }
+            }
             break;
           }
         }
@@ -439,7 +545,12 @@ export class ComputeCoordinator {
 
   private routeTasks(tasks: ComputeTask[]) {
       tasks.forEach(task => {
-        if (task.payload.type === TaskType.CalculateLayout || task.payload.type === TaskType.GenerateSummaryQuery || task.payload.type === TaskType.Summarize || task.payload.type === TaskType.DetectLanguage || task.payload.type === TaskType.ExecuteRAGForSummary) {
+        if (task.payload.type === TaskType.CalculateLayout || 
+            task.payload.type === TaskType.GenerateSummaryQuery || 
+            task.payload.type === TaskType.Summarize || 
+            task.payload.type === TaskType.DetectLanguage || 
+            task.payload.type === TaskType.ExecuteRAGForSummary ||
+            task.payload.type === TaskType.IndexDocument) {
           this.gpTaskQueue.push(task);
         } else {
           this.mlTaskQueue.push(task);
@@ -458,6 +569,15 @@ export class ComputeCoordinator {
     return this.summaryJobsInProgress.has(docId);
   }
 
+  public getPendingTaskCount(jobId: string): number {
+    const job = this.jobRegistry.get(jobId);
+    return job ? job.pendingTaskIds.size : 0;
+  }
+
+  public getVectorStore(): VectorStore {
+    return this.vectorStore;
+  }
+
   public getLayout(docId: string): ParagraphLayout[] | undefined {
     return this.layoutCache.get(docId);
   }
@@ -468,7 +588,7 @@ export class ComputeCoordinator {
       name,
       lastModified,
       size,
-      embeddings: new Array(totalChunks).fill(undefined),
+      embeddings: [], // Initialize as empty, can grow
       language: 'unknown',
       // Chunks are not available in the non-semantic path, so this is undefined
     });
@@ -594,13 +714,46 @@ export class ComputeCoordinator {
 
     if (this.isLoggingEnabled) console.log(`[${new Date().toISOString()}] [Coordinator] Dispatching ML... Queue: ${this.mlTaskQueue.length}, Available ML Workers: ${availableWorkers.length}/${this.mlWorkerPool.length}`);
 
-    for (const workerHandle of availableWorkers) {
-      if (this.mlTaskQueue.length === 0) break;
-      const task = this.mlTaskQueue.shift()!;
-      if (this.isLoggingEnabled) console.log(`[${new Date().toISOString()}] [Coordinator DEBUG] Assigning ML task ${task.id} (Job: ${task.jobId}) to ${workerHandle.id}.`);
-      workerHandle.isIdle = false;
-      workerHandle.currentTaskId = task.id;
-      workerHandle.worker.postMessage({ type: 'start_task', task });
+    // Track which workers we've already assigned a task in this loop
+    const assignedWorkerIds = new Set<string>();
+
+    // Process tasks in order
+    let i = 0;
+    while (i < this.mlTaskQueue.length && assignedWorkerIds.size < availableWorkers.length) {
+      const task = this.mlTaskQueue[i];
+      // Safely extract docId if it exists in the payload
+      const docId = 'docId' in task.payload ? (task.payload as { docId: string }).docId : null;
+      const pinnedWorkerId = docId ? this.workerPins.get(docId) : null;
+      
+      let targetWorkerHandle: WorkerHandle | undefined;
+      
+      if (pinnedWorkerId) {
+        // If this task is pinned, find that specific worker if it's available
+        targetWorkerHandle = availableWorkers.find(w => w.id === pinnedWorkerId && !assignedWorkerIds.has(w.id));
+      } else {
+        // Otherwise, find the first available worker that isn't already assigned in this loop
+        targetWorkerHandle = availableWorkers.find(w => !assignedWorkerIds.has(w.id));
+        
+        // If it's a streaming task, pin it for the future
+        if (targetWorkerHandle && docId && (task.payload.type === TaskType.StreamChunk || task.payload.type === TaskType.CompleteStream)) {
+            if (this.isLoggingEnabled) console.log(`[${new Date().toISOString()}] [Coordinator] Pinning ${docId} to ${targetWorkerHandle.id}.`);
+            this.workerPins.set(docId, targetWorkerHandle.id);
+        }
+      }
+
+      if (targetWorkerHandle) {
+        // Remove task from queue
+        this.mlTaskQueue.splice(i, 1);
+        if (this.isLoggingEnabled) console.log(`[${new Date().toISOString()}] [Coordinator DEBUG] Assigning ML task ${task.id} (Job: ${task.jobId}) to ${targetWorkerHandle.id}.`);
+        targetWorkerHandle.isIdle = false;
+        targetWorkerHandle.currentTaskId = task.id;
+        targetWorkerHandle.worker.postMessage({ type: 'start_task', task });
+        assignedWorkerIds.add(targetWorkerHandle.id);
+        // Don't increment 'i' because we just removed an element
+      } else {
+        // This task can't be assigned right now (either pinned worker is busy or no workers left), try next task
+        i++;
+      }
     }
   }
 

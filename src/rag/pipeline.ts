@@ -100,93 +100,15 @@ export class VectorStore {
 
   addParentChunks(id: string, parentChunks: DocumentChunk[]) { // Use file ID
     this.parentChunkStore.set(id, parentChunks); // Use file ID
-    // Build a lightweight entity index for this doc
-    try {
-      const entityMap = new Map<string, { count: number; positions: number[] }>();
-      // Join text or scan each chunk to track positions
-      for (const pc of parentChunks) {
-        const text = pc.text;
-        // Simple heuristic: capitalized tokens or multi-word capitalized sequences
-        const entityRegex = /\b([A-Z][A-Za-zÀ-ÖØ-öø-ÿ'-]+(?:\s+[A-Z][A-Za-zÀ-ÖØ-öø-ÿ'-]+)*)\b/g;
-        let match: RegExpExecArray | null;
-        while ((match = entityRegex.exec(text)) !== null) {
-          const entity = match[1].trim();
-          // Filter trivial/common words
-          if (entity.length < 2) continue;
-          const lower = entity.toLowerCase();
-          if (['the', 'and', 'or', 'a', 'an', 'of', 'to', 'in', 'on', 'for', 'with', 'by'].includes(lower)) continue;
-          const pos = pc.start + (match.index || 0);
-          if (!entityMap.has(lower)) entityMap.set(lower, { count: 0, positions: [] });
-          const rec = entityMap.get(lower)!;
-          rec.count += 1;
-          rec.positions.push(pos);
-        }
-      }
-      this.entityIndex.set(id, entityMap);
-    } catch (e) {
-      console.warn('[VectorStore] Failed to build entity index for', id, e);
-    }
+  }
 
-    // Build document structure (chapters + paragraphs)
-    try {
-      const chapters: { name: string; start: number; end: number }[] = [];
-      const paragraphs: { start: number; end: number }[] = [];
-      if (parentChunks.length > 0) {
-        // Detect candidate chapters via heading-like lines
-        const headingRegex = /^(?:\s*(?:chapter|rozdzia[łl])\b[\s.:-]*[\wIVXLCDM.\d-]*)\s*$/i;
-        const numberedRegex = /^\s*(?:[IVXLCDM]+|\d+)\s*(?:\.|-|:)\s*[\w-']{0,40}\s*$/;
-        const potential: { name: string; start: number }[] = [];
-        for (const pc of parentChunks) {
-          const lines = pc.text.split(/\r?\n/);
-          let offset = 0;
-          for (const line of lines) {
-            const absPos = pc.start + offset;
-            const trimmed = line.trim();
-            if (trimmed.length > 0 && trimmed.length < 80 && (headingRegex.test(trimmed) || numberedRegex.test(trimmed))) {
-              potential.push({ name: trimmed, start: absPos });
-            }
-            offset += line.length + 1; // +1 for newline
-          }
-        }
-        potential.sort((a,b)=>a.start-b.start);
-        const docStart = parentChunks[0].start;
-        const docEnd = parentChunks[parentChunks.length-1].end;
-        if (potential.length >= 3) {
-          for (let i=0;i<potential.length;i++) {
-            const start = potential[i].start;
-            const end = i+1<potential.length ? potential[i+1].start : docEnd;
-            const name = potential[i].name;
-            chapters.push({ name, start, end });
-          }
-        } else {
-          // Fallback to windowing (8 windows)
-          const windows = 8;
-          const span = docEnd - docStart;
-          for (let i=0;i<windows;i++) {
-            const start = docStart + Math.floor((i)*span/windows);
-            const end = i+1<windows ? docStart + Math.floor((i+1)*span/windows) : docEnd;
-            chapters.push({ name: `Section ${i+1}`, start, end });
-          }
-        }
-        // Paragraphs: split by blank lines within parent chunks
-        for (const pc of parentChunks) {
-          const txt = pc.text;
-          let idx = 0;
-          const parts = txt.split(/\n\s*\n+/);
-          for (const part of parts) {
-            const localStart = txt.indexOf(part, idx);
-            if (localStart === -1) { idx += part.length; continue; }
-            const absStart = pc.start + localStart;
-            const absEnd = absStart + part.length;
-            paragraphs.push({ start: absStart, end: absEnd });
-            idx = localStart + part.length;
-          }
-        }
-      }
-      this.structureIndex.set(id, { chapters, paragraphs });
-    } catch (e) {
-      console.warn('[VectorStore] Failed to build structure map for', id, e);
+  setIndexes(id: string, entities: Record<string, { count: number; positions: number[] }>, structure: DocumentStructureMap) {
+    const entityMap = new Map<string, { count: number; positions: number[] }>();
+    for (const [k, v] of Object.entries(entities)) {
+      entityMap.set(k, v);
     }
+    this.entityIndex.set(id, entityMap);
+    this.structureIndex.set(id, structure);
   }
 
   search(queryEmbedding: number[], topK = 20, docId?: string): { chunk: string; similarity: number, id: string, start: number, end: number }[] { // Use docId
@@ -273,6 +195,16 @@ export class VectorStore {
   }
 
   // Entity index APIs
+  getEntities(id: string): Record<string, { count: number; positions: number[] }> | undefined {
+    const m = this.entityIndex.get(id);
+    if (!m) return undefined;
+    const res: Record<string, { count: number; positions: number[] }> = {};
+    for (const [k, v] of m.entries()) {
+      res[k] = v;
+    }
+    return res;
+  }
+
   getTopEntities(id: string, minCount = 2, max = 50): { entity: string; count: number }[] {
     const m = this.entityIndex.get(id);
     if (!m) return [];
