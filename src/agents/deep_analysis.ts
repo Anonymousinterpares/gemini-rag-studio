@@ -356,17 +356,22 @@ export async function runDeepAnalysis(opts: {
     const k = Math.min(50, Math.max(15, (settings.numInitialCandidates || 20)));
     const searchPromises = subQs.map(async (sq) => {
       const emb = await embedSafe(sq); // serialize due to single resolver design
-      return opts.vectorStore.search(emb, k) || [];
+      return opts.vectorStore.search(emb, k, undefined, { includeEmbeddings: true }) || [];
     });
     const searchResults = await Promise.all(searchPromises);
-    const merged: SearchResult[] = searchResults.flat();
+    const merged: (SearchResult & { embedding: number[] })[] = searchResults.flat() as (SearchResult & { embedding: number[] })[];
 
     // Optional rerank
-    let ranked: SearchResult[] = merged;
+    let ranked: (SearchResult & { embedding: number[] })[] = merged;
     if (opts.rerank) {
       const docs = merged.map(r => ({ chunk: r.chunk, id: r.id, start: r.start, end: r.end }));
       try {
-        ranked = await rerankSafe(`${query} ${sec.name}`, docs); // serialize due to single resolver design
+        const reranked = await rerankSafe(`${query} ${sec.name}`, docs); // serialize due to single resolver design
+        // Restore embeddings after rerank
+        ranked = reranked.map(r => ({
+            ...r,
+            embedding: merged.find(m => m.id === r.id && m.start === r.start)?.embedding || []
+        }));
       } catch {
         // ignore
       }
@@ -384,7 +389,7 @@ export async function runDeepAnalysis(opts: {
             if (dist < nearest) nearest = dist;
           }
           const bonus = Number.isFinite(nearest) ? Math.max(0, 1 - Math.min(nearest, 3000) / 3000) * 0.1 : 0; // up to +0.1
-          return { ...r, similarity: r.similarity + bonus } as SearchResult;
+          return { ...r, similarity: r.similarity + bonus };
         });
         boosted.sort((a,b)=>b.similarity - a.similarity);
         ranked = boosted;
@@ -393,97 +398,11 @@ export async function runDeepAnalysis(opts: {
       // ignore
     }
 
-    // Coverage-aware selection with near-duplicate clustering and span quotas
-    const byDoc = new Map<string, SearchResult[]>();
-    for (const r of ranked) {
-      if (!byDoc.has(r.id)) byDoc.set(r.id, []);
-      byDoc.get(r.id)!.push(r);
-    }
-
-    const selected: SearchResult[] = [];
-    const maxPerDoc = 3; // soft cap to avoid piling from a single id
-    for (const [docId, list] of byDoc.entries()) {
-      // Simple near-duplicate clustering within a doc: group by parent range window
-      // Using start index windowing as proxy; can be upgraded to vector sim if needed
-      const clusters: SearchResult[][] = [];
-      const windowSize = 1500; // characters
-      list.sort((a, b) => a.start - b.start);
-      for (const item of list) {
-        let placed = false;
-        for (const cluster of clusters) {
-          const head = cluster[0];
-          if (Math.abs(head.start - item.start) < windowSize) { cluster.push(item); placed = true; break; }
-        }
-        if (!placed) clusters.push([item]);
-      }
-      // Take the best from each cluster by similarity
-      const clusterHeads = clusters.map(c => c.sort((a, b) => b.similarity - a.similarity)[0]);
-      clusterHeads.sort((a, b) => b.similarity - a.similarity);
-
-      // Span-aware quota: distribute picks across early/middle/late windows
-      const span = vectorStore.getDocSpan ? vectorStore.getDocSpan(docId) : undefined;
-      const quota = Math.min(maxPerDoc, Math.max(1, sec.maxBullets - 1));
-      if (span) {
-        const { minStart, maxEnd } = span;
-        const w1 = minStart + (maxEnd - minStart) / 3;
-        const w2 = minStart + 2 * (maxEnd - minStart) / 3;
-        const early: SearchResult[] = [];
-        const middle: SearchResult[] = [];
-        const late: SearchResult[] = [];
-        for (const ch of clusterHeads) {
-          if (ch.start <= w1) early.push(ch);
-          else if (ch.start <= w2) middle.push(ch);
-          else late.push(ch);
-        }
-        // Sort each bin by similarity
-        early.sort((a,b)=>b.similarity-a.similarity);
-        middle.sort((a,b)=>b.similarity-a.similarity);
-        late.sort((a,b)=>b.similarity-a.similarity);
-        const bins = [early, middle, late];
-        // Round-robin take from bins until quota
-        const picks: SearchResult[] = [];
-        let bi = 0;
-        while (picks.length < quota && (early.length || middle.length || late.length)) {
-          const bin = bins[bi % bins.length];
-          if (bin.length) picks.push(bin.shift()!);
-          bi++;
-          if (bi > 100) break; // safety
-        }
-        // If still short, fill from remaining clusterHeads
-        if (picks.length < quota) {
-          const remainingCH = clusterHeads.filter(h => !picks.some(p => p.start===h.start && p.end===h.end));
-          picks.push(...remainingCH.slice(0, quota - picks.length));
-        }
-        selected.push(...picks);
-      } else {
-        selected.push(...clusterHeads.slice(0, quota));
-      }
-    }
-
-    // If we still have room, fill with MMR globally
+    // Intelligent selection via native VectorStore diversification
+    // We use a lower lambda (0.4) for Deep Analysis to prioritize finding "different" evidence 
+    // across the document over just the most similar chunks.
     const target = Math.min(10, sec.maxBullets * 2);
-    const picked = selected.slice(0, target);
-    const remaining = ranked.filter(r => !picked.some(p => p.id === r.id && p.start === r.start && p.end === r.end));
-    const lambda = 0.7;
-    const windowSize = 1500;
-    while (picked.length < target && remaining.length > 0) {
-      let bestIdx = 0; let bestScore = -Infinity;
-      for (let i = 0; i < remaining.length; i++) {
-        const cand = remaining[i];
-        const rel = cand.similarity;
-        let red = 0;
-        for (const s of picked) {
-          // Redundancy proxy: proximity in the same doc reduces novelty
-          if (s.id === cand.id) {
-            const dist = Math.abs(s.start - cand.start);
-            red = Math.max(red, Math.max(0, (windowSize - dist) / windowSize));
-          }
-        }
-        const score = lambda * rel - (1 - lambda) * red;
-        if (score > bestScore) { bestScore = score; bestIdx = i; }
-      }
-      picked.push(remaining.splice(bestIdx, 1)[0]);
-    }
+    const picked = vectorStore.diversify(ranked, target, { lambda: 0.4, spanWeight: 0.2 });
 
     return { name: sec.name, results: picked };
   };

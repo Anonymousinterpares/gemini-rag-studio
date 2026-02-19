@@ -119,6 +119,60 @@ const Settings: FC<{ className?: string }> = ({ className }) => {
         <label>Deep Analysis:</label>
         <input type="checkbox" name="isDeepAnalysisEnabled" checked={appSettings.isDeepAnalysisEnabled} onChange={handleSettingChange} />
       </div>
+
+      {appSettings.isDeepAnalysisEnabled && (
+        <>
+          <div className="setting-row nested">
+            <label>Sub-questions:</label>
+            <div className="worker-controls">
+              <button onClick={() => setAppSettings(p => ({...p, numSubQuestions: Math.max(1, p.numSubQuestions - 1)}))}><Minus size={14} /></button>
+              <span>{appSettings.numSubQuestions}</span>
+              <button onClick={() => setAppSettings(p => ({...p, numSubQuestions: p.numSubQuestions + 1}))}><Plus size={14} /></button>
+            </div>
+          </div>
+          <div className="setting-row nested">
+            <label>DA Level:</label>
+            <select name="deepAnalysisLevel" value={appSettings.deepAnalysisLevel} onChange={(e) => setAppSettings(p => ({...p, deepAnalysisLevel: parseInt(e.target.value) as 2|3}))}>
+              <option value={2}>Level 2 (Discovery)</option>
+              <option value={3}>Level 3 (Gap Analysis)</option>
+            </select>
+          </div>
+        </>
+      )}
+
+      <div className="setting-row">
+        <label>Query Transform:</label>
+        <button onClick={() => setAppSettings(p => ({...p, isLightQueryTransformationEnabled: !p.isLightQueryTransformationEnabled}))} className={`toggle-button ${appSettings.isLightQueryTransformationEnabled ? 'active' : ''}`}>{appSettings.isLightQueryTransformationEnabled ? 'ON' : 'OFF'}</button>
+      </div>
+
+      <div className="setting-row">
+        <label>Doc-Only Mode:</label>
+        <button onClick={() => setAppSettings(p => ({...p, docOnlyMode: !p.docOnlyMode}))} className={`toggle-button ${appSettings.docOnlyMode ? 'active' : ''}`}>{appSettings.docOnlyMode ? 'ON' : 'OFF'}</button>
+      </div>
+
+      <div className="setting-row">
+        <label>Semantic Chunk:</label>
+        <button onClick={() => setAppSettings(p => ({...p, isSemanticChunkingEnabled: !p.isSemanticChunkingEnabled}))} className={`toggle-button ${appSettings.isSemanticChunkingEnabled ? 'active' : ''}`}>{appSettings.isSemanticChunkingEnabled ? 'ON' : 'OFF'}</button>
+      </div>
+
+      <div className="setting-row">
+        <label>Threshold:</label>
+        <div className="worker-controls" style={{ gap: '8px' }}>
+          <input type="range" name="relevanceThreshold" min="0.05" max="0.95" step="0.05" value={appSettings.relevanceThreshold} onChange={(e) => setAppSettings(p => ({...p, relevanceThreshold: parseFloat(e.target.value)}))} style={{ width: '80px' }} />
+          <span style={{ fontSize: '0.8em', minWidth: '35px' }}>{appSettings.relevanceThreshold}</span>
+        </div>
+      </div>
+
+      <div className="setting-row">
+        <label>Chunk Size:</label>
+        <select name="parentChunkSize" value={appSettings.parentChunkSize} onChange={handleSettingChange}>
+          <option value={500}>500</option>
+          <option value={1000}>1000</option>
+          <option value={2000}>2000</option>
+          <option value={4000}>4000</option>
+        </select>
+      </div>
+
       <div className="setting-row">
         <label>Candidates:</label>
         <div className="worker-controls">

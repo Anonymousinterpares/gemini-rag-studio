@@ -111,45 +111,130 @@ export class VectorStore {
     this.structureIndex.set(id, structure);
   }
 
-  search(queryEmbedding: number[], topK = 20, docId?: string): { chunk: string; similarity: number, id: string, start: number, end: number }[] { // Use docId
-    if (this.childVectors.length === 0) {
-        return [];
+  /**
+   * Diversifies an existing set of candidates using MMR and Span Diversity.
+   * Useful for agents that merge results from multiple sub-queries.
+   */
+  diversify(
+    candidates: ({ chunk: string; similarity: number, id: string, start: number, end: number, embedding: number[] })[], 
+    topK: number, 
+    options: { lambda?: number, spanWeight?: number } = {}
+  ): { chunk: string; similarity: number, id: string, start: number, end: number }[] {
+    if (candidates.length === 0) return [];
+    
+    const { lambda = 0.7, spanWeight = 0.1 } = options;
+    
+    const selectedIndices: number[] = [];
+    const sectionUsage = new Map<string, number>();
+
+    const candidateSections = candidates.map(c => {
+        const struct = this.structureIndex.get(c.id);
+        if (!struct || !struct.chapters || struct.chapters.length === 0) return `${c.id}-root`;
+        const chapter = struct.chapters.find(ch => c.start >= ch.start && c.start < ch.end);
+        return chapter ? `${c.id}-${chapter.name}` : `${c.id}-unknown`;
+    });
+
+    while (selectedIndices.length < Math.min(topK, candidates.length)) {
+        let bestScore = -Infinity;
+        let bestIndex = -1;
+
+        for (let i = 0; i < candidates.length; i++) {
+            if (selectedIndices.includes(i)) continue;
+
+            const candidate = candidates[i];
+            const relevance = candidate.similarity;
+            
+            let maxSimilarityToSelected = 0;
+            for (const selIdx of selectedIndices) {
+                const sim = cos_sim(candidate.embedding, candidates[selIdx].embedding);
+                if (sim > maxSimilarityToSelected) maxSimilarityToSelected = sim;
+            }
+
+            const sectionKey = candidateSections[i];
+            const sectionCount = sectionUsage.get(sectionKey) || 0;
+            const progressiveSpanPenalty = sectionCount === 0 ? 0 : spanWeight * Math.pow(1.5, sectionCount - 1);
+
+            const score = (lambda * relevance) - ((1 - lambda) * maxSimilarityToSelected) - progressiveSpanPenalty;
+
+            if (score > bestScore) {
+                bestScore = score;
+                bestIndex = i;
+            }
+        }
+
+        if (bestIndex !== -1) {
+            selectedIndices.push(bestIndex);
+            const sectionKey = candidateSections[bestIndex];
+            sectionUsage.set(sectionKey, (sectionUsage.get(sectionKey) || 0) + 1);
+        } else {
+            break;
+        }
     }
+
+    return selectedIndices.map(idx => {
+        const { embedding: _emb, ...rest } = candidates[idx];
+        return rest;
+    });
+  }
+
+  /**
+   * Performs an intelligent diversity search using Maximal Marginal Relevance (MMR)
+   * and Dynamic Span-Aware Diversity.
+   */
+  search(
+    queryEmbedding: number[], 
+    topK = 20, 
+    docId?: string, 
+    options: { lambda?: number, spanWeight?: number, diversityType?: 'mmr' | 'simple', includeEmbeddings?: boolean } = {}
+  ): { chunk: string; similarity: number, id: string, start: number, end: number, embedding?: number[] }[] {
+    if (this.childVectors.length === 0) return [];
+
+    const { 
+      lambda = 0.7,      // 1.0 = Pure Relevance, 0.0 = Pure Diversity
+      spanWeight = 0.1,  // Base penalty for repeating a section
+      diversityType = 'mmr',
+      includeEmbeddings = false
+    } = options;
 
     let vectorsToSearch = this.childVectors;
-    if (docId) { // Use docId
-        vectorsToSearch = this.childVectors.filter(v => v.id === docId); // Use v.id
+    if (docId) {
+        vectorsToSearch = this.childVectors.filter(v => v.id === docId);
     }
 
-    // 1. Initial Candidate Retrieval: Fetch a larger pool of candidates (e.g., 100)
+    // 1. Candidate Retrieval (O(N))
     const initialCandidates = vectorsToSearch.map((item) => {
         const similarity = cos_sim(queryEmbedding, item.embedding);
-        return { similarity, id: item.id, parentChunkIndex: item.parentChunkIndex, start: item.start }; // Use item.id
+        return { 
+            similarity, 
+            id: item.id, 
+            parentChunkIndex: item.parentChunkIndex, 
+            start: item.start,
+            embedding: item.embedding 
+        };
     }).sort((a, b) => b.similarity - a.similarity).slice(0, 100);
 
-    // 2. Document Score Aggregation
-    const docScores = new Map<string, number>();
-    for (const candidate of initialCandidates) {
-        docScores.set(candidate.id, (docScores.get(candidate.id) || 0) + candidate.similarity); // Use candidate.id
+    if (initialCandidates.length === 0) return [];
+    if (diversityType === 'simple' || initialCandidates.length === 1) {
+        return this.resolveParentChunks(initialCandidates.slice(0, topK), includeEmbeddings);
     }
 
-    // 3. Top Document Selection
-    const sortedDocs = Array.from(docScores.entries()).sort((a, b) => b[1] - a[1]);
-    console.log(`[DocScore] Top scoring documents:`, JSON.stringify(sortedDocs.slice(0, 5)));
-    const topDocIds = new Set(sortedDocs.slice(0, 5).map(entry => entry[0])); // Use doc IDs
+    // 2. Intelligent Selection via internal diversification
+    const diversifiedChildren = this.diversify(initialCandidates, topK, { lambda, spanWeight });
+    
+    // Resolve back to parents for rich context
+    return this.resolveParentChunks(diversifiedChildren, includeEmbeddings);
+  }
 
-    // 4. Finalist Chunk Gathering
-    const finalistCandidates = initialCandidates.filter(c => topDocIds.has(c.id)); // Use c.id
+  /**
+   * Helper to map child candidates back to their rich parent context
+   */
+  private resolveParentChunks(candidates: any[], includeEmbeddings: boolean = false): { chunk: string; similarity: number, id: string, start: number, end: number, embedding?: number[] }[] {
+    const results: { chunk: string; similarity: number, id: string, start: number, end: number, embedding?: number[] }[] = [];
+    const seenParentKeys = new Set<string>();
 
-    // 5. Unique Parent Chunk Retrieval
-    const uniqueParentChunks = new Map<string, { chunk: string; similarity: number, id: string, start: number, end: number }>(); // Use id
-
-    for (const result of finalistCandidates) {
-        const parentChunks = this.parentChunkStore.get(result.id); // Use result.id
-        if (!parentChunks) {
-            console.error(`[VectorStore ERROR] No parent chunks found for ID: ${result.id}`); // Use result.id
-            continue;
-        }
+    for (const result of candidates) {
+        const parentChunks = this.parentChunkStore.get(result.id);
+        if (!parentChunks) continue;
 
         let parentChunk: DocumentChunk | undefined;
         if (result.parentChunkIndex >= 0) {
@@ -158,27 +243,22 @@ export class VectorStore {
             parentChunk = parentChunks.find(p => p.start === result.start);
         }
 
-        if (!parentChunk) {
-            console.error(`[VectorStore ERROR] Could not retrieve parent chunk for ID ${result.id} with index ${result.parentChunkIndex}.`); // Use result.id
-            continue;
-        }
+        if (!parentChunk) continue;
 
-        const parentKey = `${result.id}-${parentChunk.start}`; // Use result.id
-        if (!uniqueParentChunks.has(parentKey)) {
-            uniqueParentChunks.set(parentKey, {
+        const parentKey = `${result.id}-${parentChunk.start}`;
+        if (!seenParentKeys.has(parentKey)) {
+            seenParentKeys.add(parentKey);
+            results.push({
                 chunk: parentChunk.text,
                 similarity: result.similarity,
-                id: result.id, // Use result.id
+                id: result.id,
                 start: parentChunk.start,
                 end: parentChunk.end,
+                ...(includeEmbeddings ? { embedding: result.embedding } : {})
             });
         }
     }
-
-    // 6. Return Final Results, sorted by similarity and sliced to topK
-    return Array.from(uniqueParentChunks.values())
-        .sort((a, b) => b.similarity - a.similarity)
-        .slice(0, topK);
+    return results;
   }
 
   clear() {
