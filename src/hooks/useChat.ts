@@ -218,7 +218,7 @@ export const useChat = ({
             const requiredDocIds = Array.from(new Set(searchResults.map(c => c.id)));
             await waitForSummaries(requiredDocIds);
 
-            const context = searchResults.slice(0, appSettings.numFinalContextChunks).map((r, i) => `[${i + 1}] File: ${files.find(f => f.id === r.id)?.name || r.id}\n\n${r.chunk}`).join('\n\n---\n\n');
+            const context = searchResults.slice(0, appSettings.numFinalContextChunks).map((r, i) => `[${i + 1}] File: ${files.find(f => f.id === r.id)?.name || r.id} (ID: ${r.id})\n\n${r.chunk}`).join('\n\n---\n\n');
             const messages: ChatMessage[] = [{ role: 'system', content: getSystemPrompt(requiredDocIds) }, ...history, { role: 'user', content: `CONTEXT:\n---\n${context}\n---\n\nUSER QUESTION: ${query}` }];
             
             const llmResponse = await callGenerateContent(selectedModel, apiKey, messages);
@@ -254,11 +254,21 @@ export const useChat = ({
         const rawHtml = marked.parse(contentWithoutResults, { gfm: true, breaks: true });
         const docNumbers = new Map<string, number>();
         let nextDocNumber = 1;
-        const finalHtml = (rawHtml as string).replace(/\[Source:\s*([^\]]+)\]/g, (match: string, inside: string) => {
+        const citationRegex = /\[Source:\s*([^\]]+)\]|\[(\d+)\]/g;
+        const finalHtml = (rawHtml as string).replace(citationRegex, (match: string, sourceInside: string, standaloneIndex: string) => {
+            const inside = sourceInside || standaloneIndex;
             const tokens = inside.trim().split(',').map((t: string) => t.trim()).filter(Boolean);
             const items = tokens.map((tid: string) => {
-                const sr = searchResults.find(r => r.id === tid);
-                if (!sr) return '';
+                const index = parseInt(tid, 10);
+                let sr = (!isNaN(index) && index > 0 && index <= searchResults.length) 
+                    ? searchResults[index - 1] 
+                    : undefined;
+                
+                if (!sr) {
+                    sr = searchResults.find(r => r.id === tid);
+                }
+
+                if (!sr) return `[${tid}]`; // Return original bracketed text if no match found
                 if (!docNumbers.has(sr.id)) docNumbers.set(sr.id, nextDocNumber++);
                 const docNo = docNumbers.get(sr.id);
                 return `<button class="source-link citation-bubble" data-file-id="${sr.id}" data-start="${sr.start}" data-end="${sr.end}" title="Doc #${docNo}"><span>${docNo}</span></button>`;
