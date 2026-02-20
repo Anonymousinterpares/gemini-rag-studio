@@ -211,8 +211,16 @@ export const useChat = ({
 
         const callGenerateContent = async (model: Model, apiKey: string, messages: ChatMessage[], tools?: Tool[]): Promise<import('../api/llm-provider').LlmResponse> => {
             const response = await generateContent(model, apiKey, messages, tools, controller.signal);
-            perRequestTokenUsage.promptTokens += response.usage.promptTokens;
-            perRequestTokenUsage.completionTokens += response.usage.completionTokens;
+            const { promptTokens, completionTokens } = response.usage;
+            perRequestTokenUsage.promptTokens += promptTokens;
+            perRequestTokenUsage.completionTokens += completionTokens;
+            
+            // Immediate, gradual update
+            setTokenUsage(prev => ({ 
+                promptTokens: prev.promptTokens + promptTokens, 
+                completionTokens: prev.completionTokens + completionTokens 
+            }));
+
             return response;
         };
 
@@ -246,12 +254,6 @@ export const useChat = ({
 
                     const response = await callGenerateContent(selectedModel, apiKey, messagesToSend, tools);
                     
-                    // Accumulate tokens
-                    setTokenUsage(prev => ({ 
-                        promptTokens: prev.promptTokens + response.usage.promptTokens, 
-                        completionTokens: prev.completionTokens + response.usage.completionTokens 
-                    }));
-
                     let toolCalls = response.toolCalls || [];
                     let cleanResponseText = response.text || '';
 
@@ -398,6 +400,14 @@ export const useChat = ({
                     const route = await decideRouteV2({
                         query, history, filesLoaded: files.length > 0, vectorStore: vectorStore.current,
                         model: selectedModel, apiKey, settings: appSettings, embedQuery: embedQueryFn,
+                        onTokenUsage: (usage) => {
+                            perRequestTokenUsage.promptTokens += usage.promptTokens;
+                            perRequestTokenUsage.completionTokens += usage.completionTokens;
+                            setTokenUsage(prev => ({
+                                promptTokens: prev.promptTokens + usage.promptTokens,
+                                completionTokens: prev.completionTokens + usage.completionTokens
+                            }));
+                        }
                     });
                     decision = route.mode === 'CHAT' ? 'GENERAL_CONVERSATION' : 'KNOWLEDGE_SEARCH';
                     
@@ -418,10 +428,16 @@ export const useChat = ({
                                 return await rerankPromise;
                             } : undefined,
                             level,
+                            onTokenUsage: (usage) => {
+                                perRequestTokenUsage.promptTokens += usage.promptTokens;
+                                perRequestTokenUsage.completionTokens += usage.completionTokens;
+                                setTokenUsage(prev => ({
+                                    promptTokens: prev.promptTokens + usage.promptTokens,
+                                    completionTokens: prev.completionTokens + usage.completionTokens
+                                }));
+                            }
                         });
-                        const daUsage = (da as { llmTokens?: TokenUsage }).llmTokens || { promptTokens: 0, completionTokens: 0 };
-                        setTokenUsage(prev => ({ promptTokens: prev.promptTokens + daUsage.promptTokens, completionTokens: prev.completionTokens + daUsage.completionTokens }));
-                        setChatHistory([...newHistoryWithUser, { role: 'model', content: `${da.finalText}<!--searchResults:${JSON.stringify(da.usedResults)}-->`, tokenUsage: daUsage, elapsedTime: Date.now() - startTime }]);
+                        setChatHistory([...newHistoryWithUser, { role: 'model', content: `${da.finalText}<!--searchResults:${JSON.stringify(da.usedResults)}-->`, tokenUsage: perRequestTokenUsage, elapsedTime: Date.now() - startTime }]);
                         setIsLoading(false);
                         return;
                     }
@@ -432,7 +448,6 @@ export const useChat = ({
 
             if (decision === 'GENERAL_CONVERSATION') {
                 const llmResponse = await callGenerateContent(selectedModel, apiKey, [{ role: 'system', content: getSystemPrompt() }, ...newHistoryWithUser]);
-                setTokenUsage(prev => ({ promptTokens: prev.promptTokens + perRequestTokenUsage.promptTokens, completionTokens: prev.completionTokens + perRequestTokenUsage.completionTokens }));
                 setChatHistory([...newHistoryWithUser, { role: 'model', content: llmResponse.text || '', tokenUsage: perRequestTokenUsage, elapsedTime: Date.now() - startTime }]);
                 setIsLoading(false);
                 return;
@@ -454,7 +469,6 @@ export const useChat = ({
             const messages: ChatMessage[] = [{ role: 'system', content: getSystemPrompt(requiredDocIds) }, ...history, { role: 'user', content: `CONTEXT:\n---\n${context}\n---\n\nUSER QUESTION: ${query}` }];
             
             const llmResponse = await callGenerateContent(selectedModel, apiKey, messages);
-            setTokenUsage(prev => ({ promptTokens: prev.promptTokens + perRequestTokenUsage.promptTokens, completionTokens: prev.completionTokens + perRequestTokenUsage.completionTokens }));
             setChatHistory([...newHistoryWithUser, { role: 'model', content: `${llmResponse.text || ''}<!--searchResults:${JSON.stringify(searchResults)}-->`, tokenUsage: perRequestTokenUsage, elapsedTime: Date.now() - startTime }]);
         } catch (error) {
             if (error instanceof Error && error.name === 'AbortError') {

@@ -250,11 +250,13 @@ export interface GenerateSummaryQueryResult {
     query: string;
     model: Model;
     apiKey: string | undefined;
+    tokenUsage?: TokenUsage;
 }
 
 export interface DetectLanguageResult {
     docId: string;
     language: string;
+    tokenUsage?: TokenUsage;
 }
 
 export interface HierarchicalChunkResult {

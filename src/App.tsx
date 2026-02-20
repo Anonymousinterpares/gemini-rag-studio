@@ -250,7 +250,12 @@ export const App: FC = () => {
               <button type='submit' className='button' disabled={!userInput.trim()}><Send size={16} /></button>
             )}
           </form>
-          <div className="token-usage-display">Tokens: {tokenUsage.promptTokens + tokenUsage.completionTokens}</div>
+          <div className="token-usage-display">
+            Tokens: {tokenUsage.promptTokens + tokenUsage.completionTokens} 
+            <span className="token-usage-split">
+              (In: {tokenUsage.promptTokens}, Out: {tokenUsage.completionTokens})
+            </span>
+          </div>
           <div className='setting-row'><button onClick={() => setAppSettings(p => ({ ...p, isDeepAnalysisEnabled: !p.isDeepAnalysisEnabled }))} className={`toggle-button ${appSettings.isDeepAnalysisEnabled ? 'active' : ''}`}>Deep Analysis: {appSettings.isDeepAnalysisEnabled ? 'ON' : 'OFF'}</button></div>
         </div>
       </div>

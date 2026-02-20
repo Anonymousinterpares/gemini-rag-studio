@@ -149,6 +149,7 @@ async function executeTask(task: ComputeTask) {
             query: llmResponse.text,
             model,
             apiKey,
+            tokenUsage: llmResponse.usage,
         };
         if (isLoggingEnabled) console.log(`[GP Worker ${workerId}] Finished summary query generation for: ${taskId}`);
         break;
@@ -219,6 +220,7 @@ async function executeTask(task: ComputeTask) {
         if (isLoggingEnabled) console.log(`[GP Worker ${workerId}] Starting language detection for: ${taskPayload.docId}`);
         const { docId, content, model, apiKey } = taskPayload;
         let languageCode = franc(content);
+        let tokenUsage: import('../types').TokenUsage | undefined;
 
         if (languageCode === 'und') {
             if (isLoggingEnabled) console.log(`[GP Worker ${workerId}] franc could not determine the language. Falling back to LLM.`);
@@ -233,12 +235,14 @@ async function executeTask(task: ComputeTask) {
                 }
             ]);
             languageCode = llmResponse.text.trim().toLowerCase();
+            tokenUsage = llmResponse.usage;
             if (isLoggingEnabled) console.log(`[GP Worker ${workerId}] LLM detected language: ${languageCode}`);
         }
         
         result = {
             docId,
             language: languageCode,
+            tokenUsage,
         };
         if (isLoggingEnabled) console.log(`[GP Worker ${workerId}] Finished language detection for: ${taskPayload.docId}. Detected: ${languageCode}`, { result });
         break;

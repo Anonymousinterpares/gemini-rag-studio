@@ -132,7 +132,10 @@ export class ComputeCoordinator {
         
         switch (taskType) {
           case TaskType.DetectLanguage: {
-            const { docId, language } = result as import('./types').DetectLanguageResult;
+            const { docId, language, tokenUsage } = result as import('./types').DetectLanguageResult;
+            if (tokenUsage) {
+                this.emit('token_usage_update', { type: 'token_usage_update', usage: tokenUsage });
+            }
             // This is a fire-and-forget operation for the coordinator.
             // The result will be used by the main thread to update the file state.
             if (this.isLoggingEnabled) console.log(`[${new Date().toISOString()}] [Coordinator] Language for ${docId} detected as ${language}.`);
@@ -171,7 +174,10 @@ export class ComputeCoordinator {
             break;
           }
           case TaskType.GenerateSummaryQuery: {
-            const { docId, query, model, apiKey } = result as import('./types').GenerateSummaryQueryResult;
+            const { docId, query, model, apiKey, tokenUsage } = result as import('./types').GenerateSummaryQueryResult;
+            if (tokenUsage) {
+                this.emit('token_usage_update', { type: 'token_usage_update', usage: tokenUsage });
+            }
             const nextTask: Omit<ComputeTask, 'jobId'> = {
               id: `${docId}-execute-rag-for-summary`,
               priority: TaskPriority.P2_Background,

@@ -63,8 +63,9 @@ export async function runDeepAnalysis(opts: {
   embedQuery: (q: string) => Promise<number[]>;
   rerank?: (query: string, docs: { chunk: string; id: string; start: number; end: number }[]) => Promise<SearchResult[]>;
   level: 1 | 2 | 3;
+  onTokenUsage?: (usage: { promptTokens: number; completionTokens: number }) => void;
 }): Promise<DeepAnalysisResult> {
-  const { query, vectorStore, settings, embedQuery, level } = opts;
+  const { query, vectorStore, settings, embedQuery, level, onTokenUsage } = opts;
 
   // Import recovery utilities
   const {
@@ -103,6 +104,9 @@ export async function runDeepAnalysis(opts: {
         totalPrompt += resp.usage.promptTokens;
         totalCompletion += resp.usage.completionTokens;
         llmCallCount += 1;
+        if (onTokenUsage) {
+          onTokenUsage({ promptTokens: resp.usage.promptTokens, completionTokens: resp.usage.completionTokens });
+        }
         return resp;
       },
       {

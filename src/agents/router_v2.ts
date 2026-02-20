@@ -22,6 +22,7 @@ export async function decideRouteV2(opts: {
   apiKey: string | undefined;
   settings: AppSettings;
   embedQuery: (q: string) => Promise<number[]>;
+  onTokenUsage?: (usage: { promptTokens: number; completionTokens: number }) => void;
 }): Promise<RouteDecision> {
   const {
     query,
@@ -32,6 +33,7 @@ export async function decideRouteV2(opts: {
     apiKey,
     settings,
     embedQuery,
+    onTokenUsage,
   } = opts;
 
   // No corpus -> Chat
@@ -67,6 +69,9 @@ Query: ${query}
 Categories: factoid, overview, synthesis, comparison, reasoning
 Return only one word.` },
     ]);
+    if (onTokenUsage) {
+      onTokenUsage({ promptTokens: cls.usage.promptTokens, completionTokens: cls.usage.completionTokens });
+    }
     const t = cls.text.trim().toLowerCase();
     if (['factoid', 'overview', 'synthesis', 'comparison', 'reasoning'].includes(t)) {
       complexity = t as 'factoid' | 'overview' | 'synthesis' | 'comparison' | 'reasoning';
