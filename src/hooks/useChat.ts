@@ -39,7 +39,9 @@ To cite a context, you MUST use the exact format [Source: uniqueId]. For example
 **Do not include any other information, formatting, or numbering in the citation.** Just the bracketed source and the unique ID.
 Use a separate citation for each piece of information. For example: "The sky is blue [Source: file-id-123]. The grass is green [Source: file-id-456]."
 **Do not group sources together.** For example, do not write "The sky is blue and the grass is green [Source: file-id-123, file-id-456]".
-If the answer is not in the files or the conversation history, say "I could not find an answer in the provided documents."`;
+If the answer is not in the files or the conversation history, say "I could not find an answer in the provided documents."
+
+{date_section}`;
 
 const CHAT_MODE_PROMPT_TEMPLATE = `You are a helpful and expert AI assistant. Your user is a software developer.
 Be concise and accurate in your answers.
@@ -53,6 +55,8 @@ CRITICAL INSTRUCTIONS:
 5. DO NOT act out the search process in your reasoning. Emit the tool call and STOP.
 4. You will receive the real search results in the next turn. Wait for them.
 5. If you use information from the provided document contexts, you MUST cite your sources using the exact format [Source: uniqueId].
+
+{date_section}
 
 {summaries_section}`;
 
@@ -147,7 +151,20 @@ export const useChat = ({
         const docOnly = (appSettings.docOnlyMode && !appSettings.isChatModeEnabled)
           ? `\n\nDOC-ONLY MODE: You must answer strictly using the provided document contexts and conversation. Do not use external or general knowledge. If the documents do not contain the answer, reply exactly: "I could not find an answer in the provided documents."\n`
           : '';
-        return template.replace('{summaries_section}', summariesSection + docOnly);
+        
+        let finalPrompt = template.replace('{summaries_section}', summariesSection + docOnly);
+        
+        if (appSettings.isChatModeEnabled) {
+            const now = new Date();
+            const dateStr = now.toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+            const timeStr = now.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            const dateSection = `\n[SYSTEM_CONTEXT: TODAY IS ${dateStr}, ${timeStr}]\n`;
+            finalPrompt = finalPrompt.replace('{date_section}', dateSection);
+        } else {
+            finalPrompt = finalPrompt.replace('{date_section}', '');
+        }
+        
+        return finalPrompt;
     }, [summaries, files, appSettings.docOnlyMode, appSettings.isChatModeEnabled]);
 
     const waitForSummaries = useCallback(async (docIds: string[]) => {
