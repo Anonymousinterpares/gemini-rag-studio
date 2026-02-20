@@ -433,7 +433,15 @@ export const useChat = ({
             }
             return '';
         });
-        const rawHtml = marked.parse(contentWithoutResults, { gfm: true, breaks: true });
+
+        const renderer = new marked.Renderer();
+        const originalLink = renderer.link.bind(renderer);
+        renderer.link = (href, title, text) => {
+            const html = originalLink(href, title, text);
+            return html.replace('<a ', '<a target="_blank" rel="noopener noreferrer" ');
+        };
+
+        const rawHtml = marked.parse(contentWithoutResults, { renderer, gfm: true, breaks: true });
         const docNumbers = new Map<string, number>();
         let nextDocNumber = 1;
         const citationRegex = /\[Source:\s*([^\]]+)\]|\[(\d+)\]/g;
