@@ -88,7 +88,7 @@ export const App: FC = () => {
     if (activeJobCount > 0) setIsEmbedding(true);
     else if (isEmbedding) {
       setIsEmbedding(false);
-      setChatHistory((prev) => prev[prev.length - 1]?.content.startsWith('Knowledge base updated') ? prev : [...prev, { role: 'model', content: `Knowledge base updated.` }]);
+      setChatHistory((prev) => (prev[prev.length - 1]?.content?.startsWith('Knowledge base updated') ?? false) ? prev : [...prev, { role: 'model', content: `Knowledge base updated.` }]);
     }
   }, [activeJobCount, isEmbedding, setChatHistory, setIsEmbedding]);
 
@@ -102,7 +102,7 @@ export const App: FC = () => {
     if (chatHistory.length > 1) {
       const last = chatHistory[chatHistory.length - 1];
       const isUser = chatHistory[chatHistory.length - 2]?.role === 'user';
-      if (last.role === 'model' && !isLoading && !isEmbedding && isUser && !['Loading', 'Adding', 'Knowledge base'].some(s => last.content.includes(s))) {
+      if (last.role === 'model' && !isLoading && !isEmbedding && isUser && !['Loading', 'Adding', 'Knowledge base'].some(s => (last.content || '').includes(s))) {
         if (!hasLLMResponded) setHasLLMResponded(true);
         setGlowType('green');
       }
