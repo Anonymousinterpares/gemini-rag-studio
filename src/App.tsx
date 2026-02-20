@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, FC, useCallback } from 'react';
 import { getStoredDirectoryHandle, storeDirectoryHandle, clearStoredDirectoryHandle } from './utils/db';
-import { List as ListIcon, LayoutGrid, Bot, User, Trash2, Send, FolderTree, RefreshCw, X, ChevronLeft, ChevronRight, Copy, Download } from 'lucide-react';
+import { Trash2, X, RefreshCw, LayoutGrid, List as ListIcon, FolderTree, ChevronLeft, ChevronRight, User, Bot, Send, Copy, Download, Info } from 'lucide-react';
 import { useFileState, useCompute, useChat } from './hooks';
 import { AppFile, ViewMode, SearchResult, Model } from './types';
 import { embeddingCache } from './cache/embeddingCache';
@@ -222,8 +222,16 @@ export const App: FC = () => {
           </div>
         </div>
         <div className='chat-input-area'>
+          {appSettings.isChatModeEnabled && (
+            <div className="chat-mode-indicator">
+              <Info size={16} />
+              <span>
+                <b>Chat Mode Active:</b> You can chat freely. Upload documents if you want the agent to analyze specific files.
+              </span>
+            </div>
+          )}
           <form className='chat-input-form' onSubmit={handleSubmit}>
-            <input type='text' className='chat-input' value={userInput} onChange={(e) => setUserInput(e.target.value)} disabled={isLoading || files.length === 0} />
+            <input type='text' className='chat-input' value={userInput} onChange={(e) => setUserInput(e.target.value)} disabled={isLoading || (files.length === 0 && !appSettings.isChatModeEnabled)} />
             <button type='submit' className='button' disabled={isLoading || !userInput.trim()}><Send size={16} /></button>
           </form>
           <div className="token-usage-display">Tokens: {tokenUsage.promptTokens + tokenUsage.completionTokens}</div>

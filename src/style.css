@@ -746,6 +746,23 @@ button:focus-visible {
   border-top: 1px solid var(--border-color);
 }
 
+.chat-mode-indicator {
+  padding: 0.5rem;
+  background-color: rgba(52, 152, 219, 0.1);
+  border: 1px solid rgba(52, 152, 219, 0.3);
+  border-radius: 4px;
+  margin-bottom: 0.5rem;
+  font-size: 0.85rem;
+  color: #3498db;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.chat-mode-indicator b {
+  color: #2980b9;
+}
+
 .remove-file-btn {
   background: none;
   border: none;

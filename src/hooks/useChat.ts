@@ -22,6 +22,12 @@ Use a separate citation for each piece of information. For example: "The sky is 
 **Do not group sources together.** For example, do not write "The sky is blue and the grass is green [Source: file-id-123, file-id-456]".
 If the answer is not in the files or the conversation history, say "I could not find an answer in the provided documents."`;
 
+const CHAT_MODE_PROMPT_TEMPLATE = `You are a helpful and expert AI assistant. Your user is a software developer.
+Be concise and accurate in your answers.
+You can use your general knowledge to answer questions.
+If you use information from the provided document contexts, you MUST cite your sources using the exact format [Source: uniqueId].
+{summaries_section}`;
+
 interface UseChatProps {
     coordinator: React.MutableRefObject<ComputeCoordinator | null> | null;
     vectorStore: React.MutableRefObject<VectorStore | null> | null;
@@ -99,11 +105,13 @@ export const useChat = ({
                 .join('\n\n');
             summariesSection = `Here is a high-level summary of the documents relevant to your query:\n\n${summaryList}\n\n`;
         }
-        const docOnly = appSettings.docOnlyMode
+
+        const template = appSettings.isChatModeEnabled ? CHAT_MODE_PROMPT_TEMPLATE : AGENT_SYSTEM_PROMPT_TEMPLATE;
+        const docOnly = (appSettings.docOnlyMode && !appSettings.isChatModeEnabled)
           ? `\n\nDOC-ONLY MODE: You must answer strictly using the provided document contexts and conversation. Do not use external or general knowledge. If the documents do not contain the answer, reply exactly: "I could not find an answer in the provided documents."\n`
           : '';
-        return AGENT_SYSTEM_PROMPT_TEMPLATE.replace('{summaries_section}', summariesSection + docOnly);
-    }, [summaries, files, appSettings.docOnlyMode]);
+        return template.replace('{summaries_section}', summariesSection + docOnly);
+    }, [summaries, files, appSettings.docOnlyMode, appSettings.isChatModeEnabled]);
 
     const waitForSummaries = useCallback(async (docIds: string[]) => {
         if (!coordinator?.current) return;
@@ -131,7 +139,9 @@ export const useChat = ({
     }, [coordinator]);
 
     const submitQuery = useCallback(async (query: string, history: ChatMessage[]) => {
-        if (!query.trim() || isLoading || !coordinator?.current || !vectorStore?.current) return;
+        if (!query.trim() || isLoading || !coordinator?.current) return;
+        // If not in chat mode, we MUST have a vector store
+        if (!appSettings.isChatModeEnabled && !vectorStore?.current) return;
 
         const startTime = Date.now();
         const perRequestTokenUsage: TokenUsage = { promptTokens: 0, completionTokens: 0 };
@@ -149,6 +159,16 @@ export const useChat = ({
 
         try {
             const apiKey = apiKeys[selectedProvider];
+
+            // If no files and Chat Mode is ON, skip router and go straight to conversation
+            if (files.length === 0 && appSettings.isChatModeEnabled) {
+                const llmResponse = await callGenerateContent(selectedModel, apiKey, [{ role: 'system', content: getSystemPrompt() }, ...newHistoryWithUser]);
+                setTokenUsage(prev => ({ promptTokens: prev.promptTokens + perRequestTokenUsage.promptTokens, completionTokens: prev.completionTokens + perRequestTokenUsage.completionTokens }));
+                setChatHistory([...newHistoryWithUser, { role: 'model', content: llmResponse.text, tokenUsage: perRequestTokenUsage, elapsedTime: Date.now() - startTime }]);
+                setIsLoading(false);
+                return;
+            }
+
             let decision = 'GENERAL_CONVERSATION';
             
             const routerPrompt = `Router Agent: GENERAL_CONVERSATION or KNOWLEDGE_SEARCH. Query: "${query}"`;

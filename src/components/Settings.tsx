@@ -151,6 +151,11 @@ const Settings: FC<{ className?: string }> = ({ className }) => {
       </div>
 
       <div className="setting-row">
+        <label>Chat Mode:</label>
+        <button onClick={() => setAppSettings(p => ({...p, isChatModeEnabled: !p.isChatModeEnabled}))} className={`toggle-button ${appSettings.isChatModeEnabled ? 'active' : ''}`}>{appSettings.isChatModeEnabled ? 'ON' : 'OFF'}</button>
+      </div>
+
+      <div className="setting-row">
         <label>Semantic Chunk:</label>
         <button onClick={() => setAppSettings(p => ({...p, isSemanticChunkingEnabled: !p.isSemanticChunkingEnabled}))} className={`toggle-button ${appSettings.isSemanticChunkingEnabled ? 'active' : ''}`}>{appSettings.isSemanticChunkingEnabled ? 'ON' : 'OFF'}</button>
       </div>
