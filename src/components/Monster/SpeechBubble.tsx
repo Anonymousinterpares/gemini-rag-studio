@@ -140,8 +140,31 @@ export const SpeechBubble: React.FC<SpeechBubbleProps> = ({
     lastStateRef.current = `${currentState}-${filesCount}`;
   }, [getCurrentState, getRandomMessage, getEmoji, filesCount, messageVariants]);
 
+  // Stable hover detection since the bubble is pointer-events: none
+  const [isHovered, setIsHovered] = useState(false);
+  const bubbleRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const checkHover = (e: MouseEvent) => {
+      if (!bubbleRef.current) return;
+      const rect = bubbleRef.current.getBoundingClientRect();
+      const isInside = 
+        e.clientX >= rect.left && 
+        e.clientX <= rect.right && 
+        e.clientY >= rect.top && 
+        e.clientY <= rect.bottom;
+      
+      if (isInside !== isHovered) {
+        setIsHovered(isInside);
+      }
+    };
+
+    window.addEventListener('mousemove', checkHover);
+    return () => window.removeEventListener('mousemove', checkHover);
+  }, [isHovered]);
+
   return (
-    <div className="speech-bubble">
+    <div ref={bubbleRef} className={`speech-bubble ${isHovered ? 'is-hovered' : ''}`}>
       <div className="speech-text">
         <span className="speech-emoji">{currentEmoji}</span>
         {currentMessage}

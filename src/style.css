@@ -944,25 +944,25 @@ button:focus-visible {
   background: linear-gradient(45deg, var(--monster-primary), var(--monster-secondary));
   border-radius: 20px;
   padding: 0.8rem 1.2rem;
-  white-space: nowrap;
   animation: bubble-bounce 0.5s ease-out;
   z-index: 9999;
   box-shadow: 0 4px 12px rgba(255, 107, 53, 0.3), 0 0 20px rgba(255, 107, 53, 0.2);
   border: 2px solid rgba(255, 255, 255, 0.3);
   max-width: calc(100% - 2rem);
-  overflow: hidden;
-  text-overflow: ellipsis;
   transition: opacity 0.3s ease, background-color 0.3s ease, transform 0.2s ease;
   cursor: default;
+  pointer-events: none; /* Always allow click-through */
 }
 
-/* Make speech bubble transparent and click-through on hover */
-.speech-bubble:hover {
-  opacity: 0.1; /* More transparent to make clicking through easier */
-  pointer-events: none;
+/* Make speech bubble transparent when hovered (handled via JS for stability) */
+.speech-bubble.is-hovered {
+  opacity: 0.1;
   background: linear-gradient(45deg, rgba(255, 107, 53, 0.1), rgba(247, 147, 30, 0.1));
-  transform: translateX(-50%) scale(0.95); /* Slightly shrink on hover */
   transition: all 0.2s ease;
+}
+
+.speech-bubble.is-hovered::after {
+  border-top-color: rgba(247, 147, 30, 0.1);
 }
 
 .speech-bubble::after {
@@ -976,6 +976,7 @@ button:focus-visible {
   border-left: 8px solid transparent;
   border-right: 8px solid transparent;
   border-top: 8px solid var(--monster-secondary);
+  transition: border-top-color 0.3s ease;
 }
 
 @keyframes bubble-bounce {
@@ -986,6 +987,16 @@ button:focus-visible {
 
 .speech-text {
   font-weight: 600;
+  color: white;
+  text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+  font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
   color: white;
   text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
   font-size: 0.9rem;
