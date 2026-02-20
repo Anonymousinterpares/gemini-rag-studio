@@ -18,21 +18,21 @@
       "description": "Google's advanced multimodal model with strong capabilities"
     },
     {
-      "id": "gemini-2.0-flash",
-      "name": "Gemini 2.0 Flash",
+      "id": "gemini-2.5-flash",
+      "name": "Gemini 2.5 Flash",
       "description": "Google's advanced multimodal model with strong capabilities"
     },
     {
-      "id": "gemini-2.0-flash-lite",
-      "name": "Gemini 2.0 Flash Lite",
+      "id": "gemini-2.5-flash-lite",
+      "name": "Gemini 2.5 Flash Lite",
       "description": "Faster, more efficient version of Gemini for everyday tasks"
     }
   ],
   "openrouter": [
     {
-      "id": "google/gemini-2.5-flash-preview-05-20",
-      "name": "Google Gemini 2.0 Flash Lite (Free)",
-      "description": "Free version of Google's Gemini 2.0 Flash model"
+      "id": "google/gemini-2.5-flash-lite",
+      "name": "Google Gemini 2.5 Flash Lite",
+      "description": "Google's Gemini 2.5 Flash"
     },
     {
       "id": "nousresearch/deephermes-3-llama-3-8b-preview:free",
@@ -40,9 +40,9 @@
       "description": "Free version of Nous Research's DeepHermes 3 model"
     },
     {
-      "id": "google/gemini-2.0-pro-exp-02-05:free",
-      "name": "Google Gemini 2.0 Pro (Free)",
-      "description": "Free version of Google's Gemini 2.0 Pro model"
+      "id": "google/gemini-3-flash-preview",
+      "name": "Google Gemini 3.0 Flash Preview",
+      "description": "Preview version of Google's Gemini 3.0 Flash model"
     },
     {
       "id": "mistralai/mistral-small-3.1-24b-instruct:free",
@@ -50,9 +50,14 @@
       "description": "Free version of Mistral AI's 24B parameter model"
     },
     {
-      "id": "deepseek/deepseek-chat-v3-0324:free",
-      "name": "Google Gemini 2.0 Flash (Free)",
-      "description": "Free version of Google's Gemini 2.0 Flash model"
+      "id": "deepseek/deepseek-chat-v3.1",
+      "name": "DeepSeek Chat V3.1",
+      "description": "DeepSeek's Chat V3.1 model"
+    },
+    {
+      "id": "openai/gpt-oss-120b",
+      "name": "OpenAI GPT-OSS 120B",
+      "description": "OpenAI's GPT-OSS 120B model"
     }
   ],
   "ollama": [

@@ -21,22 +21,50 @@ interface SettingsState {
 const initialAppSettings = loadSettings();
 
 const getInitialModelsList = (): Model[] => {
-  const savedModels = localStorage.getItem('modelsList');
-  if (savedModels) {
-    try {
-      const parsedModels = JSON.parse(savedModels);
-      if (Array.isArray(parsedModels) && parsedModels.length > 0) return parsedModels;
-    } catch (e) {
-      console.error("Failed to parse models from localStorage", e);
-    }
-  }
-  return Object.entries(models).flatMap(([provider, providerModels]) =>
+  // 1. Get base models from JSON (Source of Truth)
+  const baseModels = Object.entries(models).flatMap(([provider, providerModels]) =>
     (providerModels as { id: string; name: string; description?: string; apiKeyRequired?: boolean }[]).map((model) => ({
       ...model,
-      provider,
+      provider: provider as Provider,
       apiKeyRequired: model.apiKeyRequired !== undefined ? model.apiKeyRequired : (provider === 'openai' || provider === 'google' || provider === 'openrouter'),
     }))
   ) as Model[];
+
+  const baseKeys = new Set(baseModels.map(m => `${m.provider}:${m.id}`));
+  const managedProviders = Object.keys(models);
+
+  // 2. Load and Prune localStorage
+  const savedModelsStr = localStorage.getItem('modelsList');
+  if (savedModelsStr) {
+    try {
+      const savedModels = JSON.parse(savedModelsStr) as Model[];
+      if (Array.isArray(savedModels)) {
+        // Filter out legacy models: keep only those in JSON or from unmanaged providers
+        const activeModels = savedModels.filter(saved => {
+          const key = `${saved.provider}:${saved.id}`;
+          return !managedProviders.includes(saved.provider) || baseKeys.has(key);
+        });
+
+        // Merge: Use baseModels as foundation to get latest names/descriptions
+        const merged = [...baseModels];
+        const mergedKeys = new Set(baseModels.map(m => `${m.provider}:${m.id}`));
+
+        // Add any valid custom models from localStorage that aren't in JSON
+        activeModels.forEach(saved => {
+          const key = `${saved.provider}:${saved.id}`;
+          if (!mergedKeys.has(key)) {
+            merged.push(saved);
+          }
+        });
+
+        return merged;
+      }
+    } catch (e) {
+      console.error("Failed to parse/prune models from localStorage", e);
+    }
+  }
+  
+  return baseModels;
 };
 
 const initialModelsList = getInitialModelsList();
