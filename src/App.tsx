@@ -204,7 +204,12 @@ export const App: FC = () => {
         <div className='chat-panel-header'><div className='background-changer'><button className='background-btn' onClick={() => setAppSettings(p => ({...p, backgroundIndex: p.backgroundIndex === 0 ? backgroundImages.length : p.backgroundIndex - 1}))}><ChevronLeft size={16} /></button><button className='background-btn' onClick={() => setAppSettings(p => ({...p, backgroundIndex: (p.backgroundIndex + 1) % (backgroundImages.length + 1)}))}><ChevronRight size={16} /></button></div></div>
         <div className='panel-content' ref={chatHistoryRef} onClick={handleSourceClick} style={{ backgroundImage: backgroundImages[appSettings.backgroundIndex - 1] ? `url('${backgroundImages[appSettings.backgroundIndex - 1]}')` : 'none', backgroundSize: 'cover' }}>
           <div className='chat-history'>
-            {chatHistory.map((msg, i) => (
+            {chatHistory.filter(msg => {
+              // Hide intermediate tool calls and tool results from the UI
+              if (msg.role === 'tool') return false;
+              if (msg.role === 'model' && msg.tool_calls && msg.tool_calls.length > 0) return false;
+              return true;
+            }).map((msg, i) => (
               <div key={i} className={`message-container ${msg.role}`}>
                 <div className={`chat-message ${msg.role} bubble-${appSettings.chatBubbleColor}`}>
                   <div className='avatar'>{msg.role === 'model' ? <Bot size={20} /> : <User size={20} />}</div>
