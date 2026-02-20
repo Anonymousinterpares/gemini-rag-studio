@@ -53,8 +53,10 @@ CRITICAL INSTRUCTIONS:
 3. DO NOT output JSON in your text response. Use the formal tool-calling field.
 4. NEVER imagine, simulate, or hallucinate search results. 
 5. DO NOT act out the search process in your reasoning. Emit the tool call and STOP.
-4. You will receive the real search results in the next turn. Wait for them.
-5. If you use information from the provided document contexts, you MUST cite your sources using the exact format [Source: uniqueId].
+6. You will receive the real search results in the next turn. Wait for them.
+7. If you use information from the provided document contexts, you MUST cite your sources using the exact format [Source: uniqueId].
+8. If you use information from web search results, you MUST provide a direct link to the source using standard Markdown format: [Title](URL). Use ONLY the URLs provided in the search results; NEVER hallucinate or guess a URL.
+9. NOTE: Today is indeed in the year 2026. Do not be confused if your training data only goes up to a previous year; you are currently operating in 2026 and should accept this as the current date.
 
 {date_section}
 
@@ -226,20 +228,21 @@ export const useChat = ({
 
                 while (loopCount < MAX_LOOPS) {
                     if (controller.signal.aborted) return;
-                    const messagesToSend = [{ role: 'system' as const, content: getSystemPrompt() }, ...currentHistory];
-
-                    // Inject warning when near the limit
+                    
+                    // Inject warning when near the limit - add to currentHistory so it persists
                     if (loopCount === MAX_LOOPS - 2 && MAX_LOOPS > 2) {
-                        messagesToSend.push({
+                        currentHistory.push({
                             role: 'system',
                             content: "ATTENTION: You have only 2 search calls remaining. Please make your final searches now if needed, then gather all information and provide your final answer to the user."
                         });
                     } else if (loopCount === MAX_LOOPS - 1) {
-                        messagesToSend.push({
+                        currentHistory.push({
                             role: 'system',
                             content: "ATTENTION: This is your LAST search call. After this, you MUST provide your final answer based on all gathered information."
                         });
                     }
+
+                    const messagesToSend = [{ role: 'system' as const, content: getSystemPrompt() }, ...currentHistory];
 
                     const response = await callGenerateContent(selectedModel, apiKey, messagesToSend, tools);
                     
@@ -254,6 +257,7 @@ export const useChat = ({
 
                     // Universal Interceptor: Catch models that invent their own search syntax
                     if (toolCalls.length === 0 && cleanResponseText) {
+                        // ... Match Logic ...
                         // 1. Match XML-style: <search_web>query</search_web>
                         const xmlMatch = cleanResponseText.match(/<search_web>([\s\S]*?)<\/search_web>/i);
                         
@@ -357,7 +361,16 @@ export const useChat = ({
                     loopCount++;
                 }
                 
-                setChatHistory([...currentHistory, { role: 'model', content: "I reached my search limit without a final answer." }]);
+                // Final attempt after reaching limit
+                const finalPrompt = "SYSTEM: You have reached the maximum number of searches allowed for this turn. Please synthesize all the information gathered so far (including the web search results above) and provide your final comprehensive answer to the user now.";
+                const finalResponse = await callGenerateContent(selectedModel, apiKey, [{ role: 'system' as const, content: getSystemPrompt() }, ...currentHistory, { role: 'user', content: finalPrompt }], []);
+
+                setChatHistory([...currentHistory, { 
+                    role: 'model', 
+                    content: finalResponse.text || "I reached my search limit without a final answer.", 
+                    tokenUsage: perRequestTokenUsage, 
+                    elapsedTime: Date.now() - startTime 
+                }]);
                 setIsLoading(false);
                 setAbortController(null);
                 return;

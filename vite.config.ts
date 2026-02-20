@@ -28,45 +28,74 @@ export default defineConfig({
 
             console.log(`[Search Proxy] Searching for: ${query}`);
             
-            // Try DDG Lite with GET - usually more reliable than POST for basic searches
-            const searchUrl = `https://lite.duckduckgo.com/lite/?q=${encodeURIComponent(query)}`;
-            
-            const response = await fetch(searchUrl, {
-              headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-              }
-            });
+            // Randomized User Agents to avoid simple blocking
+            const userAgents = [
+              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+              'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+              'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+              'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/121.0'
+            ];
+            const randomUA = userAgents[Math.floor(Math.random() * userAgents.length)];
 
-            if (!response.ok) {
-              throw new Error(`DDG Lite responded with ${response.status} ${response.statusText}`);
+            let results: { title: string; link: string; snippet: string }[] = [];
+            let errorDetails = '';
+
+            try {
+              // Try DDG Lite first
+              const searchUrl = `https://lite.duckduckgo.com/lite/?q=${encodeURIComponent(query)}`;
+              const response = await fetch(searchUrl, {
+                headers: {
+                  'User-Agent': randomUA,
+                  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                  'Accept-Language': 'en-US,en;q=0.5',
+                }
+              });
+
+              if (response.ok) {
+                const html = await response.text();
+                const $ = load(html);
+                
+                $('a.result-link').each((i, el) => {
+                  if (i >= 8) return false;
+                  const $el = $(el);
+                  const title = $el.text().trim();
+                  const link = $el.attr('href');
+                  const snippet = $el.closest('tr').next().find('.result-snippet').text().trim();
+                  
+                  if (title && link) {
+                    const fullLink = link.startsWith('http') ? link : (link.startsWith('//') ? `https:${link}` : `https://duckduckgo.com${link}`);
+                    results.push({ title, link: fullLink, snippet: snippet || 'No description available.' });
+                  }
+                });
+              } else {
+                errorDetails = `DDG Lite responded with ${response.status}`;
+              }
+            } catch (e) {
+              errorDetails = String(e);
             }
 
-            const html = await response.text();
-            const $ = load(html);
-            const results: { title: string; link: string; snippet: string }[] = [];
-
-            // DuckDuckGo Lite structure:
-            // Results are in tables. Each result usually has:
-            // 1. A link with class 'result-link'
-            // 2. A snippet in a div with class 'result-snippet'
-            
-            $('a.result-link').each((i, el) => {
-              if (i >= 8) return false; // Limit to 8 results
-              
-              const $el = $(el);
-              const title = $el.text().trim();
-              const link = $el.attr('href');
-              
-              // Find the snippet - it's usually in the next row or a nearby div
-              const snippet = $el.closest('tr').next().find('.result-snippet').text().trim();
-              
-              if (title && link) {
-                // Handle relative links if any
-                const fullLink = link.startsWith('http') ? link : `https:${link}`;
-                results.push({ title, link: fullLink, snippet: snippet || 'No description available.' });
+            // Fallback to duck-duck-scrape if DDG Lite failed or returned no results
+            if (results.length === 0) {
+              console.log('[Search Proxy] DDG Lite failed or no results, trying duck-duck-scrape...');
+              try {
+                const { search } = await import('duck-duck-scrape');
+                const ddsResults = await search(query, { safeSearch: 0 });
+                if (ddsResults && ddsResults.results) {
+                  results = ddsResults.results.slice(0, 8).map(r => ({
+                    title: r.title,
+                    link: r.url,
+                    snippet: r.description
+                  }));
+                }
+              } catch (e) {
+                console.error('[Search Proxy] Fallback failed:', e);
+                errorDetails += ` | Fallback error: ${String(e)}`;
               }
-            });
+            }
+
+            if (results.length === 0 && errorDetails) {
+              throw new Error(`Search failed: ${errorDetails}`);
+            }
 
             console.log(`[Search Proxy] Found ${results.length} results`);
             
