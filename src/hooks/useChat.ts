@@ -380,7 +380,7 @@ export const useChat = ({
             
             const routerPrompt = `Router Agent: GENERAL_CONVERSATION or KNOWLEDGE_SEARCH. Query: "${query}"`;
             const routerResponse = await callGenerateContent(selectedModel, apiKey, [{ role: 'user', content: routerPrompt }]);
-            decision = routerResponse.text.trim().toUpperCase().includes('KNOWLEDGE_SEARCH') ? 'KNOWLEDGE_SEARCH' : 'GENERAL_CONVERSATION';
+            decision = (routerResponse.text || '').trim().toUpperCase().includes('KNOWLEDGE_SEARCH') ? 'KNOWLEDGE_SEARCH' : 'GENERAL_CONVERSATION';
 
             if (appSettings.enableRouterV2) {
                 try {
@@ -392,8 +392,11 @@ export const useChat = ({
                         }
                         return await p;
                     };
+                    
+                    if (!vectorStore?.current) throw new Error("Vector store not initialized.");
+
                     const route = await decideRouteV2({
-                        query, history, filesLoaded: files.length > 0, vectorStore: vectorStore.current!,
+                        query, history, filesLoaded: files.length > 0, vectorStore: vectorStore.current,
                         model: selectedModel, apiKey, settings: appSettings, embedQuery: embedQueryFn,
                     });
                     decision = route.mode === 'CHAT' ? 'GENERAL_CONVERSATION' : 'KNOWLEDGE_SEARCH';
@@ -402,7 +405,7 @@ export const useChat = ({
                         const { runDeepAnalysis } = await import('../agents/deep_analysis');
                         const level = appSettings.deepAnalysisLevel === 3 || route.mode === 'DEEP_ANALYSIS_L3' ? 3 : 2;
                         const da = await runDeepAnalysis({
-                            query, history: newHistoryWithUser, vectorStore: vectorStore.current!,
+                            query, history: newHistoryWithUser, vectorStore: vectorStore.current,
                             model: selectedModel, apiKey, settings: appSettings, embedQuery: embedQueryFn,
                             rerank: appSettings.isRerankingEnabled ? async (rerankQuery, docs) => {
                                 const tasks: Omit<ComputeTask, 'jobId'>[] = [];
@@ -430,7 +433,7 @@ export const useChat = ({
             if (decision === 'GENERAL_CONVERSATION') {
                 const llmResponse = await callGenerateContent(selectedModel, apiKey, [{ role: 'system', content: getSystemPrompt() }, ...newHistoryWithUser]);
                 setTokenUsage(prev => ({ promptTokens: prev.promptTokens + perRequestTokenUsage.promptTokens, completionTokens: prev.completionTokens + perRequestTokenUsage.completionTokens }));
-                setChatHistory([...newHistoryWithUser, { role: 'model', content: llmResponse.text, tokenUsage: perRequestTokenUsage, elapsedTime: Date.now() - startTime }]);
+                setChatHistory([...newHistoryWithUser, { role: 'model', content: llmResponse.text || '', tokenUsage: perRequestTokenUsage, elapsedTime: Date.now() - startTime }]);
                 setIsLoading(false);
                 return;
             }
@@ -440,6 +443,8 @@ export const useChat = ({
                 coordinator.current.addJob('Embed Query', [{ id: `query-${Date.now()}`, priority: TaskPriority.P1_Primary, payload: { type: TaskType.EmbedQuery, query } }]);
             }
             const queryEmbedding = await queryEmbeddingPromise;
+            
+            if (!vectorStore?.current) throw new Error("Vector store not initialized.");
             const searchResults = vectorStore.current.search(queryEmbedding, appSettings.numInitialCandidates);
             
             const requiredDocIds = Array.from(new Set(searchResults.map(c => c.id)));
@@ -450,7 +455,7 @@ export const useChat = ({
             
             const llmResponse = await callGenerateContent(selectedModel, apiKey, messages);
             setTokenUsage(prev => ({ promptTokens: prev.promptTokens + perRequestTokenUsage.promptTokens, completionTokens: prev.completionTokens + perRequestTokenUsage.completionTokens }));
-            setChatHistory([...newHistoryWithUser, { role: 'model', content: `${llmResponse.text}<!--searchResults:${JSON.stringify(searchResults)}-->`, tokenUsage: perRequestTokenUsage, elapsedTime: Date.now() - startTime }]);
+            setChatHistory([...newHistoryWithUser, { role: 'model', content: `${llmResponse.text || ''}<!--searchResults:${JSON.stringify(searchResults)}-->`, tokenUsage: perRequestTokenUsage, elapsedTime: Date.now() - startTime }]);
         } catch (error) {
             if (error instanceof Error && error.name === 'AbortError') {
                 console.log('[Chat] Generation aborted by user.');
@@ -465,7 +470,7 @@ export const useChat = ({
 
     const handleRedo = useCallback(async (index: number) => {
         const messageToRedo = chatHistory[index];
-        if (messageToRedo.role !== 'user' || isLoading) return;
+        if (messageToRedo.role !== 'user' || isLoading || messageToRedo.content === null) return;
         await submitQuery(messageToRedo.content, chatHistory.slice(0, index));
     }, [chatHistory, isLoading, submitQuery]);
 
