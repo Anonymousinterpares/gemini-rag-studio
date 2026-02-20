@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState, useMemo } from 'react';
 import { marked } from 'marked';
-import { AppFile, ChatMessage, JobProgress, Model, SearchResult, TokenUsage, ToolCall } from '../types';
+import { AppFile, ChatMessage, JobProgress, Model, SearchResult, TokenUsage } from '../types';
 import { summaryCache } from '../cache/summaryCache';
 import { ComputeTask, TaskPriority, TaskType } from '../compute/types';
-import { generateContent, LlmResponse, Tool } from '../api/llm-provider';
+import { generateContent, Tool } from '../api/llm-provider';
 import { ComputeCoordinator } from '../compute/coordinator';
 import { VectorStore } from '../rag/pipeline';
 import { useChatStore, useFileStore, useSettingsStore } from '../store';
@@ -219,14 +219,14 @@ export const useChat = ({
 
             // If Chat Mode is ON, enable search capabilities
             if (appSettings.isChatModeEnabled) {
-                let currentHistory = [...newHistoryWithUser];
+                const currentHistory = [...newHistoryWithUser];
                 const tools = [SEARCH_TOOL];
                 let loopCount = 0;
                 const MAX_LOOPS = appSettings.maxSearchLoops;
 
                 while (loopCount < MAX_LOOPS) {
                     if (controller.signal.aborted) return;
-                    let messagesToSend = [{ role: 'system' as const, content: getSystemPrompt() }, ...currentHistory];
+                    const messagesToSend = [{ role: 'system' as const, content: getSystemPrompt() }, ...currentHistory];
 
                     // Inject warning when near the limit
                     if (loopCount === MAX_LOOPS - 2 && MAX_LOOPS > 2) {
@@ -289,7 +289,7 @@ export const useChat = ({
                                 const parsed = JSON.parse(jsonMatch[0].replace(/```json|```/g, '').trim());
                                 extractedQuery = parsed.query || parsed.search || (parsed.parameters?.query);
                                 if (extractedQuery) matchedText = jsonMatch[0];
-                            } catch (e) { /* ignore */ }
+                            } catch { /* ignore */ }
                         }
 
                         if (extractedQuery) {
@@ -342,13 +342,13 @@ export const useChat = ({
                                     content: JSON.stringify(results)
                                 };
                                 currentHistory.push(toolOutput);
-                            } catch (e) {
-                                console.error('[Chat] Failed to parse tool arguments', e);
+                            } catch (_e) {
+                                console.error('[Chat] Search tool error:', _e);
                                 currentHistory.push({
                                     role: 'tool' as const,
                                     tool_call_id: toolCall.id,
                                     name: toolCall.function.name,
-                                    content: JSON.stringify({ error: "Failed to parse arguments" })
+                                    content: JSON.stringify({ error: _e instanceof Error ? _e.message : "Search failed" })
                                 });
                             }
                         }

@@ -6,7 +6,7 @@ export interface Tool {
   function: {
     name: string;
     description: string;
-    parameters: Record<string, any>;
+    parameters: Record<string, unknown>;
   };
 }
 
@@ -26,6 +26,14 @@ export interface LlmResponse {
     promptTokens: number;
     completionTokens: number;
   };
+}
+
+interface ProviderMessage {
+  role: 'user' | 'assistant' | 'system' | 'tool';
+  content: string | null;
+  name?: string;
+  tool_call_id?: string;
+  tool_calls?: ToolCall[];
 }
 
 function sanitizeHistory(messages: ChatMessage[]): {
@@ -151,8 +159,12 @@ export async function generateContent(
         const gemini = ai.getGenerativeModel({
             model: model.id,
             ...(systemPrompt && { systemInstruction: { role: 'system', parts: [{ text: systemPrompt }] } }),
-            tools: geminiTools as any
-        }, { requestOptions: { signal } as any });
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            tools: geminiTools as any 
+        }, { 
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            requestOptions: { signal } as any 
+        });
         
         const googleHistory: Content[] = history.map(m => {
             if (m.role === 'tool') {
@@ -167,14 +179,14 @@ export async function generateContent(
                 };
             }
             
-            const parts: any[] = [];
+            const parts: { text?: string; functionCall?: { name: string; args: Record<string, unknown> } }[] = [];
             if (m.content) parts.push({ text: m.content });
             if (m.tool_calls) {
                 m.tool_calls.forEach(tc => {
                     parts.push({ 
                         functionCall: { 
                             name: tc.function.name, 
-                            args: JSON.parse(tc.function.arguments) 
+                            args: JSON.parse(tc.function.arguments) as Record<string, unknown>
                         } 
                     });
                 });
@@ -182,7 +194,8 @@ export async function generateContent(
 
             return {
                 role: m.role === 'model' ? 'model' as const : 'user' as const,
-                parts
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                parts: parts as any[] 
             };
         });
 
@@ -222,11 +235,43 @@ export async function generateContent(
     case 'openai': {
       if (!apiKey) throw new Error('OpenAI API key not provided.');
       
-      const finalMessages: ChatMessage[] = [];
+      const finalMessages: ProviderMessage[] = [];
       if (systemPrompt) finalMessages.push({ role: 'system', content: systemPrompt });
-      finalMessages.push(...history, lastMessage);
       
-      const body: any = {
+      // Map 'model' to 'assistant' for OpenAI
+      const mappedHistory: ProviderMessage[] = history.map(m => {
+        let role: 'user' | 'assistant' | 'system' | 'tool' = 'user';
+        if (m.role === 'model') role = 'assistant';
+        else if (m.role === 'system') role = 'system';
+        else if (m.role === 'tool') role = 'tool';
+        else role = 'user';
+
+        return {
+          role,
+          content: m.content,
+          name: m.name,
+          tool_call_id: m.tool_call_id,
+          tool_calls: m.tool_calls
+        };
+      });
+
+      let lastRole: 'user' | 'assistant' | 'system' | 'tool' = 'user';
+      if (lastMessage.role === 'model') lastRole = 'assistant';
+      else if (lastMessage.role === 'system') lastRole = 'system';
+      else if (lastMessage.role === 'tool') lastRole = 'tool';
+      else lastRole = 'user';
+
+      const mappedLastMessage: ProviderMessage = {
+        role: lastRole,
+        content: lastMessage.content,
+        name: lastMessage.name,
+        tool_call_id: lastMessage.tool_call_id,
+        tool_calls: lastMessage.tool_calls
+      };
+      
+      finalMessages.push(...mappedHistory, mappedLastMessage);
+      
+      const body: Record<string, unknown> = {
         model: model.id,
         messages: finalMessages,
       };
@@ -247,8 +292,8 @@ export async function generateContent(
       });
 
       if (!openAiResponse.ok) {
-        const error = await openAiResponse.json();
-        throw new Error(`OpenAI API Error: ${error.error.message}`);
+        const errorData = await openAiResponse.json() as { error: { message: string } };
+        throw new Error(`OpenAI API Error: ${errorData.error.message}`);
       }
       const openAiData = await openAiResponse.json();
       console.log('[DEBUG] OpenAI API Response Body:', JSON.stringify(openAiData, null, 2));
@@ -263,11 +308,43 @@ export async function generateContent(
     }
     case 'openrouter': {
        if (!apiKey) throw new Error('OpenRouter API key not provided.');
-       const finalMessages: ChatMessage[] = [];
+       const finalMessages: ProviderMessage[] = [];
        if (systemPrompt) finalMessages.push({ role: 'system', content: systemPrompt });
-       finalMessages.push(...history, lastMessage);
+       
+       // Map 'model' to 'assistant' for OpenRouter
+       const mappedHistory: ProviderMessage[] = history.map(m => {
+         let role: 'user' | 'assistant' | 'system' | 'tool' = 'user';
+         if (m.role === 'model') role = 'assistant';
+         else if (m.role === 'system') role = 'system';
+         else if (m.role === 'tool') role = 'tool';
+         else role = 'user';
 
-       const body: any = {
+         return {
+           role,
+           content: m.content,
+           name: m.name,
+           tool_call_id: m.tool_call_id,
+           tool_calls: m.tool_calls
+         };
+       });
+
+       let lastRole: 'user' | 'assistant' | 'system' | 'tool' = 'user';
+       if (lastMessage.role === 'model') lastRole = 'assistant';
+       else if (lastMessage.role === 'system') lastRole = 'system';
+       else if (lastMessage.role === 'tool') lastRole = 'tool';
+       else lastRole = 'user';
+
+       const mappedLastMessage: ProviderMessage = {
+         role: lastRole,
+         content: lastMessage.content,
+         name: lastMessage.name,
+         tool_call_id: lastMessage.tool_call_id,
+         tool_calls: lastMessage.tool_calls
+       };
+
+       finalMessages.push(...mappedHistory, mappedLastMessage);
+
+       const body: Record<string, unknown> = {
           model: model.id,
           messages: finalMessages,
         };
@@ -290,8 +367,8 @@ export async function generateContent(
       });
 
       if (!openRouterResponse.ok) {
-        const error = await openRouterResponse.json();
-        throw new Error(`OpenRouter API Error: ${error.error.message}`);
+        const errorData = await openRouterResponse.json() as { error: { message: string } };
+        throw new Error(`OpenRouter API Error: ${errorData.error.message}`);
       }
       const openRouterData = await openRouterResponse.json();
       console.log('[DEBUG] OpenRouter API Response Body:', JSON.stringify(openRouterData, null, 2));
@@ -305,9 +382,41 @@ export async function generateContent(
       };
     }
     case 'ollama': {
-      const finalMessages: ChatMessage[] = [];
+      const finalMessages: ProviderMessage[] = [];
       if (systemPrompt) finalMessages.push({ role: 'system', content: systemPrompt });
-      finalMessages.push(...history, lastMessage);
+      
+      // Map 'model' to 'assistant' for Ollama
+      const mappedHistory: ProviderMessage[] = history.map(m => {
+        let role: 'user' | 'assistant' | 'system' | 'tool' = 'user';
+        if (m.role === 'model') role = 'assistant';
+        else if (m.role === 'system') role = 'system';
+        else if (m.role === 'tool') role = 'tool';
+        else role = 'user';
+
+        return {
+          role,
+          content: m.content,
+          name: m.name,
+          tool_call_id: m.tool_call_id,
+          tool_calls: m.tool_calls
+        };
+      });
+
+      let lastRole: 'user' | 'assistant' | 'system' | 'tool' = 'user';
+      if (lastMessage.role === 'model') lastRole = 'assistant';
+      else if (lastMessage.role === 'system') lastRole = 'system';
+      else if (lastMessage.role === 'tool') lastRole = 'tool';
+      else lastRole = 'user';
+
+      const mappedLastMessage: ProviderMessage = {
+        role: lastRole,
+        content: lastMessage.content,
+        name: lastMessage.name,
+        tool_call_id: lastMessage.tool_call_id,
+        tool_calls: lastMessage.tool_calls
+      };
+
+      finalMessages.push(...mappedHistory, mappedLastMessage);
 
       console.log('[DEBUG] Sending to Ollama API:', { messages: finalMessages });
       const ollamaResponse = await fetch('http://localhost:11434/v1/chat/completions', {

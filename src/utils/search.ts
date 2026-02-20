@@ -13,7 +13,15 @@ export async function searchWeb(query: string): Promise<SearchResult[]> {
   try {
     const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
     if (!response.ok) {
-      throw new Error(`Search failed with status: ${response.status}`);
+      // Try to get error details from response body
+      let details = '';
+      try {
+        const data = await response.json();
+        details = data.details || data.error || '';
+      } catch {
+        details = response.statusText;
+      }
+      throw new Error(`Search failed: ${details || response.status}`);
     }
     const data = await response.json();
     if (data.error) {
@@ -22,6 +30,6 @@ export async function searchWeb(query: string): Promise<SearchResult[]> {
     return data.results || [];
   } catch (error) {
     console.error('Web search error:', error);
-    return [];
+    throw error; // Re-throw to allow caller to handle or stop the loop
   }
 }

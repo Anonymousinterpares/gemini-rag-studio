@@ -52,6 +52,15 @@ export async function chunkDocument(text: string, chunkSize = 1000, overlap = 20
 
 // 4. Vector Store and Search
 // A simple in-memory vector store to hold the embeddings and perform search.
+interface SearchCandidate {
+  id: string;
+  similarity: number;
+  start: number;
+  end: number;
+  parentChunkIndex: number;
+  embedding?: number[];
+}
+
 export class VectorStore {
   // Holds the small, searchable child chunks and their embeddings
   private childVectors: {
@@ -228,7 +237,7 @@ export class VectorStore {
   /**
    * Helper to map child candidates back to their rich parent context
    */
-  private resolveParentChunks(candidates: any[], includeEmbeddings: boolean = false): { chunk: string; similarity: number, id: string, start: number, end: number, embedding?: number[] }[] {
+  private resolveParentChunks(candidates: SearchCandidate[], includeEmbeddings: boolean = false): { chunk: string; similarity: number, id: string, start: number, end: number, embedding?: number[] }[] {
     const results: { chunk: string; similarity: number, id: string, start: number, end: number, embedding?: number[] }[] = [];
     const seenParentKeys = new Set<string>();
 
