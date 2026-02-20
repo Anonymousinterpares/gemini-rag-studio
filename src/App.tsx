@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, FC, useCallback } from 'react';
 import { getStoredDirectoryHandle, storeDirectoryHandle, clearStoredDirectoryHandle } from './utils/db';
-import { Trash2, X, RefreshCw, LayoutGrid, List as ListIcon, FolderTree, ChevronLeft, ChevronRight, User, Bot, Send, Copy, Download, Info } from 'lucide-react';
+import { Trash2, X, RefreshCw, LayoutGrid, List as ListIcon, FolderTree, ChevronLeft, ChevronRight, User, Bot, Send, Copy, Download, Info, Square } from 'lucide-react';
 import { useFileState, useCompute, useChat } from './hooks';
 import { AppFile, ViewMode, SearchResult, Model } from './types';
 import { embeddingCache } from './cache/embeddingCache';
@@ -16,7 +16,7 @@ import EmbeddingCacheModal from './components/EmbeddingCacheModal';
 import SummaryModal from './components/SummaryModal';
 import { SpeechBubble, DigestParticles, FloatingArrows, RejectionBubble } from './components/Monster';
 import RecoveryDialogContainer from './components/RecoveryDialogContainer';
-import { useSettingsStore, useFileStore, useChatStore, useComputeStore } from './store';
+import { useSettingsStore, useFileStore, useComputeStore } from './store';
 import './style.css';
 import './progress-bar.css';
 import './Modal.css';
@@ -24,7 +24,6 @@ import './Modal.css';
 export const App: FC = () => {
   const { appSettings, setAppSettings, modelsList, selectedModel, setSelectedModel, apiKeys, setApiKeys } = useSettingsStore();
   const { files, setFiles, fileTree, selectedFile, isDragging } = useFileStore();
-  const { chatHistory, setChatHistory, userInput, setUserInput, tokenUsage, isLoading } = useChatStore();
   const { isEmbedding, setIsEmbedding, jobTimers, setJobTimers, computeDevice, mlWorkerCount, activeJobCount } = useComputeStore();
 
   const [viewMode, setViewMode] = useState<ViewMode>('tree');
@@ -47,7 +46,15 @@ export const App: FC = () => {
 
   const { coordinator, vectorStore, queryEmbeddingResolver, rerankPromiseResolver } = useCompute(docFontSize);
 
-  const { handleRedo, handleSubmit, handleSourceClick, renderModelMessage, handleClearConversation, handleRemoveMessage, initialChatHistory } = useChat({
+  const {
+    userInput, setUserInput,
+    chatHistory, setChatHistory,
+    tokenUsage, isLoading,
+    handleRedo, handleSubmit, handleSourceClick, renderModelMessage,
+    stopGeneration,
+    handleClearConversation, handleRemoveMessage,
+    initialChatHistory
+  } = useChat({
     coordinator, vectorStore, queryEmbeddingResolver, rerankPromiseResolver, setRerankProgress: () => {}, setActiveSource, setIsModalOpen
   });
 
@@ -237,7 +244,11 @@ export const App: FC = () => {
           )}
           <form className='chat-input-form' onSubmit={handleSubmit}>
             <input type='text' className='chat-input' value={userInput} onChange={(e) => setUserInput(e.target.value)} disabled={isLoading || (files.length === 0 && !appSettings.isChatModeEnabled)} />
-            <button type='submit' className='button' disabled={isLoading || !userInput.trim()}><Send size={16} /></button>
+            {isLoading ? (
+              <button type='button' className='button stop-button' onClick={stopGeneration}><Square size={16} /></button>
+            ) : (
+              <button type='submit' className='button' disabled={!userInput.trim()}><Send size={16} /></button>
+            )}
           </form>
           <div className="token-usage-display">Tokens: {tokenUsage.promptTokens + tokenUsage.completionTokens}</div>
           <div className='setting-row'><button onClick={() => setAppSettings(p => ({ ...p, isDeepAnalysisEnabled: !p.isDeepAnalysisEnabled }))} className={`toggle-button ${appSettings.isDeepAnalysisEnabled ? 'active' : ''}`}>Deep Analysis: {appSettings.isDeepAnalysisEnabled ? 'ON' : 'OFF'}</button></div>

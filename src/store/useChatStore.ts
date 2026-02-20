@@ -7,6 +7,7 @@ interface ChatState {
   pendingQuery: string | null;
   tokenUsage: TokenUsage;
   isLoading: boolean;
+  abortController: AbortController | null;
   
   // Actions
   setChatHistory: (updater: ChatMessage[] | ((prev: ChatMessage[]) => ChatMessage[])) => void;
@@ -14,6 +15,7 @@ interface ChatState {
   setPendingQuery: (query: string | null) => void;
   setTokenUsage: (updater: TokenUsage | ((prev: TokenUsage) => TokenUsage)) => void;
   setIsLoading: (loading: boolean) => void;
+  setAbortController: (controller: AbortController | null) => void;
   clearHistory: (initialHistory: ChatMessage[]) => void;
 }
 
@@ -28,6 +30,7 @@ export const useChatStore = create<ChatState>((set) => ({
   pendingQuery: null,
   tokenUsage: { promptTokens: 0, completionTokens: 0 },
   isLoading: false,
+  abortController: null,
 
   setChatHistory: (updater) => set((state) => ({
     chatHistory: typeof updater === 'function' ? updater(state.chatHistory) : updater
@@ -43,10 +46,13 @@ export const useChatStore = create<ChatState>((set) => ({
 
   setIsLoading: (loading) => set({ isLoading: loading }),
 
+  setAbortController: (controller) => set({ abortController: controller }),
+
   clearHistory: (initialHistory) => set({
     chatHistory: initialHistory,
     tokenUsage: { promptTokens: 0, completionTokens: 0 },
     userInput: '',
-    pendingQuery: null
+    pendingQuery: null,
+    abortController: null
   }),
 }));

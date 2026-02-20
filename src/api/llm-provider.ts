@@ -99,7 +99,8 @@ export async function generateContent(
   model: Model,
   apiKeyFromUI: string | undefined,
   messages: ChatMessage[],
-  tools?: Tool[]
+  tools?: Tool[],
+  signal?: AbortSignal
 ): Promise<LlmResponse> {
   const getApiKey = (provider: 'google' | 'openai' | 'openrouter' | 'ollama'): string | undefined => {
     switch (provider) {
@@ -151,7 +152,7 @@ export async function generateContent(
             model: model.id,
             ...(systemPrompt && { systemInstruction: { role: 'system', parts: [{ text: systemPrompt }] } }),
             tools: geminiTools as any
-        });
+        }, { requestOptions: { signal } as any });
         
         const googleHistory: Content[] = history.map(m => {
             if (m.role === 'tool') {
@@ -242,6 +243,7 @@ export async function generateContent(
           'Authorization': `Bearer ${apiKey}`,
         },
         body: JSON.stringify(body),
+        signal
       });
 
       if (!openAiResponse.ok) {
@@ -284,6 +286,7 @@ export async function generateContent(
           'X-Title': 'Gemini RAG Studio',
         },
         body: JSON.stringify(body),
+        signal
       });
 
       if (!openRouterResponse.ok) {
@@ -317,6 +320,7 @@ export async function generateContent(
           messages: finalMessages,
           stream: false,
         }),
+        signal
       });
       if (!ollamaResponse.ok) {
         const error = await ollamaResponse.text();

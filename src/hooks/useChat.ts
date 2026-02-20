@@ -80,6 +80,7 @@ export const useChat = ({
         pendingQuery, setPendingQuery, 
         tokenUsage, setTokenUsage, 
         isLoading, setIsLoading,
+        abortController, setAbortController,
         clearHistory
     } = useChatStore();
 
@@ -87,6 +88,14 @@ export const useChat = ({
     const { appSettings, selectedModel, selectedProvider, apiKeys } = useSettingsStore();
 
     const [summaries, setSummaries] = useState<Record<string, string>>({});
+
+    const stopGeneration = useCallback(() => {
+        if (abortController) {
+            abortController.abort();
+            setAbortController(null);
+        }
+        setIsLoading(false);
+    }, [abortController, setAbortController, setIsLoading]);
 
     const initialChatHistory = useMemo((): ChatMessage[] => ([
         {
@@ -178,8 +187,11 @@ export const useChat = ({
         setChatHistory(newHistoryWithUser);
         setIsLoading(true);
 
+        const controller = new AbortController();
+        setAbortController(controller);
+
         const callGenerateContent = async (model: Model, apiKey: string, messages: ChatMessage[], tools?: Tool[]): Promise<import('../api/llm-provider').LlmResponse> => {
-            const response = await generateContent(model, apiKey, messages, tools);
+            const response = await generateContent(model, apiKey, messages, tools, controller.signal);
             perRequestTokenUsage.promptTokens += response.usage.promptTokens;
             perRequestTokenUsage.completionTokens += response.usage.completionTokens;
             return response;
@@ -196,6 +208,7 @@ export const useChat = ({
                 const MAX_LOOPS = appSettings.maxSearchLoops;
 
                 while (loopCount < MAX_LOOPS) {
+                    if (controller.signal.aborted) return;
                     let messagesToSend = [{ role: 'system' as const, content: getSystemPrompt() }, ...currentHistory];
 
                     // Inject warning when near the limit
@@ -283,6 +296,7 @@ export const useChat = ({
                             elapsedTime: Date.now() - startTime 
                         }]);
                         setIsLoading(false);
+                        setAbortController(null);
                         return;
                     }
 
@@ -296,6 +310,7 @@ export const useChat = ({
 
                     // Execute tools
                     for (const toolCall of toolCalls) {
+                        if (controller.signal.aborted) return;
                         if (toolCall.function.name === 'search_web') {
                             try {
                                 const args = JSON.parse(toolCall.function.arguments);
@@ -327,6 +342,7 @@ export const useChat = ({
                 
                 setChatHistory([...currentHistory, { role: 'model', content: "I reached my search limit without a final answer." }]);
                 setIsLoading(false);
+                setAbortController(null);
                 return;
             }
 
@@ -406,11 +422,16 @@ export const useChat = ({
             setTokenUsage(prev => ({ promptTokens: prev.promptTokens + perRequestTokenUsage.promptTokens, completionTokens: prev.completionTokens + perRequestTokenUsage.completionTokens }));
             setChatHistory([...newHistoryWithUser, { role: 'model', content: `${llmResponse.text}<!--searchResults:${JSON.stringify(searchResults)}-->`, tokenUsage: perRequestTokenUsage, elapsedTime: Date.now() - startTime }]);
         } catch (error) {
-            setChatHistory([...newHistoryWithUser, { role: 'model', content: `Sorry, I encountered an error: ${error instanceof Error ? error.message : 'Unknown error'}` }]);
+            if (error instanceof Error && error.name === 'AbortError') {
+                console.log('[Chat] Generation aborted by user.');
+            } else {
+                setChatHistory([...newHistoryWithUser, { role: 'model', content: `Sorry, I encountered an error: ${error instanceof Error ? error.message : 'Unknown error'}` }]);
+            }
         } finally {
             setIsLoading(false);
+            setAbortController(null);
         }
-    }, [isLoading, appSettings, coordinator, vectorStore, queryEmbeddingResolver, rerankPromiseResolver, apiKeys, selectedProvider, selectedModel, setIsLoading, setChatHistory, getSystemPrompt, waitForSummaries, files, setTokenUsage]);
+    }, [isLoading, appSettings, coordinator, vectorStore, queryEmbeddingResolver, rerankPromiseResolver, apiKeys, selectedProvider, selectedModel, setIsLoading, setChatHistory, getSystemPrompt, waitForSummaries, files, setTokenUsage, setAbortController]);
 
     const handleRedo = useCallback(async (index: number) => {
         const messageToRedo = chatHistory[index];
@@ -486,7 +507,9 @@ export const useChat = ({
         userInput, setUserInput,
         chatHistory, setChatHistory,
         tokenUsage, setTokenUsage,
+        isLoading, setIsLoading,
         handleRedo, handleSubmit, handleSourceClick, renderModelMessage,
+        stopGeneration,
         handleClearConversation: () => clearHistory(initialChatHistory),
         handleRemoveMessage: (idx: number) => setChatHistory(prev => prev.filter((_, i) => i !== idx)),
         pendingQuery, setPendingQuery,

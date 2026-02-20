@@ -702,6 +702,13 @@ button:focus-visible {
   cursor: not-allowed;
 }
 
+.button.stop-button {
+  background-color: #dc3545;
+}
+.button.stop-button:hover {
+  background-color: #bd2130;
+}
+
 .button.secondary {
   background-color: var(--secondary-color);
 }
