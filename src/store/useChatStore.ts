@@ -17,6 +17,8 @@ interface ChatState {
   setIsLoading: (loading: boolean) => void;
   setAbortController: (controller: AbortController | null) => void;
   clearHistory: (initialHistory: ChatMessage[]) => void;
+  updateMessage: (index: number, content: string) => void;
+  truncateHistory: (index: number) => void;
 }
 
 export const useChatStore = create<ChatState>((set) => ({
@@ -55,4 +57,16 @@ export const useChatStore = create<ChatState>((set) => ({
     pendingQuery: null,
     abortController: null
   }),
+
+  updateMessage: (index, content) => set((state) => {
+    const newHistory = [...state.chatHistory];
+    if (newHistory[index]) {
+      newHistory[index] = { ...newHistory[index], content };
+    }
+    return { chatHistory: newHistory };
+  }),
+
+  truncateHistory: (index) => set((state) => ({
+    chatHistory: state.chatHistory.slice(0, index + 1)
+  })),
 }));

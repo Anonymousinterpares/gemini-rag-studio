@@ -481,6 +481,93 @@ button:focus-visible {
   margin-bottom: 0;
 }
 
+/* Message Actions Container */
+.message-actions {
+  display: flex;
+  gap: 0.25rem;
+  margin-top: 0.5rem;
+  justify-content: flex-end;
+  opacity: 0.4;
+  transition: opacity 0.2s;
+}
+
+.message-container:hover .message-actions {
+  opacity: 1;
+}
+
+.chat-message.user .message-actions {
+  flex-direction: row-reverse;
+  justify-content: flex-start;
+}
+
+/* Edit Message Area */
+.edit-message-area {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: 100%;
+  min-width: 300px;
+}
+
+.edit-message-textarea {
+  width: 100%;
+  min-height: 100px;
+  background-color: var(--input-bg-color);
+  color: var(--text-color);
+  border: 1px solid var(--primary-color);
+  border-radius: 8px;
+  padding: 0.5rem;
+  font-family: inherit;
+  font-size: 1em;
+  resize: vertical;
+}
+
+.edit-message-actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}
+
+.edit-message-actions button {
+  padding: 0.3rem 0.6rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--secondary-color);
+  color: var(--text-color);
+  border: 1px solid var(--border-color);
+}
+
+.edit-message-actions button:hover {
+  background-color: var(--primary-color);
+  border-color: var(--primary-color);
+  color: white;
+}
+
+.message-actions button {
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--text-color-secondary);
+  cursor: pointer;
+  padding: 0.3rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  transition: all 0.2s;
+}
+
+.message-actions button:hover:not(:disabled) {
+  background-color: var(--primary-color);
+  color: white;
+  border-color: var(--primary-color);
+}
+
+.message-actions button:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
 /* Chat Bubble Color Themes */
 .chat-message.bubble-default {
   background-color: var(--message-bg-color);

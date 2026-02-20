@@ -87,7 +87,7 @@ export const useChat = ({
         tokenUsage, setTokenUsage, 
         isLoading, setIsLoading,
         abortController, setAbortController,
-        clearHistory
+        clearHistory, updateMessage, truncateHistory
     } = useChatStore();
 
     const { files } = useFileStore();
@@ -588,10 +588,12 @@ export const useChat = ({
         chatHistory, setChatHistory,
         tokenUsage, setTokenUsage,
         isLoading, setIsLoading,
-        handleRedo, handleSubmit, handleSourceClick, renderModelMessage,
+        handleSourceClick, renderModelMessage,
         stopGeneration,
         handleClearConversation: () => clearHistory(initialChatHistory),
         handleRemoveMessage: (idx: number) => setChatHistory(prev => prev.filter((_, i) => i !== idx)),
+        handleUpdateMessage: updateMessage,
+        handleTruncateHistory: truncateHistory,
         pendingQuery, setPendingQuery,
         initialChatHistory
     };

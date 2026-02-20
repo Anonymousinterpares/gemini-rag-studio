@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, FC, useCallback } from 'react';
 import { getStoredDirectoryHandle, storeDirectoryHandle, clearStoredDirectoryHandle } from './utils/db';
-import { Trash2, X, RefreshCw, LayoutGrid, List as ListIcon, FolderTree, ChevronLeft, ChevronRight, User, Bot, Send, Copy, Download, Info, Square } from 'lucide-react';
+import { Trash2, X, RefreshCw, LayoutGrid, List as ListIcon, FolderTree, ChevronLeft, ChevronRight, User, Bot, Send, Copy, Download, Info, Square, Edit2, Check, XCircle } from 'lucide-react';
 import { useFileState, useCompute, useChat } from './hooks';
 import { AppFile, ViewMode, SearchResult, Model } from './types';
 import { embeddingCache } from './cache/embeddingCache';
@@ -53,10 +53,34 @@ export const App: FC = () => {
     handleRedo, handleSubmit, handleSourceClick, renderModelMessage,
     stopGeneration,
     handleClearConversation, handleRemoveMessage,
+    handleUpdateMessage, handleTruncateHistory,
     initialChatHistory
   } = useChat({
     coordinator, vectorStore, queryEmbeddingResolver, rerankPromiseResolver, setRerankProgress: () => {}, setActiveSource, setIsModalOpen
   });
+
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [editingContent, setEditingContent] = useState('');
+
+  const handleStartEdit = (idx: number, content: string) => {
+    setEditingIndex(idx);
+    setEditingContent(content);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingIndex(null);
+    setEditingContent('');
+  };
+
+  const handleSaveAndRerun = async (idx: number) => {
+    if (!editingContent.trim()) return;
+    handleUpdateMessage(idx, editingContent);
+    handleTruncateHistory(idx);
+    setEditingIndex(null);
+    setEditingContent('');
+    // Need to trigger the redo for the modified message
+    await handleRedo(idx);
+  };
 
   const { handleDrop, handleClearFiles, addFilesAndEmbed } = useFileState({
     vectorStore, docFontSize, coordinator, resetLLMResponseState: () => setHasLLMResponded(false)
@@ -211,21 +235,43 @@ export const App: FC = () => {
         <div className='chat-panel-header'><div className='background-changer'><button className='background-btn' onClick={() => setAppSettings(p => ({...p, backgroundIndex: p.backgroundIndex === 0 ? backgroundImages.length : p.backgroundIndex - 1}))}><ChevronLeft size={16} /></button><button className='background-btn' onClick={() => setAppSettings(p => ({...p, backgroundIndex: (p.backgroundIndex + 1) % (backgroundImages.length + 1)}))}><ChevronRight size={16} /></button></div></div>
         <div className='panel-content' ref={chatHistoryRef} onClick={handleSourceClick} style={{ backgroundImage: backgroundImages[appSettings.backgroundIndex - 1] ? `url('${backgroundImages[appSettings.backgroundIndex - 1]}')` : 'none', backgroundSize: 'cover' }}>
           <div className='chat-history'>
-            {chatHistory.filter(msg => {
+            {chatHistory.map((msg, i) => ({ msg, i })).filter(({ msg }) => {
               // Hide intermediate tool calls and tool results from the UI
               if (msg.role === 'tool') return false;
               if (msg.role === 'model' && msg.tool_calls && msg.tool_calls.length > 0) return false;
               return true;
-            }).map((msg, i) => (
+            }).map(({ msg, i }) => (
               <div key={i} className={`message-container ${msg.role}`}>
                 <div className={`chat-message ${msg.role} bubble-${appSettings.chatBubbleColor}`}>
                   <div className='avatar'>{msg.role === 'model' ? <Bot size={20} /> : <User size={20} />}</div>
-                  <div className='message-content'>{msg.role === 'model' ? <div className='message-markup' dangerouslySetInnerHTML={renderModelMessage(msg.content)} /> : msg.content}</div>
+                  <div className='message-content'>
+                    {editingIndex === i ? (
+                      <div className="edit-message-area">
+                        <textarea
+                          className="edit-message-textarea"
+                          value={editingContent}
+                          onChange={(e) => setEditingContent(e.target.value)}
+                          autoFocus
+                        />
+                        <div className="edit-message-actions">
+                          <button onClick={() => handleSaveAndRerun(i)} title="Save and Rerun"><Check size={14} /></button>
+                          <button onClick={handleCancelEdit} title="Cancel"><XCircle size={14} /></button>
+                        </div>
+                      </div>
+                    ) : (
+                      msg.role === 'model' ? <div className='message-markup' dangerouslySetInnerHTML={renderModelMessage(msg.content)} /> : msg.content
+                    )}
+                  </div>
                   <div className="message-actions">
-                    <button onClick={() => handleCopy(i)}><Copy size={14} /></button>
-                    <button onClick={() => handleDownloadAction(i)}><Download size={14} /></button>
-                    {msg.role === 'user' && <button onClick={() => handleRedo(i)} disabled={isLoading || isEmbedding}><RefreshCw size={14} /></button>}
-                    <button onClick={() => handleRemoveMessage(i)}><Trash2 size={14} /></button>
+                    <button onClick={() => handleCopy(i)} title="Copy"><Copy size={14} /></button>
+                    <button onClick={() => handleDownloadAction(i)} title="Download"><Download size={14} /></button>
+                    {msg.role === 'user' && editingIndex !== i && (
+                      <>
+                        <button onClick={() => handleStartEdit(i, msg.content || '')} title="Edit"><Edit2 size={14} /></button>
+                        <button onClick={() => handleRedo(i)} disabled={isLoading || isEmbedding} title="Redo"><RefreshCw size={14} /></button>
+                      </>
+                    )}
+                    <button onClick={() => handleRemoveMessage(i)} title="Remove"><Trash2 size={14} /></button>
                   </div>
                 </div>
               </div>
