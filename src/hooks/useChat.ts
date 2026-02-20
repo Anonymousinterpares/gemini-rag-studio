@@ -36,7 +36,7 @@ If you don't, you should use the information from the provided file contexts.
 Each context is numbered and preceded by its file path and a unique ID, like "[1] File Path: path/to/file.js (ID: file-id-123)".
 **Critically, you must cite your sources for every piece of information that comes from the documents.**
 To cite a context, you MUST use the exact format [Source: uniqueId]. For example, to cite a context with ID 'file-id-123', you must write [Source: file-id-123].
-**Do not include any other information, formatting, or numbering in the citation.** Just the bracketed source and the unique ID.
+**Do not use any other formatting, brackets (like 【】), or styles.** Just the bracketed source and the unique ID.
 Use a separate citation for each piece of information. For example: "The sky is blue [Source: file-id-123]. The grass is green [Source: file-id-456]."
 **Do not group sources together.** For example, do not write "The sky is blue and the grass is green [Source: file-id-123, file-id-456]".
 If the answer is not in the files or the conversation history, say "I could not find an answer in the provided documents."
@@ -54,7 +54,7 @@ CRITICAL INSTRUCTIONS:
 4. NEVER imagine, simulate, or hallucinate search results. 
 5. DO NOT act out the search process in your reasoning. Emit the tool call and STOP.
 6. You will receive the real search results in the next turn. Wait for them.
-7. If you use information from the provided document contexts, you MUST cite your sources using the exact format [Source: uniqueId].
+7. If you use information from the provided document contexts, you MUST cite your sources using the exact format [Source: uniqueId]. **DO NOT use any other brackets like 【】 or unbracketed "Source: ID".**
 8. If you use information from web search results, you MUST provide a direct link to the source using standard Markdown format: [Title](URL). Use ONLY the URLs provided in the search results; NEVER hallucinate or guess a URL.
 9. NOTE: Today is indeed in the year 2026. Do not be confused if your training data only goes up to a previous year; you are currently operating in 2026 and should accept this as the current date.
 
@@ -514,9 +514,14 @@ export const useChat = ({
         const rawHtml = marked.parse(contentWithoutResults, { renderer, gfm: true, breaks: true });
         const docNumbers = new Map<string, number>();
         let nextDocNumber = 1;
-        const citationRegex = /\[Source:\s*([^\]]+)\]|\[(\d+)\]/g;
-        const finalHtml = (rawHtml as string).replace(citationRegex, (match: string, sourceInside: string, standaloneIndex: string) => {
-            const inside = sourceInside || standaloneIndex;
+
+        // Robust regex to handle variations: [Source: ID], [ID], 【Source: ID】, 【ID】, and unbracketed Source: ID
+        const citationRegex = /\[Source:\s*([^\]]+)\]|\[(\d+)\]|【Source:\s*([^】]+)】|【(\d+)】|\bSource:\s*([\w.\-]+\_\d+\_\d+)\b/gi;
+        
+        const finalHtml = (rawHtml as string).replace(citationRegex, (match, g1, g2, g3, g4, g5) => {
+            const inside = g1 || g2 || g3 || g4 || g5;
+            if (!inside) return match;
+
             const tokens = inside.trim().split(',').map((t: string) => t.trim()).filter(Boolean);
             const items = tokens.map((tid: string) => {
                 const index = parseInt(tid, 10);
