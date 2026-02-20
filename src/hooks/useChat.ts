@@ -1,12 +1,31 @@
 import { useCallback, useEffect, useState, useMemo } from 'react';
 import { marked } from 'marked';
-import { AppFile, ChatMessage, JobProgress, Model, SearchResult, TokenUsage } from '../types';
+import { AppFile, ChatMessage, JobProgress, Model, SearchResult, TokenUsage, ToolCall } from '../types';
 import { summaryCache } from '../cache/summaryCache';
 import { ComputeTask, TaskPriority, TaskType } from '../compute/types';
-import { generateContent } from '../api/llm-provider';
+import { generateContent, LlmResponse, Tool } from '../api/llm-provider';
 import { ComputeCoordinator } from '../compute/coordinator';
 import { VectorStore } from '../rag/pipeline';
 import { useChatStore, useFileStore, useSettingsStore } from '../store';
+import { searchWeb } from '../utils/search';
+
+const SEARCH_TOOL: Tool = {
+  type: 'function',
+  function: {
+    name: 'search_web',
+    description: 'Search the internet for current information, news, or specific data not present in your training knowledge.',
+    parameters: {
+      type: 'object',
+      properties: {
+        query: {
+          type: 'string',
+          description: 'The search query to perform.',
+        },
+      },
+      required: ['query'],
+    },
+  },
+};
 
 const AGENT_SYSTEM_PROMPT_TEMPLATE = `You are a helpful and expert AI assistant. Your user is a software developer.
 Be concise and accurate in your answers.
@@ -24,8 +43,17 @@ If the answer is not in the files or the conversation history, say "I could not 
 
 const CHAT_MODE_PROMPT_TEMPLATE = `You are a helpful and expert AI assistant. Your user is a software developer.
 Be concise and accurate in your answers.
-You can use your general knowledge to answer questions.
-If you use information from the provided document contexts, you MUST cite your sources using the exact format [Source: uniqueId].
+You HAVE INTERNET ACCESS via the 'search_web' tool. 
+
+CRITICAL INSTRUCTIONS:
+1. If you need information you don't have, you MUST use 'search_web'.
+2. The ONLY valid way to search is to call the function 'search_web' with the parameter 'query'.
+3. DO NOT output JSON in your text response. Use the formal tool-calling field.
+4. NEVER imagine, simulate, or hallucinate search results. 
+5. DO NOT act out the search process in your reasoning. Emit the tool call and STOP.
+4. You will receive the real search results in the next turn. Wait for them.
+5. If you use information from the provided document contexts, you MUST cite your sources using the exact format [Source: uniqueId].
+
 {summaries_section}`;
 
 interface UseChatProps {
@@ -150,8 +178,8 @@ export const useChat = ({
         setChatHistory(newHistoryWithUser);
         setIsLoading(true);
 
-        const callGenerateContent = async (model: Model, apiKey: string, messages: ChatMessage[]): Promise<import('../api/llm-provider').LlmResponse> => {
-            const response = await generateContent(model, apiKey, messages);
+        const callGenerateContent = async (model: Model, apiKey: string, messages: ChatMessage[], tools?: Tool[]): Promise<import('../api/llm-provider').LlmResponse> => {
+            const response = await generateContent(model, apiKey, messages, tools);
             perRequestTokenUsage.promptTokens += response.usage.promptTokens;
             perRequestTokenUsage.completionTokens += response.usage.completionTokens;
             return response;
@@ -160,11 +188,144 @@ export const useChat = ({
         try {
             const apiKey = apiKeys[selectedProvider];
 
-            // If no files and Chat Mode is ON, skip router and go straight to conversation
-            if (files.length === 0 && appSettings.isChatModeEnabled) {
-                const llmResponse = await callGenerateContent(selectedModel, apiKey, [{ role: 'system', content: getSystemPrompt() }, ...newHistoryWithUser]);
-                setTokenUsage(prev => ({ promptTokens: prev.promptTokens + perRequestTokenUsage.promptTokens, completionTokens: prev.completionTokens + perRequestTokenUsage.completionTokens }));
-                setChatHistory([...newHistoryWithUser, { role: 'model', content: llmResponse.text, tokenUsage: perRequestTokenUsage, elapsedTime: Date.now() - startTime }]);
+            // If Chat Mode is ON, enable search capabilities
+            if (appSettings.isChatModeEnabled) {
+                let currentHistory = [...newHistoryWithUser];
+                const tools = [SEARCH_TOOL];
+                let loopCount = 0;
+                const MAX_LOOPS = appSettings.maxSearchLoops;
+
+                while (loopCount < MAX_LOOPS) {
+                    let messagesToSend = [{ role: 'system' as const, content: getSystemPrompt() }, ...currentHistory];
+
+                    // Inject warning when near the limit
+                    if (loopCount === MAX_LOOPS - 2 && MAX_LOOPS > 2) {
+                        messagesToSend.push({
+                            role: 'system',
+                            content: "ATTENTION: You have only 2 search calls remaining. Please make your final searches now if needed, then gather all information and provide your final answer to the user."
+                        });
+                    } else if (loopCount === MAX_LOOPS - 1) {
+                        messagesToSend.push({
+                            role: 'system',
+                            content: "ATTENTION: This is your LAST search call. After this, you MUST provide your final answer based on all gathered information."
+                        });
+                    }
+
+                    const response = await callGenerateContent(selectedModel, apiKey, messagesToSend, tools);
+                    
+                    // Accumulate tokens
+                    setTokenUsage(prev => ({ 
+                        promptTokens: prev.promptTokens + response.usage.promptTokens, 
+                        completionTokens: prev.completionTokens + response.usage.completionTokens 
+                    }));
+
+                    let toolCalls = response.toolCalls || [];
+                    let cleanResponseText = response.text || '';
+
+                    // Universal Interceptor: Catch models that invent their own search syntax
+                    if (toolCalls.length === 0 && cleanResponseText) {
+                        // 1. Match XML-style: <search_web>query</search_web>
+                        const xmlMatch = cleanResponseText.match(/<search_web>([\s\S]*?)<\/search_web>/i);
+                        
+                        // 2. Match Square-style: [search_web: query]
+                        const bracketMatch = cleanResponseText.match(/\[search_web:?\s*([\s\S]*?)\]/i);
+
+                        // 3. Match Complex XML: <invoke name="search_web"><parameter name="query">...</parameter></invoke>
+                        const invokeMatch = cleanResponseText.match(/<invoke name="search_web">[\s\S]*?<parameter name="query">([\s\S]*?)<\/parameter>[\s\S]*?<\/invoke>/i);
+
+                        // 4. Match Markdown Table: | tool | search_web | ... | query | ... |
+                        const tableMatch = cleanResponseText.match(/\|\s*tool\s*\|\s*search_web\s*\|[\s\S]*?\|\s*query\s*\|\s*([\s\S]*?)\s*\|/i);
+
+                        // 5. Match JSON-style anywhere in text
+                        const jsonMatch = cleanResponseText.match(/\{[\s\S]*?"query"[\s\S]*?\}/i) || cleanResponseText.match(/\{[\s\S]*?"search"[\s\S]*?\}/i);
+
+                        let extractedQuery = '';
+                        let matchedText = '';
+
+                        if (xmlMatch) {
+                            extractedQuery = xmlMatch[1].trim();
+                            matchedText = xmlMatch[0];
+                        } else if (bracketMatch) {
+                            extractedQuery = bracketMatch[1].trim();
+                            matchedText = bracketMatch[0];
+                        } else if (invokeMatch) {
+                            extractedQuery = invokeMatch[1].trim();
+                            matchedText = invokeMatch[0];
+                        } else if (tableMatch) {
+                            extractedQuery = tableMatch[1].trim();
+                            matchedText = tableMatch[0];
+                        } else if (jsonMatch) {
+                            try {
+                                const parsed = JSON.parse(jsonMatch[0].replace(/```json|```/g, '').trim());
+                                extractedQuery = parsed.query || parsed.search || (parsed.parameters?.query);
+                                if (extractedQuery) matchedText = jsonMatch[0];
+                            } catch (e) { /* ignore */ }
+                        }
+
+                        if (extractedQuery) {
+                            console.log('[Chat] Intercepted non-standard tool call:', extractedQuery);
+                            toolCalls = [{
+                                id: `intercepted_${Date.now()}`,
+                                type: 'function',
+                                function: { name: 'search_web', arguments: JSON.stringify({ query: extractedQuery }) }
+                            }];
+                            // Clean the text response so the user doesn't see the raw command
+                            cleanResponseText = cleanResponseText.replace(matchedText, '').trim();
+                        }
+                    }
+
+                    // If no tool calls (and no fallback detected), we are done.
+                    if (toolCalls.length === 0) {
+                        setChatHistory([...currentHistory, { 
+                            role: 'model', 
+                            content: cleanResponseText, 
+                            tokenUsage: perRequestTokenUsage, 
+                            elapsedTime: Date.now() - startTime 
+                        }]);
+                        setIsLoading(false);
+                        return;
+                    }
+
+                    // Handle tool calls
+                    const assistantMessage: ChatMessage = {
+                        role: 'model',
+                        content: cleanResponseText || null,
+                        tool_calls: toolCalls
+                    };
+                    currentHistory.push(assistantMessage);
+
+                    // Execute tools
+                    for (const toolCall of toolCalls) {
+                        if (toolCall.function.name === 'search_web') {
+                            try {
+                                const args = JSON.parse(toolCall.function.arguments);
+                                const searchQuery = args.query || args.search || toolCall.function.arguments;
+                                console.log(`[Chat] Executing search_web with query: "${searchQuery}"`);
+                                
+                                const results = await searchWeb(searchQuery);
+                                const toolOutput = {
+                                    role: 'tool' as const,
+                                    tool_call_id: toolCall.id,
+                                    name: toolCall.function.name,
+                                    content: JSON.stringify(results)
+                                };
+                                currentHistory.push(toolOutput);
+                            } catch (e) {
+                                console.error('[Chat] Failed to parse tool arguments', e);
+                                currentHistory.push({
+                                    role: 'tool' as const,
+                                    tool_call_id: toolCall.id,
+                                    name: toolCall.function.name,
+                                    content: JSON.stringify({ error: "Failed to parse arguments" })
+                                });
+                            }
+                        }
+                    }
+
+                    loopCount++;
+                }
+                
+                setChatHistory([...currentHistory, { role: 'model', content: "I reached my search limit without a final answer." }]);
                 setIsLoading(false);
                 return;
             }
@@ -263,7 +424,8 @@ export const useChat = ({
         setUserInput('');
     }, [userInput, chatHistory, submitQuery, setUserInput]);
 
-    const renderModelMessage = useCallback((content: string) => {
+    const renderModelMessage = useCallback((content: string | null) => {
+        if (!content) return { __html: '' };
         let searchResults: SearchResult[] = [];
         const contentWithoutResults = content.replace(/<!--searchResults:(.*?)-->/, (_, resultsJson) => {
             try { searchResults = JSON.parse(resultsJson); } catch {

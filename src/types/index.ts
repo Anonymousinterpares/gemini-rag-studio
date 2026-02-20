@@ -39,11 +39,23 @@ export interface ReviewFileTreeItem {
 
 export type ViewMode = 'tree' | 'list'
 
+export interface ToolCall {
+  id: string;
+  type: 'function';
+  function: {
+    name: string;
+    arguments: string;
+  };
+}
+
 export interface ChatMessage {
-  role: 'user' | 'model' | 'system'
-  content: string
+  role: 'user' | 'model' | 'system' | 'tool'
+  content: string | null; // Content can be null for tool calls
   tokenUsage?: TokenUsage;
   elapsedTime?: number;
+  tool_calls?: ToolCall[];
+  tool_call_id?: string;
+  name?: string;
 }
 
 export interface JobProgress {

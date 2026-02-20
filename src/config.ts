@@ -15,6 +15,7 @@ export interface AppSettings {
   isLightQueryTransformationEnabled: boolean;
   chatBubbleColor: string;
   isChatModeEnabled: boolean;
+  maxSearchLoops: number;
   // Enforcement: when true, answers must be based on the user's documents only
   docOnlyMode: boolean;
   // Feature flags
@@ -41,6 +42,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   isLightQueryTransformationEnabled: false,
   chatBubbleColor: 'default',
   isChatModeEnabled: false,
+  maxSearchLoops: 10,
   docOnlyMode: true,
   // Enable new features by default for testing; can be toggled in Settings later
   enableRouterV2: true,

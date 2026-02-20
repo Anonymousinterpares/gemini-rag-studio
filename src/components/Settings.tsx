@@ -156,6 +156,15 @@ const Settings: FC<{ className?: string }> = ({ className }) => {
       </div>
 
       <div className="setting-row">
+        <label>Search Limit:</label>
+        <div className="worker-controls">
+          <button onClick={() => setAppSettings(p => ({...p, maxSearchLoops: Math.max(1, p.maxSearchLoops - 1)}))}><Minus size={14} /></button>
+          <span>{appSettings.maxSearchLoops}</span>
+          <button onClick={() => setAppSettings(p => ({...p, maxSearchLoops: p.maxSearchLoops + 1}))}><Plus size={14} /></button>
+        </div>
+      </div>
+
+      <div className="setting-row">
         <label>Semantic Chunk:</label>
         <button onClick={() => setAppSettings(p => ({...p, isSemanticChunkingEnabled: !p.isSemanticChunkingEnabled}))} className={`toggle-button ${appSettings.isSemanticChunkingEnabled ? 'active' : ''}`}>{appSettings.isSemanticChunkingEnabled ? 'ON' : 'OFF'}</button>
       </div>
