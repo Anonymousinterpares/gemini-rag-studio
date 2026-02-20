@@ -125,7 +125,10 @@ export const createFileTasks = async (
         }
         case 'layout': {
             const modalContent = document.querySelector('.modal-content');
-            const defaultWidth = modalContent?.clientWidth || 800;
+            const defaultWidth = modalContent?.clientWidth || (window.innerWidth * 0.9);
+            // Subtract sidebar (250px) and some padding
+            const targetWidth = Math.max(300, defaultWidth - 250 - 64);
+            
             tasks.push({
                 id: `${file.id}-layout-${taskIdCounter++}`,
                 priority: TaskPriority.P2_Background,
@@ -134,9 +137,9 @@ export const createFileTasks = async (
                     docId: file.id,
                     docContent: file.content,
                     file: file.file,
-                    containerWidth: defaultWidth - (2 * 16),
+                    containerWidth: targetWidth,
                     fontSize: docFontSize,
-                    fontFamily: "'Fira Code', 'Courier New', monospace",
+                    fontFamily: "'Fira Code', 'JetBrains Mono', monospace",
                 }
             });
             break;

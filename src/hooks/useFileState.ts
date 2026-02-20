@@ -103,6 +103,10 @@ export const useFileState = ({
                 chunkOverlap: 200,
             }
         }]);
+
+        // Trigger layout calculation for the streamed file
+        const layoutTasks = await createFileTasks(appFile, 'layout', coordinator.current, docFontSize, selectedModel, selectedProvider, apiKeys, appSettings);
+        coordinator.current.addJob(`Layout: ${appFile.id}`, layoutTasks);
     } catch (e) {
         console.error(`[streamFileToCoordinator] Error streaming file ${appFile.id}:`, e);
     }

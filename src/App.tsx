@@ -254,7 +254,15 @@ export const App: FC = () => {
           <div className='setting-row'><button onClick={() => setAppSettings(p => ({ ...p, isDeepAnalysisEnabled: !p.isDeepAnalysisEnabled }))} className={`toggle-button ${appSettings.isDeepAnalysisEnabled ? 'active' : ''}`}>Deep Analysis: {appSettings.isDeepAnalysisEnabled ? 'ON' : 'OFF'}</button></div>
         </div>
       </div>
-      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)}><MemoizedDocViewer coordinator={coordinator.current} selectedFile={activeSource?.file ?? selectedFile} chunksToHighlight={activeSource?.chunks?.map(c => ({ start: c.start, end: c.end })) ?? []} docFontSize={docFontSize} setDocFontSize={setDocFontSize} /></Modal>
+      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)}>
+        <MemoizedDocViewer 
+          coordinator={coordinator.current} 
+          selectedFile={activeSource?.file ?? selectedFile} 
+          chunksToHighlight={activeSource?.chunks ?? []} 
+          docFontSize={docFontSize} 
+          setDocFontSize={setDocFontSize} 
+        />
+      </Modal>
       <EmbeddingCacheModal isOpen={isCacheModalOpen} onClose={() => setIsCacheModalOpen(false)} />
       {summaryFile && <SummaryModal isOpen={isSummaryModalOpen} onClose={() => setIsSummaryModalOpen(false)} summary={currentSummary} fileName={summaryFile.name} />}
       <CustomFileExplorer isOpen={isExplorerOpen} onClose={() => setIsExplorerOpen(false)} rootDirectoryHandle={rootDirectoryHandle} onFilesSelected={async (items) => {

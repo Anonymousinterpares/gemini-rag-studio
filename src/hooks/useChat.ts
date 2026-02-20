@@ -517,7 +517,9 @@ export const useChat = ({
                 if (!sr) return `[${tid}]`; // Return original bracketed text if no match found
                 if (!docNumbers.has(sr.id)) docNumbers.set(sr.id, nextDocNumber++);
                 const docNo = docNumbers.get(sr.id);
-                return `<button class="source-link citation-bubble" data-file-id="${sr.id}" data-start="${sr.start}" data-end="${sr.end}" title="Doc #${docNo}"><span>${docNo}</span></button>`;
+                // Store chunk text (escaped) in data-chunk attribute for quick view
+                const chunkEscaped = sr.chunk.replace(/"/g, '&quot;');
+                return `<button class="source-link citation-bubble" data-file-id="${sr.id}" data-start="${sr.start}" data-end="${sr.end}" data-chunk="${chunkEscaped}" title="Doc #${docNo}"><span>${docNo}</span></button>`;
             }).join('');
             return items ? `<span class="citation-group">${items}</span>` : match;
         });
@@ -529,10 +531,34 @@ export const useChat = ({
         const btn = target.closest('button.source-link');
         if (btn) {
             const fileId = btn.getAttribute('data-file-id');
+            const start = parseInt(btn.getAttribute('data-start') || '0');
+            const end = parseInt(btn.getAttribute('data-end') || '0');
+            const chunkText = btn.getAttribute('data-chunk') || '';
+            
             const file = files.find(f => f.id === fileId);
             if (file) {
-                const chunks = [{ id: file.id, start: parseInt(btn.getAttribute('data-start') || '0'), end: parseInt(btn.getAttribute('data-end') || '0'), chunk: '', similarity: 1 }];
-                setActiveSource({ file, chunks });
+                // By default use the clicked chunk
+                let allRelevantChunks: SearchResult[] = [{ id: fileId!, start, end, chunk: chunkText, similarity: 1 }];
+
+                // Find all chunks from the same file in the same message
+                const messageContainer = btn.closest('.message-container');
+                if (messageContainer) {
+                    const messageDocLinks = messageContainer.querySelectorAll(`.source-link[data-file-id="${fileId}"]`);
+                    const otherChunks: SearchResult[] = [];
+                    messageDocLinks.forEach(link => {
+                        const lStart = parseInt(link.getAttribute('data-start') || '0');
+                        const lEnd = parseInt(link.getAttribute('data-end') || '0');
+                        // Avoid duplication of the clicked chunk
+                        if (lStart !== start) {
+                            otherChunks.push({ id: fileId!, start: lStart, end: lEnd, chunk: link.getAttribute('data-chunk') || '', similarity: 1 });
+                        }
+                    });
+                    
+                    // Sort combined chunks by their document position
+                    allRelevantChunks = [...allRelevantChunks, ...otherChunks].sort((a, b) => a.start - b.start);
+                }
+
+                setActiveSource({ file, chunks: allRelevantChunks });
                 setIsModalOpen(true);
             }
         }
