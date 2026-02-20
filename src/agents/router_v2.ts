@@ -72,7 +72,7 @@ Return only one word.` },
     if (onTokenUsage) {
       onTokenUsage({ promptTokens: cls.usage.promptTokens, completionTokens: cls.usage.completionTokens });
     }
-    const t = cls.text.trim().toLowerCase();
+    const t = (cls.text || '').trim().toLowerCase();
     if (['factoid', 'overview', 'synthesis', 'comparison', 'reasoning'].includes(t)) {
       complexity = t as 'factoid' | 'overview' | 'synthesis' | 'comparison' | 'reasoning';
     }

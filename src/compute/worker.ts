@@ -8,8 +8,8 @@ import {
   ComputeTask,
   ParagraphLayout,
   Line,
+  IndexDocumentResult
 } from './types';
-import type { IndexDocumentResult } from './types';
 
 // --- Canvas and Caching ---
 const canvas = new OffscreenCanvas(1, 1);
@@ -185,6 +185,7 @@ async function executeTask(task: ComputeTask) {
             searchResults,
             model,
             apiKey,
+            query: null
         };
 
         if (isLoggingEnabled) console.log(`[GP Worker ${workerId}] Finished RAG for summary for: ${taskId}`);
@@ -234,7 +235,7 @@ async function executeTask(task: ComputeTask) {
                     content: `TEXT: "${content.slice(0, 500)}"`
                 }
             ]);
-            languageCode = llmResponse.text.trim().toLowerCase();
+            languageCode = (llmResponse.text || 'und').trim().toLowerCase();
             tokenUsage = llmResponse.usage;
             if (isLoggingEnabled) console.log(`[GP Worker ${workerId}] LLM detected language: ${languageCode}`);
         }

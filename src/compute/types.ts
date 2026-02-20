@@ -1,5 +1,5 @@
 import { SearchResult, Model, TokenUsage } from "../types";
-import { DocumentChunk } from "../rag/pipeline";
+import { DocumentChunk, DocumentStructureMap } from "../rag/pipeline";
 
 // The different types of computation the engine can perform
 export enum TaskType {
@@ -86,6 +86,7 @@ export interface RerankPayload {
     id: string; // Changed from path to id
     start: number;
     end: number;
+    parentChunkIndex: number;
   }[];
 }
 
@@ -121,6 +122,7 @@ export interface ExecuteRAGForSummaryResult {
     searchResults: SearchResult[];
     model: Model;
     apiKey: string | undefined;
+    query: string | null;
 }
 
 export interface DetectLanguagePayload {
@@ -174,6 +176,12 @@ export interface IndexDocumentPayload {
   type: TaskType.IndexDocument;
   docId: string;
   parentChunks: DocumentChunk[];
+}
+
+export interface IndexDocumentResult {
+  docId: string;
+  entities: Record<string, { count: number; positions: number[] }>;
+  structure: DocumentStructureMap;
 }
 
 // A task as it exists in the coordinator's queue, combining payload with metadata
@@ -241,13 +249,13 @@ export interface CalculateLayoutResult {
 
 export interface SummarizeResult {
   docId: string;
-  summary: string;
+  summary: string | null;
   tokenUsage: TokenUsage;
 }
 
 export interface GenerateSummaryQueryResult {
     docId: string;
-    query: string;
+    query: string | null;
     model: Model;
     apiKey: string | undefined;
     tokenUsage?: TokenUsage;
@@ -420,9 +428,8 @@ export interface SummaryGenerationStartedMessage {
 }
 
 export interface SummaryGenerationCompletedMessage {
-    type: 'summary_generation_completed';
     docId: string;
-    summary: string;
+    summary: string | null;
     tokenUsage: TokenUsage;
 }
 

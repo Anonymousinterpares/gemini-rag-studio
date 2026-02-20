@@ -1,6 +1,6 @@
 import React, { memo, useRef, useLayoutEffect, useState, useMemo, useEffect } from 'react';
 import { VariableSizeList } from 'react-window';
-import { FileText, ZoomIn, ZoomOut, BrainCircuit, List, Eye, BookOpen, ChevronRight } from 'lucide-react';
+import { FileText, ZoomIn, ZoomOut, BrainCircuit, List, BookOpen, ChevronRight } from 'lucide-react';
 import { AppFile, SearchResult } from '../types';
 import { ComputeCoordinator } from '../compute/coordinator';
 import { useLayoutManager } from '../hooks/useLayoutManager';

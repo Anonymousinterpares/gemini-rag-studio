@@ -47,7 +47,7 @@ function sanitizeHistory(messages: ChatMessage[]): {
     // 1. Find and remove the system prompt
     const systemMsgIndex = messages.findIndex(m => m.role === 'system');
     if (systemMsgIndex !== -1) {
-        systemPrompt = messages.splice(systemMsgIndex, 1)[0].content;
+        systemPrompt = messages.splice(systemMsgIndex, 1)[0].content || undefined;
     }
 
     // 2. Find the first user message. Discard anything before it, UNLESS it's a sequence of tool interactions 
@@ -161,10 +161,7 @@ export async function generateContent(
             ...(systemPrompt && { systemInstruction: { role: 'system', parts: [{ text: systemPrompt }] } }),
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             tools: geminiTools as any 
-        }, { 
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            requestOptions: { signal } as any 
-        });
+        }, { signal } as any);
         
         const googleHistory: Content[] = history.map(m => {
             if (m.role === 'tool') {

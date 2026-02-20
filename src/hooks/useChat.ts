@@ -419,7 +419,15 @@ export const useChat = ({
                             model: selectedModel, apiKey, settings: appSettings, embedQuery: embedQueryFn,
                             rerank: appSettings.isRerankingEnabled ? async (rerankQuery, docs) => {
                                 const tasks: Omit<ComputeTask, 'jobId'>[] = [];
-                                docs.forEach((d, i) => tasks.push({ id: `rerank-${i}`, priority: TaskPriority.P1_Primary, payload: { type: TaskType.Rerank, query: rerankQuery, documents: [d] } }));
+                                docs.forEach((d, i) => tasks.push({ 
+                                    id: `rerank-${i}`, 
+                                    priority: TaskPriority.P1_Primary, 
+                                    payload: { 
+                                        type: TaskType.Rerank, 
+                                        query: rerankQuery, 
+                                        documents: [{ ...d, parentChunkIndex: (d as any).parentChunkIndex ?? -1 }]
+                                    } 
+                                }));
                                 const rerankPromise = new Promise<SearchResult[]>((resolve) => { if (rerankPromiseResolver) rerankPromiseResolver.current = { resolve, jobId: '', taskResults: [] }; });
                                 if (coordinator.current) {
                                     const jobId = coordinator.current.addJob('Rerank', tasks);
@@ -538,7 +546,7 @@ export const useChat = ({
                 const docNo = docNumbers.get(sr.id);
                 // Store chunk text (escaped) in data-chunk attribute for quick view
                 const chunkEscaped = sr.chunk.replace(/"/g, '&quot;');
-                return `<button class="source-link citation-bubble" data-file-id="${sr.id}" data-start="${sr.start}" data-end="${sr.end}" data-chunk="${chunkEscaped}" title="Doc #${docNo}"><span>${docNo}</span></button>`;
+                return `<button class="source-link citation-bubble" data-file-id="${sr.id}" data-start="${sr.start}" data-end="${sr.end}" data-parent-index="${sr.parentChunkIndex}" data-chunk="${chunkEscaped}" title="Doc #${docNo}"><span>${docNo}</span></button>`;
             }).join('');
             return items ? `<span class="citation-group">${items}</span>` : match;
         });
@@ -552,12 +560,13 @@ export const useChat = ({
             const fileId = btn.getAttribute('data-file-id');
             const start = parseInt(btn.getAttribute('data-start') || '0');
             const end = parseInt(btn.getAttribute('data-end') || '0');
+            const parentIndex = parseInt(btn.getAttribute('data-parent-index') || '-1');
             const chunkText = btn.getAttribute('data-chunk') || '';
             
             const file = files.find(f => f.id === fileId);
             if (file) {
                 // By default use the clicked chunk
-                let allRelevantChunks: SearchResult[] = [{ id: fileId!, start, end, chunk: chunkText, similarity: 1 }];
+                let allRelevantChunks: SearchResult[] = [{ id: fileId!, start, end, parentChunkIndex: parentIndex, chunk: chunkText, similarity: 1 }];
 
                 // Find all chunks from the same file in the same message
                 const messageContainer = btn.closest('.message-container');
@@ -567,9 +576,11 @@ export const useChat = ({
                     messageDocLinks.forEach(link => {
                         const lStart = parseInt(link.getAttribute('data-start') || '0');
                         const lEnd = parseInt(link.getAttribute('data-end') || '0');
+                        const lParentIndex = parseInt(link.getAttribute('data-parent-index') || '-1');
+                        const lChunk = link.getAttribute('data-chunk') || '';
                         // Avoid duplication of the clicked chunk
                         if (lStart !== start) {
-                            otherChunks.push({ id: fileId!, start: lStart, end: lEnd, chunk: link.getAttribute('data-chunk') || '', similarity: 1 });
+                            otherChunks.push({ id: fileId!, start: lStart, end: lEnd, parentChunkIndex: lParentIndex, chunk: lChunk, similarity: 1 });
                         }
                     });
                     
@@ -588,7 +599,7 @@ export const useChat = ({
         chatHistory, setChatHistory,
         tokenUsage, setTokenUsage,
         isLoading, setIsLoading,
-        handleSourceClick, renderModelMessage,
+        handleRedo, handleSubmit, handleSourceClick, renderModelMessage,
         stopGeneration,
         handleClearConversation: () => clearHistory(initialChatHistory),
         handleRemoveMessage: (idx: number) => setChatHistory(prev => prev.filter((_, i) => i !== idx)),

@@ -75,6 +75,7 @@ export interface SearchResult {
   id: string; // Use file ID instead of path
   start: number;
   end: number;
+  parentChunkIndex: number;
   embedding?: number[]; // Optional raw vector for diversification/clustering
 }
 

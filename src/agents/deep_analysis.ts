@@ -368,7 +368,7 @@ export async function runDeepAnalysis(opts: {
     // Optional rerank
     let ranked: (SearchResult & { embedding: number[] })[] = merged;
     if (opts.rerank) {
-      const docs = merged.map(r => ({ chunk: r.chunk, id: r.id, start: r.start, end: r.end }));
+      const docs = merged.map(r => ({ chunk: r.chunk, id: r.id, start: r.start, end: r.end, parentChunkIndex: r.parentChunkIndex }));
       try {
         const reranked = await rerankSafe(`${query} ${sec.name}`, docs); // serialize due to single resolver design
         // Restore embeddings after rerank

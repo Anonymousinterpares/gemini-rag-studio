@@ -1,5 +1,6 @@
 import { cos_sim } from "@xenova/transformers";
 import { RecursiveCharacterTextSplitter } from "langchain/text_splitter";
+import { SearchResult } from "../types";
 
 // 1. Document Chunking
 // We split the document into smaller chunks to embed them separately.
@@ -58,7 +59,8 @@ interface SearchCandidate {
   start: number;
   end: number;
   parentChunkIndex: number;
-  embedding?: number[];
+  embedding: number[];
+  chunk: string;
 }
 
 export class VectorStore {
@@ -69,6 +71,7 @@ export class VectorStore {
     parentChunkIndex: number; // -1 for legacy chunks
     start: number; // start of the child chunk
     end: number; // end of the child chunk
+    chunk: string;
   }[] = [];
   // Holds the large, contextual parent chunks, indexed by document ID and then by index
   private parentChunkStore: Map<string, DocumentChunk[]> = new Map();
@@ -85,6 +88,7 @@ export class VectorStore {
       parentChunkIndex: -1,
       start: chunk.start,
       end: chunk.end,
+      chunk: chunk.text
     });
     if (!this.parentChunkStore.has(id)) { // Use file ID
       this.parentChunkStore.set(id, []); // Use file ID
@@ -104,6 +108,7 @@ export class VectorStore {
       parentChunkIndex: childChunk.parentChunkIndex,
       start: childChunk.start,
       end: childChunk.end,
+      chunk: childChunk.text
     });
   }
 
@@ -125,10 +130,10 @@ export class VectorStore {
    * Useful for agents that merge results from multiple sub-queries.
    */
   diversify(
-    candidates: ({ chunk: string; similarity: number, id: string, start: number, end: number, embedding: number[] })[], 
+    candidates: SearchCandidate[], 
     topK: number, 
     options: { lambda?: number, spanWeight?: number } = {}
-  ): { chunk: string; similarity: number, id: string, start: number, end: number }[] {
+  ): SearchCandidate[] {
     if (candidates.length === 0) return [];
     
     const { lambda = 0.7, spanWeight = 0.1 } = options;
@@ -180,10 +185,7 @@ export class VectorStore {
         }
     }
 
-    return selectedIndices.map(idx => {
-        const { embedding: _emb, ...rest } = candidates[idx];
-        return rest;
-    });
+    return selectedIndices.map(idx => candidates[idx]);
   }
 
   /**
@@ -195,7 +197,7 @@ export class VectorStore {
     topK = 20, 
     docId?: string, 
     options: { lambda?: number, spanWeight?: number, diversityType?: 'mmr' | 'simple', includeEmbeddings?: boolean } = {}
-  ): { chunk: string; similarity: number, id: string, start: number, end: number, embedding?: number[] }[] {
+  ): SearchResult[] {
     if (this.childVectors.length === 0) return [];
 
     const { 
@@ -211,13 +213,15 @@ export class VectorStore {
     }
 
     // 1. Candidate Retrieval (O(N))
-    const initialCandidates = vectorsToSearch.map((item) => {
+    const initialCandidates: SearchCandidate[] = vectorsToSearch.map((item) => {
         const similarity = cos_sim(queryEmbedding, item.embedding);
         return { 
             similarity, 
             id: item.id, 
             parentChunkIndex: item.parentChunkIndex, 
             start: item.start,
+            end: item.end,
+            chunk: item.chunk,
             embedding: item.embedding 
         };
     }).sort((a, b) => b.similarity - a.similarity).slice(0, 100);
@@ -237,8 +241,8 @@ export class VectorStore {
   /**
    * Helper to map child candidates back to their rich parent context
    */
-  private resolveParentChunks(candidates: SearchCandidate[], includeEmbeddings: boolean = false): { chunk: string; similarity: number, id: string, start: number, end: number, embedding?: number[] }[] {
-    const results: { chunk: string; similarity: number, id: string, start: number, end: number, embedding?: number[] }[] = [];
+  private resolveParentChunks(candidates: SearchCandidate[], includeEmbeddings: boolean = false): SearchResult[] {
+    const results: SearchResult[] = [];
     const seenParentKeys = new Set<string>();
 
     for (const result of candidates) {
@@ -263,6 +267,7 @@ export class VectorStore {
                 id: result.id,
                 start: parentChunk.start,
                 end: parentChunk.end,
+                parentChunkIndex: result.parentChunkIndex,
                 ...(includeEmbeddings ? { embedding: result.embedding } : {})
             });
         }

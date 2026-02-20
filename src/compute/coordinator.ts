@@ -184,7 +184,7 @@ export class ComputeCoordinator {
               payload: {
                 type: TaskType.ExecuteRAGForSummary,
                 docId,
-                query,
+                query: query || '',
                 model,
                 apiKey,
               },
@@ -406,7 +406,6 @@ export class ComputeCoordinator {
 
                 // Emit the original completion event for other listeners
                 this.emit('summary_generation_completed', {
-                    type: 'summary_generation_completed',
                     docId: summaryPayload.docId,
                     summary: summaryPayload.summary,
                     tokenUsage: summaryPayload.tokenUsage, // Keep it here for listeners that need it
