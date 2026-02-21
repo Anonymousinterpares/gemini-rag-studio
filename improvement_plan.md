@@ -103,11 +103,3 @@ Expected net effects
 •  VOI + span coverage + clustering/MMR: Produce broader, higher-quality answers with fewer redundant snippets, even for a single book/paper.
 •  Investigator gatherers + rubric: Answers shift from “event lists” to well-organized, claim-backed insights aligned to intent.
 •  Multi-iteration budgets: Predictable trade-off—better answers when needed, early stop when sufficient.
-
-Proposed implementation order (iteration-friendly)
-•  Step A: DocStructureMap + span coverage in retrieval; near-duplicate clustering + MMR selection.
-•  Step B: VOI frontier + scoring and a single extra refinement cycle (beam 2–3) under a simple time/LLM-call budget.
-•  Step C: Strengthen gatherers (negative evidence, uncertainty reason) and rubric (hard gate).
-•  Step D: Observability (stage logs, coverage meter, VoI decisions) + optional UI panel.
-•  Step E: Add a second refinement iteration (if needed) with tight budgets.
-•  Step F: Optional hybrid lexical fallback for poor embedding cases.
