@@ -379,6 +379,7 @@ export const useChat = ({
             }
 
             let decision = 'GENERAL_CONVERSATION';
+            let complexity: 'factoid' | 'overview' | 'synthesis' | 'comparison' | 'reasoning' | 'unknown' = 'unknown';
             
             const routerPrompt = `Router Agent: GENERAL_CONVERSATION or KNOWLEDGE_SEARCH. Query: "${query}"`;
             const routerResponse = await callGenerateContent(selectedModel, apiKey, [{ role: 'user', content: routerPrompt }]);
@@ -410,6 +411,7 @@ export const useChat = ({
                         }
                     });
                     decision = route.mode === 'CHAT' ? 'GENERAL_CONVERSATION' : 'KNOWLEDGE_SEARCH';
+                    complexity = route.complexity || 'unknown';
                     
                     if (route.mode.startsWith('DEEP_ANALYSIS') && appSettings.enableDeepAnalysisV1) {
                         const { runDeepAnalysis } = await import('../agents/deep_analysis');
@@ -425,7 +427,7 @@ export const useChat = ({
                                     payload: { 
                                         type: TaskType.Rerank, 
                                         query: rerankQuery, 
-                                        documents: [{ ...d, parentChunkIndex: (d as any).parentChunkIndex ?? -1 }]
+                                        documents: [{ ...d, parentChunkIndex: (d as SearchResult).parentChunkIndex ?? -1 }]
                                     } 
                                 }));
                                 const rerankPromise = new Promise<SearchResult[]>((resolve) => { if (rerankPromiseResolver) rerankPromiseResolver.current = { resolve, jobId: '', taskResults: [] }; });
@@ -468,12 +470,37 @@ export const useChat = ({
             const queryEmbedding = await queryEmbeddingPromise;
             
             if (!vectorStore?.current) throw new Error("Vector store not initialized.");
-            const searchResults = vectorStore.current.search(queryEmbedding, appSettings.numInitialCandidates);
             
+            // DIAGNOSTIC LOGGING & DYNAMIC WINDOW
+            const initialCandidates = vectorStore.current.search(queryEmbedding, appSettings.numInitialCandidates);
+            
+            let finalChunkCount = appSettings.numFinalContextChunks;
+            if (complexity === 'overview' || complexity === 'synthesis') {
+                finalChunkCount = Math.min(20, finalChunkCount * 2);
+            }
+
+            const searchResults = initialCandidates.slice(0, finalChunkCount);
+            
+            if (appSettings.isLoggingEnabled) {
+                const maxSim = searchResults.length > 0 ? searchResults[0].similarity : 0;
+                console.log(`[RAG DEBUG] Complexity: ${complexity}, Chunks Requested: ${finalChunkCount}, Chunks Found: ${searchResults.length}, Max Similarity: ${maxSim.toFixed(4)}`);
+            }
+
+            if (searchResults.length === 0 && files.length > 0) {
+                setChatHistory([...newHistoryWithUser, { 
+                    role: 'model', 
+                    content: `I couldn't find any relevant information in your documents for this query. The search threshold might be too restrictive, or the documents may not contain the answer.`,
+                    tokenUsage: perRequestTokenUsage, 
+                    elapsedTime: Date.now() - startTime 
+                }]);
+                setIsLoading(false);
+                return;
+            }
+
             const requiredDocIds = Array.from(new Set(searchResults.map(c => c.id)));
             await waitForSummaries(requiredDocIds);
 
-            const context = searchResults.slice(0, appSettings.numFinalContextChunks).map((r, i) => `[${i + 1}] File: ${files.find(f => f.id === r.id)?.name || r.id} (ID: ${r.id})\n\n${r.chunk}`).join('\n\n---\n\n');
+            const context = searchResults.map((r, i) => `[${i + 1}] File: ${files.find(f => f.id === r.id)?.name || r.id} (ID: ${r.id})\n\n${r.chunk}`).join('\n\n---\n\n');
             const messages: ChatMessage[] = [{ role: 'system', content: getSystemPrompt(requiredDocIds) }, ...history, { role: 'user', content: `CONTEXT:\n---\n${context}\n---\n\nUSER QUESTION: ${query}` }];
             
             const llmResponse = await callGenerateContent(selectedModel, apiKey, messages);
@@ -524,10 +551,10 @@ export const useChat = ({
         let nextDocNumber = 1;
 
         // Robust regex to handle variations: [Source: ID], [ID], 【Source: ID】, 【ID】, and unbracketed Source: ID
-        const citationRegex = /\[Source:\s*([^\]]+)\]|\[(\d+)\]|【Source:\s*([^】]+)】|【(\d+)】|\bSource:\s*([\w.\-]+\_\d+\_\d+)\b/gi;
+        const citationRegex = /\[Source:\s*([^\]]+)\]|\[(\d+)\]|【Source:\s*([^】]+)】|【(\d+)】|\bSource:\s*([\w.-]+_\d+_\d+)\b/gi;
         
         const finalHtml = (rawHtml as string).replace(citationRegex, (match, g1, g2, g3, g4, g5) => {
-            const inside = g1 || g2 || g3 || g4 || g5;
+            const inside = (g1 || g2 || g3 || g4 || g5) as string;
             if (!inside) return match;
 
             const tokens = inside.trim().split(',').map((t: string) => t.trim()).filter(Boolean);

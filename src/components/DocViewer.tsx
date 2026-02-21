@@ -1,4 +1,4 @@
-import React, { memo, useRef, useLayoutEffect, useState, useMemo, useEffect } from 'react';
+import React, { memo, useRef, useLayoutEffect, useState, useMemo, useEffect, useCallback } from 'react';
 import { VariableSizeList } from 'react-window';
 import { FileText, ZoomIn, ZoomOut, BrainCircuit, List, BookOpen, ChevronRight } from 'lucide-react';
 import { AppFile, SearchResult } from '../types';
@@ -84,7 +84,7 @@ const DocViewer = memo(function DocViewer({ coordinator, selectedFile, chunksToH
     return processed;
   }, [layout, chunksToHighlight]);
 
-  const scrollToChunk = (start: number) => {
+  const scrollToChunk = useCallback((start: number) => {
     if (!listRef.current || flatLines.length === 0) return;
     const targetIndex = flatLines.findIndex(item => item.type === 'line' && start >= item.startIndex && start < item.endIndex);
     if (targetIndex !== -1) {
@@ -92,13 +92,13 @@ const DocViewer = memo(function DocViewer({ coordinator, selectedFile, chunksToH
       setActiveFocusIndex(targetIndex);
       setTimeout(() => setActiveFocusIndex(null), 2000);
     }
-  };
+  }, [flatLines]);
 
   useEffect(() => {
     if (status === 'READY' && chunksToHighlight.length > 0 && flatLines.length > 0) {
       scrollToChunk(chunksToHighlight[0].start);
     }
-  }, [status, chunksToHighlight, flatLines.length]); // Scroll when status or highlights change
+  }, [status, chunksToHighlight, flatLines.length, scrollToChunk]); // Scroll when status or highlights change
 
   const getItemSize = (index: number) => {
     const item = flatLines[index];

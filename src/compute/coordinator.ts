@@ -325,11 +325,19 @@ export class ComputeCoordinator {
             if (fileResult) {
                 fileResult.parentChunks = [...(fileResult.parentChunks || []), ...completeResult.parentChunks];
                 fileResult.childChunks = [...(fileResult.childChunks || []), ...completeResult.childChunks];
-                // Embeddings should have been sent already or if worker embeds in CompleteStream, 
-                // we'd need them here. But our worker sends them in StreamChunk.
-                // Wait, if CompleteStream returns chunks, they might not have embeddings yet.
-                // Let's re-use the HierarchicalChunk logic to create embedding tasks if needed.
                 
+                // For streaming files, we must also trigger an Indexing task now that all chunks are available.
+                const indexTask: Omit<ComputeTask, 'jobId'> = {
+                    id: `${docId}-index-stream`,
+                    priority: TaskPriority.P1_Primary,
+                    payload: {
+                        type: TaskType.IndexDocument,
+                        docId: docId,
+                        parentChunks: fileResult.parentChunks,
+                    },
+                };
+                this.addTasksToJob(jobId, [indexTask]);
+
                 if (completeResult.childChunks.length > 0) {
                      if (this.isLoggingEnabled) console.log(`[${new Date().toISOString()}] [Coordinator] Stream completion returned ${completeResult.childChunks.length} additional child chunks. Creating embedding tasks.`);
                      const embedTasks: Omit<ComputeTask, 'jobId'>[] = completeResult.childChunks.map((child, i) => {

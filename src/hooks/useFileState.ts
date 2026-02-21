@@ -110,7 +110,7 @@ export const useFileState = ({
     } catch (e) {
         console.error(`[streamFileToCoordinator] Error streaming file ${appFile.id}:`, e);
     }
-  }, [coordinator, setJobTimers, setFiles]);
+  }, [coordinator, setJobTimers, setFiles, docFontSize, selectedModel, selectedProvider, apiKeys, appSettings]);
 
   const addFilesAndEmbed = useCallback(async (newFiles: AppFile[]) => {
     if (!coordinator?.current) return;

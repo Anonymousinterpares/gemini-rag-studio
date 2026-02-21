@@ -289,13 +289,26 @@ export const App: FC = () => {
             </div>
           )}
           <form className='chat-input-form' onSubmit={handleSubmit}>
-            <input type='text' className='chat-input' value={userInput} onChange={(e) => setUserInput(e.target.value)} disabled={isLoading || (files.length === 0 && !appSettings.isChatModeEnabled)} />
+            <input 
+                type='text' 
+                className='chat-input' 
+                value={userInput} 
+                onChange={(e) => setUserInput(e.target.value)} 
+                disabled={isLoading || (files.length === 0 && !appSettings.isChatModeEnabled) || activeJobCount > 0} 
+                placeholder={activeJobCount > 0 ? "Processing documents... please wait" : ""}
+            />
             {isLoading ? (
               <button type='button' className='button stop-button' onClick={stopGeneration}><Square size={16} /></button>
             ) : (
-              <button type='submit' className='button' disabled={!userInput.trim()}><Send size={16} /></button>
+              <button type='submit' className='button' disabled={!userInput.trim() || activeJobCount > 0}><Send size={16} /></button>
             )}
           </form>
+          {activeJobCount > 0 && (
+            <div className="processing-indicator">
+              <RefreshCw size={14} className="animate-spin" />
+              <span>Indexing in progress... Knowledge base may be incomplete.</span>
+            </div>
+          )}
           <div className="token-usage-display">
             Tokens: {tokenUsage.promptTokens + tokenUsage.completionTokens} 
             <span className="token-usage-split">

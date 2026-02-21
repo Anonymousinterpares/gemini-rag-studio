@@ -83,17 +83,19 @@ export const useCompute = (docFontSize: number) => {
 
                 if (fileResult.parentChunks && fileResult.childChunks) {
                     const { parentChunks, childChunks } = fileResult;
-                    // For streaming, these might have been added incrementally already, 
-                    // but for non-streaming (HierarchicalChunk task), they are added here.
-                    if (!fileResult.isStreaming) {
-                        vectorStore.current?.addParentChunks(docPath, parentChunks);
-                        for (let i = 0; i < childChunks.length; i++) {
-                            const child = childChunks[i];
-                            vectorStore.current?.addChildChunkEmbedding(docPath, finalEmbeddings[i], {
-                                ...child,
-                                parentChunkIndex: child.parentChunkIndex ?? -1,
-                            });
-                        }
+                    
+                    // For streaming files, we clear and re-add to ensure consistency and catch final chunks
+                    if (fileResult.isStreaming) {
+                        vectorStore.current?.removeDocument(docPath);
+                    }
+
+                    vectorStore.current?.addParentChunks(docPath, parentChunks);
+                    for (let i = 0; i < childChunks.length; i++) {
+                        const child = childChunks[i];
+                        vectorStore.current?.addChildChunkEmbedding(docPath, finalEmbeddings[i], {
+                            ...child,
+                            parentChunkIndex: child.parentChunkIndex ?? -1,
+                        });
                     }
                     setTotalEmbeddingsCount(vectorStore.current?.getEmbeddingCount() || 0);
                 } else {

@@ -11,6 +11,7 @@ export type RouteDecision = {
   mode: 'CHAT' | 'RAG' | 'DEEP_ANALYSIS_L1' | 'DEEP_ANALYSIS_L2' | 'DEEP_ANALYSIS_L3';
   reason: string;
   preResults?: SearchResult[];
+  complexity?: 'factoid' | 'overview' | 'synthesis' | 'comparison' | 'reasoning' | 'unknown';
 };
 
 export async function decideRouteV2(opts: {
@@ -38,7 +39,7 @@ export async function decideRouteV2(opts: {
 
   // No corpus -> Chat
   if (!filesLoaded || !vectorStore) {
-    return { mode: 'CHAT', reason: 'No local documents available.' };
+    return { mode: 'CHAT', reason: 'No local documents available.', complexity: 'unknown' };
   }
 
   // Pre-retrieval: quick signal check
@@ -49,7 +50,7 @@ export async function decideRouteV2(opts: {
     preResults = vectorStore.search(emb, k);
   } catch {
     // Fallback to RAG if embed fails
-    return { mode: 'RAG', reason: 'Pre-retrieval failed; falling back to RAG.' };
+    return { mode: 'RAG', reason: 'Pre-retrieval failed; falling back to RAG.', complexity: 'unknown' };
   }
 
   const maxSim = preResults.reduce((m, r) => Math.max(m, r.similarity), 0);
@@ -86,23 +87,23 @@ Return only one word.` },
 
   if (!goodEvidence) {
     // Lack of evidence; still allow user to proceed with RAG if they want
-    return { mode: 'CHAT', reason: 'Evidence below threshold in pre-retrieval; defaulting to Chat.' };
+    return { mode: 'CHAT', reason: 'Evidence below threshold in pre-retrieval; defaulting to Chat.', complexity };
   }
 
   // Decide depth by complexity; do not rely on keywords
   if (complexity === 'factoid') {
-    return { mode: 'RAG', reason: 'Factoid task with evidence present.', preResults };
+    return { mode: 'RAG', reason: 'Factoid task with evidence present.', preResults, complexity };
   }
   if (complexity === 'overview') {
-    return { mode: 'RAG', reason: 'Overview task; RAG is sufficient.', preResults };
+    return { mode: 'RAG', reason: 'Overview task; RAG is sufficient.', preResults, complexity };
   }
   if (complexity === 'comparison' || complexity === 'reasoning') {
-    return { mode: 'DEEP_ANALYSIS_L2', reason: 'Reasoning/comparison; sectioned analysis needed.', preResults };
+    return { mode: 'DEEP_ANALYSIS_L2', reason: 'Reasoning/comparison; sectioned analysis needed.', preResults, complexity };
   }
   if (complexity === 'synthesis') {
-    return { mode: 'DEEP_ANALYSIS_L2', reason: 'Synthesis task; sectioned deep analysis selected.', preResults };
+    return { mode: 'DEEP_ANALYSIS_L2', reason: 'Synthesis task; sectioned deep analysis selected.', preResults, complexity };
   }
   // default (including 'unknown')
-  return { mode: 'RAG', reason: 'Complexity unknown or low-confidence; defaulting to RAG.', preResults };
+  return { mode: 'RAG', reason: 'Complexity unknown or low-confidence; defaulting to RAG.', preResults, complexity };
 }
 

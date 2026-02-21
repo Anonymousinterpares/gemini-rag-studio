@@ -185,6 +185,28 @@ button:focus-visible {
 .message-content .message-markup ul { margin: 0.25em 0 0.75em 1.25em; }
 .message-content .message-markup li { margin-bottom: 0.35em; }
 
+.processing-indicator {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  background-color: rgba(255, 230, 109, 0.1);
+  border: 1px solid rgba(255, 230, 109, 0.3);
+  border-radius: 4px;
+  margin-top: 0.5rem;
+  font-size: 0.85rem;
+  color: var(--warning-orange);
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
 /* --- Main Layout --- */
 .app-container {
   display: flex;

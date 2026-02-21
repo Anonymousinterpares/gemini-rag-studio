@@ -159,9 +159,8 @@ export async function generateContent(
         const gemini = ai.getGenerativeModel({
             model: model.id,
             ...(systemPrompt && { systemInstruction: { role: 'system', parts: [{ text: systemPrompt }] } }),
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            tools: geminiTools as any 
-        }, { signal } as any);
+            tools: geminiTools
+        }, { signal } as import('@google/generative-ai').RequestOptions);
         
         const googleHistory: Content[] = history.map(m => {
             if (m.role === 'tool') {
@@ -176,7 +175,7 @@ export async function generateContent(
                 };
             }
             
-            const parts: { text?: string; functionCall?: { name: string; args: Record<string, unknown> } }[] = [];
+            const parts: Content['parts'] = [];
             if (m.content) parts.push({ text: m.content });
             if (m.tool_calls) {
                 m.tool_calls.forEach(tc => {
@@ -191,8 +190,7 @@ export async function generateContent(
 
             return {
                 role: m.role === 'model' ? 'model' as const : 'user' as const,
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                parts: parts as any[] 
+                parts: parts
             };
         });
 
