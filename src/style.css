@@ -45,6 +45,7 @@ a {
   color: #646cff;
   text-decoration: inherit;
 }
+
 a:hover {
   color: #535bf2;
 }
@@ -71,26 +72,16 @@ button {
   cursor: pointer;
   transition: border-color 0.25s;
 }
+
 button:hover {
   border-color: #646cff;
 }
+
 button:focus,
 button:focus-visible {
   outline: 4px auto -webkit-focus-ring-color;
 }
 
-@media (prefers-color-scheme: light) {
-  :root {
-    color: #213547;
-    background-color: #ffffff;
-  }
-  a:hover {
-    color: #747bff;
-  }
-  button {
-    background-color: #f9f9f9;
-  }
-}
 
 /* Compact citation bubbles */
 .source-link.citation-bubble {
@@ -109,9 +100,19 @@ button:focus-visible {
   cursor: pointer;
   margin: 0 0.2em;
 }
-.source-link.citation-bubble:hover { background: #2c5282; }
-.source-link.citation-bubble .bubble-number { font-weight: 700; }
-.source-link.citation-bubble .frag-letter { margin-left: 0.15em; opacity: 0.85; }
+
+.source-link.citation-bubble:hover {
+  background: #2c5282;
+}
+
+.source-link.citation-bubble .bubble-number {
+  font-weight: 700;
+}
+
+.source-link.citation-bubble .frag-letter {
+  margin-left: 0.15em;
+  opacity: 0.85;
+}
 
 /* Jump-to badge */
 .jump-to-badge {
@@ -127,7 +128,10 @@ button:focus-visible {
   margin-left: 0.2em;
   cursor: pointer;
 }
-.jump-to-badge:hover { background: #4a4a4a; }
+
+.jump-to-badge:hover {
+  background: #4a4a4a;
+}
 
 /* Citation group wrapper */
 .citation-group {
@@ -137,6 +141,7 @@ button:focus-visible {
   align-items: baseline;
   position: relative;
 }
+
 .citation-group .citation-overflow-toggle {
   background: #2b6cb0;
   color: #fff;
@@ -147,6 +152,7 @@ button:focus-visible {
   font-size: 0.8em;
   cursor: pointer;
 }
+
 .citation-group .citation-overflow-popover {
   display: none;
   position: absolute;
@@ -157,18 +163,26 @@ button:focus-visible {
   border: 1px solid var(--border-color);
   border-radius: 6px;
   padding: 0.4rem;
-  box-shadow: 0 4px 14px rgba(0,0,0,0.4);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
   max-width: 60vw;
   max-height: 40vh;
   overflow: auto;
 }
+
 .citation-group[data-open="true"] .citation-overflow-popover {
   display: block;
 }
+
 /* Hover-only jump-to badge */
-.jump-to-badge { opacity: 0; transition: opacity 0.15s ease-in-out; }
-.citation-bubble:hover + .jump-to-badge,
-.citation-group:hover .jump-to-badge { opacity: 1; }
+.jump-to-badge {
+  opacity: 0;
+  transition: opacity 0.15s ease-in-out;
+}
+
+.citation-bubble:hover+.jump-to-badge,
+.citation-group:hover .jump-to-badge {
+  opacity: 1;
+}
 
 /* Message markup container (for large markdown bodies) */
 .message-content .message-markup {
@@ -176,14 +190,24 @@ button:focus-visible {
   white-space: normal;
   line-height: 1.5;
 }
+
 .message-content .message-markup h1,
 .message-content .message-markup h2,
 .message-content .message-markup h3 {
   margin: 0.6em 0 0.3em;
 }
-.message-content .message-markup p { margin: 0.4em 0; }
-.message-content .message-markup ul { margin: 0.25em 0 0.75em 1.25em; }
-.message-content .message-markup li { margin-bottom: 0.35em; }
+
+.message-content .message-markup p {
+  margin: 0.4em 0;
+}
+
+.message-content .message-markup ul {
+  margin: 0.25em 0 0.75em 1.25em;
+}
+
+.message-content .message-markup li {
+  margin-bottom: 0.35em;
+}
 
 .processing-indicator {
   display: flex;
@@ -203,8 +227,13 @@ button:focus-visible {
 }
 
 @keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* --- Main Layout --- */
@@ -226,11 +255,16 @@ button:focus-visible {
   width: 35%;
   min-width: 350px;
   max-width: 500px;
-  flex-shrink: 0; /* Prevent shrinking */
-  position: relative; /* Allow absolute positioning of speech bubble */
-  height: 100vh; /* Ensure it takes full viewport height */
-  display: flex; /* Already flex, but explicitly state */
-  flex-direction: column; /* Already column, but explicitly state */
+  flex-shrink: 0;
+  /* Prevent shrinking */
+  position: relative;
+  /* Allow absolute positioning of speech bubble */
+  height: 100vh;
+  /* Ensure it takes full viewport height */
+  display: flex;
+  /* Already flex, but explicitly state */
+  flex-direction: column;
+  /* Already column, but explicitly state */
 }
 
 .chat-panel {
@@ -255,12 +289,14 @@ button:focus-visible {
   padding: 0.5rem;
   border-bottom: 1px solid var(--border-color);
   background-color: rgba(0, 0, 0, 0.1);
-  margin-bottom: 0; /* No margin, settings panel will handle spacing */
+  margin-bottom: 0;
+  /* No margin, settings panel will handle spacing */
 }
 
 .file-panel-header button {
   flex: 1;
-  min-width: 0; /* Allows flex items to shrink below content size */
+  min-width: 0;
+  /* Allows flex items to shrink below content size */
 }
 
 /* Add some spacing between major sections */
@@ -301,6 +337,7 @@ button:focus-visible {
   max-height: 100%;
   object-fit: contain;
 }
+
 .drop-media-element {
   position: absolute;
   top: 50%;
@@ -312,7 +349,8 @@ button:focus-visible {
 }
 
 .drop-video {
-  background-color: var(--panel-bg-color); /* Cover the background image */
+  background-color: var(--panel-bg-color);
+  /* Cover the background image */
 }
 
 .view-switcher {
@@ -330,8 +368,10 @@ button:focus-visible {
 }
 
 .file-panel.settings-hidden .file-list-container {
-  max-height: 50vh; /* Max 50% of viewport height when settings are hidden */
-  flex-grow: 0; /* Prevent it from growing beyond max-height */
+  max-height: 50vh;
+  /* Max 50% of viewport height when settings are hidden */
+  flex-grow: 0;
+  /* Prevent it from growing beyond max-height */
 }
 
 .file-list-container ul {
@@ -341,7 +381,7 @@ button:focus-visible {
 }
 
 .file-list-container li div,
-.file-list-container li > span {
+.file-list-container li>span {
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -353,7 +393,7 @@ button:focus-visible {
   text-overflow: ellipsis;
 }
 
-.file-list-container li .folder-item > div {
+.file-list-container li .folder-item>div {
   font-weight: bold;
 }
 
@@ -456,11 +496,11 @@ button:focus-visible {
 }
 
 .token-usage-display-message {
-    display: flex;
-    gap: 0.5rem;
-    background-color: var(--secondary-color);
-    padding: 0.1rem 0.4rem;
-    border-radius: 4px;
+  display: flex;
+  gap: 0.5rem;
+  background-color: var(--secondary-color);
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
 }
 
 .chat-message {
@@ -499,6 +539,7 @@ button:focus-visible {
 .message-content p:first-child {
   margin-top: 0;
 }
+
 .message-content p:last-child {
   margin-bottom: 0;
 }
@@ -670,7 +711,8 @@ button:focus-visible {
 
 .doc-viewer-container {
   display: flex;
-  height: calc(100% - 40px); /* Adjust based on header height */
+  height: calc(100% - 40px);
+  /* Adjust based on header height */
   width: 100%;
   overflow: hidden;
   background-color: var(--panel-bg-color);
@@ -730,8 +772,13 @@ button:focus-visible {
 }
 
 @keyframes focus-flash {
-  0% { background-color: rgba(100, 108, 255, 0.5); }
-  100% { background-color: rgba(100, 108, 255, 0.2); }
+  0% {
+    background-color: rgba(100, 108, 255, 0.5);
+  }
+
+  100% {
+    background-color: rgba(100, 108, 255, 0.2);
+  }
 }
 
 .doc-gutter {
@@ -834,6 +881,7 @@ button:focus-visible {
   color: var(--text-color-secondary);
   display: -webkit-box;
   -webkit-line-clamp: 2;
+  line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
   line-height: 1.4;
@@ -884,12 +932,17 @@ button:focus-visible {
   margin: 0 0.5rem;
   border-top: 1px solid var(--border-color);
   border-bottom: 1px solid var(--border-color);
-  overflow-y: auto; /* Allow vertical scrolling */
-  overflow-x: hidden; /* Hide horizontal overflow */
-  transition: max-height 0.3s ease-out, opacity 0.3s ease-out, padding 0.3s ease-out, margin 0.3s ease-out, border 0.3s ease-out; /* Smooth transition for height and opacity */
-  max-height: 500px; /* Arbitrary max-height for animation */
+  overflow-y: auto;
+  /* Allow vertical scrolling */
+  overflow-x: hidden;
+  /* Hide horizontal overflow */
+  transition: max-height 0.3s ease-out, opacity 0.3s ease-out, padding 0.3s ease-out, margin 0.3s ease-out, border 0.3s ease-out;
+  /* Smooth transition for height and opacity */
+  max-height: 500px;
+  /* Arbitrary max-height for animation */
   opacity: 1;
-  flex-shrink: 0; /* Prevent settings panel from shrinking */
+  flex-shrink: 0;
+  /* Prevent settings panel from shrinking */
 }
 
 .settings-panel.hidden {
@@ -931,7 +984,8 @@ button:focus-visible {
   padding: 0.4em 0.6em;
   color: var(--text-color);
   font-size: 0.9em;
-  min-width: 0; /* Prevents flex/grid items from overflowing */
+  min-width: 0;
+  /* Prevents flex/grid items from overflowing */
 }
 
 /* --- General & Utility --- */
@@ -958,9 +1012,11 @@ button:focus-visible {
   cursor: pointer;
   transition: background-color 0.25s;
 }
+
 .button:hover {
   background-color: var(--primary-color-hover);
 }
+
 .button:disabled {
   background-color: var(--disabled-color);
   cursor: not-allowed;
@@ -969,6 +1025,7 @@ button:focus-visible {
 .button.stop-button {
   background-color: #dc3545;
 }
+
 .button.stop-button:hover {
   background-color: #bd2130;
 }
@@ -976,12 +1033,18 @@ button:focus-visible {
 .button.secondary {
   background-color: var(--secondary-color);
 }
+
 .button.secondary:hover {
   background-color: var(--secondary-color-hover);
 }
 
-.flex { display: flex; }
-.gap-2 { gap: 0.5rem; }
+.flex {
+  display: flex;
+}
+
+.gap-2 {
+  gap: 0.5rem;
+}
 
 .source-link {
   background-color: var(--source-link-bg);
@@ -992,6 +1055,7 @@ button:focus-visible {
   cursor: pointer;
   font-size: 0.85em;
 }
+
 .source-link:hover {
   background-color: var(--hover-bg-color);
 }
@@ -1001,7 +1065,8 @@ button:focus-visible {
   border-radius: 4px;
   margin: 2px 0;
   height: 100%;
-  width: calc(100% - 1rem); /* Leave some padding */
+  width: calc(100% - 1rem);
+  /* Leave some padding */
   margin-left: 0.5rem;
   opacity: 0.5;
 }
@@ -1055,29 +1120,34 @@ button:focus-visible {
 }
 
 .summary-status.available {
-  color: #28a745; /* Green */
+  color: #28a745;
+  /* Green */
 }
+
 .summary-status.in-progress {
-  color: #ffc107; /* Yellow */
+  color: #ffc107;
+  /* Yellow */
 }
+
 .summary-status.missing {
-  color: #dc3545; /* Red */
+  color: #dc3545;
+  /* Red */
 }
 
 .file-item-details {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: auto;
 }
 
 .language-indicator {
-    font-size: 0.75em;
-    background-color: var(--secondary-color);
-    color: var(--text-color);
-    padding: 0.1em 0.4em;
-    border-radius: 3px;
-    text-transform: uppercase;
+  font-size: 0.75em;
+  background-color: var(--secondary-color);
+  color: var(--text-color);
+  padding: 0.1em 0.4em;
+  border-radius: 3px;
+  text-transform: uppercase;
 }
 
 /* --- Custom File Explorer --- */
@@ -1089,7 +1159,8 @@ button:focus-visible {
   height: 100vh;
   background-color: rgba(0, 0, 0, 0.7);
   display: flex;
-  justify-content: flex-end; /* Align to the right */
+  justify-content: flex-end;
+  /* Align to the right */
   align-items: center;
   z-index: 1000;
 }
@@ -1098,11 +1169,14 @@ button:focus-visible {
   background-color: var(--panel-bg-color);
   border-radius: 8px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-  width: 800px; /* Specified width */
-  height: 500px; /* Specified height */
+  width: 800px;
+  /* Specified width */
+  height: 500px;
+  /* Specified height */
   display: flex;
   flex-direction: column;
-  margin-right: 1rem; /* Align with the right border of the left panel (adjust as needed) */
+  margin-right: 1rem;
+  /* Align with the right border of the left panel (adjust as needed) */
   overflow: hidden;
 }
 
@@ -1175,7 +1249,8 @@ button:focus-visible {
 .file-list {
   flex-grow: 1;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); /* Responsive grid */
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  /* Responsive grid */
   gap: 1rem;
   padding: 0.5rem;
   overflow-y: auto;
@@ -1191,7 +1266,8 @@ button:focus-visible {
   cursor: pointer;
   transition: background-color 0.2s;
   text-align: center;
-  word-break: break-all; /* Break long words */
+  word-break: break-all;
+  /* Break long words */
 }
 
 .file-item:hover {
@@ -1212,7 +1288,8 @@ button:focus-visible {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  width: 100%; /* Ensure text takes full width for ellipsis */
+  width: 100%;
+  /* Ensure text takes full width for ellipsis */
 }
 
 .custom-file-explorer-modal .modal-footer {
@@ -1232,7 +1309,8 @@ button:focus-visible {
 /* --- Speech Bubbles --- */
 .speech-bubble {
   position: absolute;
-  top: -80px; /* Position above drop zone */
+  top: -80px;
+  /* Position above drop zone */
   left: 50%;
   transform: translateX(-50%) scale(1);
   background: linear-gradient(45deg, var(--monster-primary), var(--monster-secondary));
@@ -1245,7 +1323,8 @@ button:focus-visible {
   max-width: calc(100% - 2rem);
   transition: opacity 0.3s ease, background-color 0.3s ease, transform 0.2s ease;
   cursor: default;
-  pointer-events: none; /* Always allow click-through */
+  pointer-events: none;
+  /* Always allow click-through */
 }
 
 /* Make speech bubble transparent when hovered (handled via JS for stability) */
@@ -1274,15 +1353,25 @@ button:focus-visible {
 }
 
 @keyframes bubble-bounce {
-  0% { transform: translateX(-50%) scale(0) rotate(45deg); opacity: 0; }
-  50% { transform: translateX(-50%) scale(1.1) rotate(0deg); }
-  100% { transform: translateX(-50%) scale(1) rotate(0deg); opacity: 1; }
+  0% {
+    transform: translateX(-50%) scale(0) rotate(45deg);
+    opacity: 0;
+  }
+
+  50% {
+    transform: translateX(-50%) scale(1.1) rotate(0deg);
+  }
+
+  100% {
+    transform: translateX(-50%) scale(1) rotate(0deg);
+    opacity: 1;
+  }
 }
 
 .speech-text {
   font-weight: 600;
   color: white;
-  text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+  text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5);
   font-size: 0.9rem;
   display: flex;
   align-items: center;
@@ -1309,16 +1398,47 @@ button:focus-visible {
 }
 
 @keyframes rejection-shake {
-  0%, 100% { transform: translateX(-50%) scale(1) rotate(0deg); }
-  10% { transform: translateX(-50%) scale(1.05) rotate(-2deg); }
-  20% { transform: translateX(-50%) scale(1.05) rotate(2deg); }
-  30% { transform: translateX(-50%) scale(1.05) rotate(-2deg); }
-  40% { transform: translateX(-50%) scale(1.05) rotate(2deg); }
-  50% { transform: translateX(-50%) scale(1.05) rotate(-1deg); }
-  60% { transform: translateX(-50%) scale(1.05) rotate(1deg); }
-  70% { transform: translateX(-50%) scale(1.02) rotate(-0.5deg); }
-  80% { transform: translateX(-50%) scale(1.02) rotate(0.5deg); }
-  90% { transform: translateX(-50%) scale(1.01) rotate(0deg); }
+
+  0%,
+  100% {
+    transform: translateX(-50%) scale(1) rotate(0deg);
+  }
+
+  10% {
+    transform: translateX(-50%) scale(1.05) rotate(-2deg);
+  }
+
+  20% {
+    transform: translateX(-50%) scale(1.05) rotate(2deg);
+  }
+
+  30% {
+    transform: translateX(-50%) scale(1.05) rotate(-2deg);
+  }
+
+  40% {
+    transform: translateX(-50%) scale(1.05) rotate(2deg);
+  }
+
+  50% {
+    transform: translateX(-50%) scale(1.05) rotate(-1deg);
+  }
+
+  60% {
+    transform: translateX(-50%) scale(1.05) rotate(1deg);
+  }
+
+  70% {
+    transform: translateX(-50%) scale(1.02) rotate(-0.5deg);
+  }
+
+  80% {
+    transform: translateX(-50%) scale(1.02) rotate(0.5deg);
+  }
+
+  90% {
+    transform: translateX(-50%) scale(1.01) rotate(0deg);
+  }
 }
 
 /* --- Floating Arrows --- */
@@ -1337,38 +1457,45 @@ button:focus-visible {
   font-size: 2rem;
   animation: gentle-bounce 2s ease-in-out infinite;
   opacity: 0.9;
-  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.8)) drop-shadow(0 0 8px rgba(255,255,255,0.6));
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.8)) drop-shadow(0 0 8px rgba(255, 255, 255, 0.6));
   color: #FFE66D;
-  text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
 }
 
-.arrow-1 { 
-  top: 15%; 
-  left: 8%; 
-  animation-delay: 0s; 
+.arrow-1 {
+  top: 15%;
+  left: 8%;
+  animation-delay: 0s;
 }
 
-.arrow-2 { 
-  top: 25%; 
-  right: 8%; 
-  animation-delay: 0.5s; 
+.arrow-2 {
+  top: 25%;
+  right: 8%;
+  animation-delay: 0.5s;
 }
 
-.arrow-3 { 
-  bottom: 15%; 
-  left: 50%; 
+.arrow-3 {
+  bottom: 15%;
+  left: 50%;
   transform: translateX(-50%);
-  animation-delay: 1s; 
+  animation-delay: 1s;
 }
 
 @keyframes gentle-bounce {
-  0%, 100% { transform: translateY(0px); }
-  50% { transform: translateY(-10px); }
+
+  0%,
+  100% {
+    transform: translateY(0px);
+  }
+
+  50% {
+    transform: translateY(-10px);
+  }
 }
 
 /* --- Glow Effects --- */
 .drag-drop-area.glow-default {
-  box-shadow: 
+  box-shadow:
     0 0 20px rgba(255, 107, 53, 0.4),
     0 0 40px rgba(255, 107, 53, 0.2),
     inset 0 0 20px rgba(255, 107, 53, 0.1);
@@ -1377,7 +1504,7 @@ button:focus-visible {
 }
 
 .drag-drop-area.glow-blue {
-  box-shadow: 
+  box-shadow:
     0 0 20px rgba(0, 102, 204, 0.6),
     0 0 40px rgba(0, 102, 204, 0.4),
     inset 0 0 20px rgba(0, 102, 204, 0.2);
@@ -1386,7 +1513,7 @@ button:focus-visible {
 }
 
 .drag-drop-area.glow-yellow {
-  box-shadow: 
+  box-shadow:
     0 0 20px rgba(255, 230, 109, 0.4),
     0 0 40px rgba(255, 230, 109, 0.2),
     inset 0 0 20px rgba(255, 230, 109, 0.1);
@@ -1395,7 +1522,7 @@ button:focus-visible {
 }
 
 .drag-drop-area.glow-green {
-  box-shadow: 
+  box-shadow:
     0 0 20px rgba(39, 174, 96, 0.6),
     0 0 40px rgba(39, 174, 96, 0.4),
     inset 0 0 20px rgba(39, 174, 96, 0.2);
@@ -1404,7 +1531,7 @@ button:focus-visible {
 }
 
 .drag-drop-area.glow-red {
-  box-shadow: 
+  box-shadow:
     0 0 20px rgba(255, 107, 107, 0.4),
     0 0 40px rgba(255, 107, 107, 0.2),
     inset 0 0 20px rgba(255, 107, 107, 0.1);
@@ -1413,65 +1540,80 @@ button:focus-visible {
 }
 
 @keyframes glow-pulse-orange {
-  0%, 100% { 
-    box-shadow: 
+
+  0%,
+  100% {
+    box-shadow:
       0 0 20px rgba(255, 107, 53, 0.4),
       0 0 40px rgba(255, 107, 53, 0.2);
   }
-  50% { 
-    box-shadow: 
+
+  50% {
+    box-shadow:
       0 0 30px rgba(255, 107, 53, 0.7),
       0 0 60px rgba(255, 107, 53, 0.4);
   }
 }
 
 @keyframes glow-pulse-blue {
-  0%, 100% { 
-    box-shadow: 
+
+  0%,
+  100% {
+    box-shadow:
       0 0 20px rgba(0, 102, 204, 0.6),
       0 0 40px rgba(0, 102, 204, 0.4);
   }
-  50% { 
-    box-shadow: 
+
+  50% {
+    box-shadow:
       0 0 30px rgba(0, 102, 204, 0.9),
       0 0 60px rgba(0, 102, 204, 0.7);
   }
 }
 
 @keyframes glow-pulse-yellow {
-  0%, 100% { 
-    box-shadow: 
+
+  0%,
+  100% {
+    box-shadow:
       0 0 20px rgba(255, 230, 109, 0.4),
       0 0 40px rgba(255, 230, 109, 0.2);
   }
-  50% { 
-    box-shadow: 
+
+  50% {
+    box-shadow:
       0 0 30px rgba(255, 230, 109, 0.7),
       0 0 60px rgba(255, 230, 109, 0.4);
   }
 }
 
 @keyframes glow-pulse-green {
-  0%, 100% { 
-    box-shadow: 
+
+  0%,
+  100% {
+    box-shadow:
       0 0 20px rgba(39, 174, 96, 0.6),
       0 0 40px rgba(39, 174, 96, 0.4);
   }
-  50% { 
-    box-shadow: 
+
+  50% {
+    box-shadow:
       0 0 30px rgba(39, 174, 96, 0.9),
       0 0 60px rgba(39, 174, 96, 0.7);
   }
 }
 
 @keyframes glow-pulse-red {
-  0%, 100% { 
-    box-shadow: 
+
+  0%,
+  100% {
+    box-shadow:
       0 0 20px rgba(255, 107, 107, 0.4),
       0 0 40px rgba(255, 107, 107, 0.2);
   }
-  50% { 
-    box-shadow: 
+
+  50% {
+    box-shadow:
       0 0 30px rgba(255, 107, 107, 0.7),
       0 0 60px rgba(255, 107, 107, 0.4);
   }
@@ -1499,20 +1641,22 @@ button:focus-visible {
 }
 
 @keyframes digest-fall {
-  0% { 
-    top: 10%; 
-    opacity: 1; 
-    transform: scale(1) rotate(0deg); 
+  0% {
+    top: 10%;
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
   }
-  50% { 
-    top: 50%; 
-    opacity: 0.8; 
-    transform: scale(0.8) rotate(180deg); 
+
+  50% {
+    top: 50%;
+    opacity: 0.8;
+    transform: scale(0.8) rotate(180deg);
   }
-  100% { 
-    top: 90%; 
-    opacity: 0; 
-    transform: scale(0.3) rotate(360deg); 
+
+  100% {
+    top: 90%;
+    opacity: 0;
+    transform: scale(0.3) rotate(360deg);
   }
 }
 
@@ -1554,13 +1698,29 @@ button:focus-visible {
   animation: typing-bounce 1.4s ease-in-out infinite;
 }
 
-.typing-dot:nth-child(1) { animation-delay: 0s; }
-.typing-dot:nth-child(2) { animation-delay: 0.2s; }
-.typing-dot:nth-child(3) { animation-delay: 0.4s; }
+.typing-dot:nth-child(1) {
+  animation-delay: 0s;
+}
+
+.typing-dot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.typing-dot:nth-child(3) {
+  animation-delay: 0.4s;
+}
 
 @keyframes typing-bounce {
-  0%, 60%, 100% { transform: translateY(0); }
-  30% { transform: translateY(-6px); }
+
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+  }
+
+  30% {
+    transform: translateY(-6px);
+  }
 }
 
 /* --- Message Slide-in Animation --- */
@@ -1573,6 +1733,7 @@ button:focus-visible {
     opacity: 0;
     transform: translateY(20px) scale(0.95);
   }
+
   100% {
     opacity: 1;
     transform: translateY(0) scale(1);
