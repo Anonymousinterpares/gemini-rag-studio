@@ -56,7 +56,7 @@ export const App: FC = () => {
     handleUpdateMessage, handleTruncateHistory,
     initialChatHistory
   } = useChat({
-    coordinator, vectorStore, queryEmbeddingResolver, rerankPromiseResolver, setRerankProgress: () => {}, setActiveSource, setIsModalOpen
+    coordinator, vectorStore, queryEmbeddingResolver, rerankPromiseResolver, setRerankProgress: () => { }, setActiveSource, setIsModalOpen
   });
 
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
@@ -210,7 +210,7 @@ export const App: FC = () => {
           <button className='button secondary' onClick={() => setShowSettings(p => !p)}>Settings</button>
         </div>
         <Settings className={showSettings ? '' : 'hidden'} />
-        <div className={`drag-drop-area glow-${glowType} ${isDragging ? 'dragging' : ''}`} onDrop={handleDropValidate} onDragOver={(e) => e.preventDefault()} onDragLeave={() => {}}>
+        <div className={`drag-drop-area glow-${glowType} ${isDragging ? 'dragging' : ''}`} onDrop={handleDropValidate} onDragOver={(e) => e.preventDefault()} onDragLeave={() => { }}>
           <SpeechBubble filesCount={files.length} isProcessing={activeJobCount > 0 || isLoading} isEmbedding={isEmbedding} />
           <RejectionBubble show={showRejectionBubble} />
           <FloatingArrows show={files.length === 0 && activeJobCount === 0 && !isLoading} />
@@ -232,13 +232,14 @@ export const App: FC = () => {
         </div>
       </div>
       <div className='panel chat-panel'>
-        <div className='chat-panel-header'><div className='background-changer'><button className='background-btn' onClick={() => setAppSettings(p => ({...p, backgroundIndex: p.backgroundIndex === 0 ? backgroundImages.length : p.backgroundIndex - 1}))}><ChevronLeft size={16} /></button><button className='background-btn' onClick={() => setAppSettings(p => ({...p, backgroundIndex: (p.backgroundIndex + 1) % (backgroundImages.length + 1)}))}><ChevronRight size={16} /></button></div></div>
+        <div className='chat-panel-header'><div className='background-changer'><button className='background-btn' onClick={() => setAppSettings(p => ({ ...p, backgroundIndex: p.backgroundIndex === 0 ? backgroundImages.length : p.backgroundIndex - 1 }))}><ChevronLeft size={16} /></button><button className='background-btn' onClick={() => setAppSettings(p => ({ ...p, backgroundIndex: (p.backgroundIndex + 1) % (backgroundImages.length + 1) }))}><ChevronRight size={16} /></button></div></div>
         <div className='panel-content' ref={chatHistoryRef} onClick={handleSourceClick} style={{ backgroundImage: backgroundImages[appSettings.backgroundIndex - 1] ? `url('${backgroundImages[appSettings.backgroundIndex - 1]}')` : 'none', backgroundSize: 'cover' }}>
           <div className='chat-history'>
             {chatHistory.map((msg, i) => ({ msg, i })).filter(({ msg }) => {
               // Hide intermediate tool calls and tool results from the UI
               if (msg.role === 'tool') return false;
               if (msg.role === 'model' && msg.tool_calls && msg.tool_calls.length > 0) return false;
+              if (msg.isInternal) return false;
               return true;
             }).map(({ msg, i }) => (
               <div key={i} className={`message-container ${msg.role}`}>
@@ -289,13 +290,13 @@ export const App: FC = () => {
             </div>
           )}
           <form className='chat-input-form' onSubmit={handleSubmit}>
-            <input 
-                type='text' 
-                className='chat-input' 
-                value={userInput} 
-                onChange={(e) => setUserInput(e.target.value)} 
-                disabled={isLoading || (files.length === 0 && !appSettings.isChatModeEnabled) || activeJobCount > 0} 
-                placeholder={activeJobCount > 0 ? "Processing documents... please wait" : ""}
+            <input
+              type='text'
+              className='chat-input'
+              value={userInput}
+              onChange={(e) => setUserInput(e.target.value)}
+              disabled={isLoading || (files.length === 0 && !appSettings.isChatModeEnabled) || activeJobCount > 0}
+              placeholder={activeJobCount > 0 ? "Processing documents... please wait" : ""}
             />
             {isLoading ? (
               <button type='button' className='button stop-button' onClick={stopGeneration}><Square size={16} /></button>
@@ -310,7 +311,7 @@ export const App: FC = () => {
             </div>
           )}
           <div className="token-usage-display">
-            Tokens: {tokenUsage.promptTokens + tokenUsage.completionTokens} 
+            Tokens: {tokenUsage.promptTokens + tokenUsage.completionTokens}
             <span className="token-usage-split">
               (In: {tokenUsage.promptTokens}, Out: {tokenUsage.completionTokens})
             </span>
@@ -319,12 +320,12 @@ export const App: FC = () => {
         </div>
       </div>
       <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)}>
-        <MemoizedDocViewer 
-          coordinator={coordinator.current} 
-          selectedFile={activeSource?.file ?? selectedFile} 
-          chunksToHighlight={activeSource?.chunks ?? []} 
-          docFontSize={docFontSize} 
-          setDocFontSize={setDocFontSize} 
+        <MemoizedDocViewer
+          coordinator={coordinator.current}
+          selectedFile={activeSource?.file ?? selectedFile}
+          chunksToHighlight={activeSource?.chunks ?? []}
+          docFontSize={docFontSize}
+          setDocFontSize={setDocFontSize}
         />
       </Modal>
       <EmbeddingCacheModal isOpen={isCacheModalOpen} onClose={() => setIsCacheModalOpen(false)} />

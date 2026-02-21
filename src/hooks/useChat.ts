@@ -10,21 +10,21 @@ import { useChatStore, useFileStore, useSettingsStore } from '../store';
 import { searchWeb } from '../utils/search';
 
 const SEARCH_TOOL: Tool = {
-  type: 'function',
-  function: {
-    name: 'search_web',
-    description: 'Search the internet for current information, news, or specific data not present in your training knowledge.',
-    parameters: {
-      type: 'object',
-      properties: {
-        query: {
-          type: 'string',
-          description: 'The search query to perform.',
+    type: 'function',
+    function: {
+        name: 'search_web',
+        description: 'Search the internet for current information, news, or specific data not present in your training knowledge.',
+        parameters: {
+            type: 'object',
+            properties: {
+                query: {
+                    type: 'string',
+                    description: 'The search query to perform.',
+                },
+            },
+            required: ['query'],
         },
-      },
-      required: ['query'],
     },
-  },
 };
 
 const AGENT_SYSTEM_PROMPT_TEMPLATE = `You are a helpful and expert AI assistant. Your user is a software developer.
@@ -80,11 +80,11 @@ export const useChat = ({
     setActiveSource,
     setIsModalOpen,
 }: UseChatProps) => {
-    const { 
-        chatHistory, setChatHistory, 
-        userInput, setUserInput, 
-        pendingQuery, setPendingQuery, 
-        tokenUsage, setTokenUsage, 
+    const {
+        chatHistory, setChatHistory,
+        userInput, setUserInput,
+        pendingQuery, setPendingQuery,
+        tokenUsage, setTokenUsage,
         isLoading, setIsLoading,
         abortController, setAbortController,
         clearHistory, updateMessage, truncateHistory
@@ -151,11 +151,11 @@ export const useChat = ({
 
         const template = appSettings.isChatModeEnabled ? CHAT_MODE_PROMPT_TEMPLATE : AGENT_SYSTEM_PROMPT_TEMPLATE;
         const docOnly = (appSettings.docOnlyMode && !appSettings.isChatModeEnabled)
-          ? `\n\nDOC-ONLY MODE: You must answer strictly using the provided document contexts and conversation. Do not use external or general knowledge. If the documents do not contain the answer, reply exactly: "I could not find an answer in the provided documents."\n`
-          : '';
-        
+            ? `\n\nDOC-ONLY MODE: You must answer strictly using the provided document contexts and conversation. Do not use external or general knowledge. If the documents do not contain the answer, reply exactly: "I could not find an answer in the provided documents."\n`
+            : '';
+
         let finalPrompt = template.replace('{summaries_section}', summariesSection + docOnly);
-        
+
         if (appSettings.isChatModeEnabled) {
             const now = new Date();
             const dateStr = now.toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
@@ -165,7 +165,7 @@ export const useChat = ({
         } else {
             finalPrompt = finalPrompt.replace('{date_section}', '');
         }
-        
+
         return finalPrompt;
     }, [summaries, files, appSettings.docOnlyMode, appSettings.isChatModeEnabled]);
 
@@ -202,7 +202,7 @@ export const useChat = ({
         const startTime = Date.now();
         const perRequestTokenUsage: TokenUsage = { promptTokens: 0, completionTokens: 0 };
         const newHistoryWithUser: ChatMessage[] = [...history, { role: 'user', content: query }];
-        
+
         setChatHistory(newHistoryWithUser);
         setIsLoading(true);
 
@@ -214,11 +214,11 @@ export const useChat = ({
             const { promptTokens, completionTokens } = response.usage;
             perRequestTokenUsage.promptTokens += promptTokens;
             perRequestTokenUsage.completionTokens += completionTokens;
-            
+
             // Immediate, gradual update
-            setTokenUsage(prev => ({ 
-                promptTokens: prev.promptTokens + promptTokens, 
-                completionTokens: prev.completionTokens + completionTokens 
+            setTokenUsage(prev => ({
+                promptTokens: prev.promptTokens + promptTokens,
+                completionTokens: prev.completionTokens + completionTokens
             }));
 
             return response;
@@ -236,24 +236,26 @@ export const useChat = ({
 
                 while (loopCount < MAX_LOOPS) {
                     if (controller.signal.aborted) return;
-                    
+
                     // Inject warning when near the limit - add to currentHistory so it persists
                     if (loopCount === MAX_LOOPS - 2 && MAX_LOOPS > 2) {
                         currentHistory.push({
                             role: 'system',
-                            content: "ATTENTION: You have only 2 search calls remaining. Please make your final searches now if needed, then gather all information and provide your final answer to the user."
+                            content: "ATTENTION: You have only 2 search calls remaining. Please make your final searches now if needed, then gather all information and provide your final answer to the user.",
+                            isInternal: true
                         });
                     } else if (loopCount === MAX_LOOPS - 1) {
                         currentHistory.push({
                             role: 'system',
-                            content: "ATTENTION: This is your LAST search call. After this, you MUST provide your final answer based on all gathered information."
+                            content: "ATTENTION: This is your LAST search call. After this, you MUST provide your final answer based on all gathered information.",
+                            isInternal: true
                         });
                     }
 
                     const messagesToSend = [{ role: 'system' as const, content: getSystemPrompt() }, ...currentHistory];
 
                     const response = await callGenerateContent(selectedModel, apiKey, messagesToSend, tools);
-                    
+
                     let toolCalls = response.toolCalls || [];
                     let cleanResponseText = response.text || '';
 
@@ -262,7 +264,7 @@ export const useChat = ({
                         // ... Match Logic ...
                         // 1. Match XML-style: <search_web>query</search_web>
                         const xmlMatch = cleanResponseText.match(/<search_web>([\s\S]*?)<\/search_web>/i);
-                        
+
                         // 2. Match Square-style: [search_web: query]
                         const bracketMatch = cleanResponseText.match(/\[search_web:?\s*([\s\S]*?)\]/i);
 
@@ -312,11 +314,11 @@ export const useChat = ({
 
                     // If no tool calls (and no fallback detected), we are done.
                     if (toolCalls.length === 0) {
-                        setChatHistory([...currentHistory, { 
-                            role: 'model', 
-                            content: cleanResponseText, 
-                            tokenUsage: perRequestTokenUsage, 
-                            elapsedTime: Date.now() - startTime 
+                        setChatHistory([...currentHistory, {
+                            role: 'model',
+                            content: cleanResponseText,
+                            tokenUsage: perRequestTokenUsage,
+                            elapsedTime: Date.now() - startTime
                         }]);
                         setIsLoading(false);
                         setAbortController(null);
@@ -339,7 +341,7 @@ export const useChat = ({
                                 const args = JSON.parse(toolCall.function.arguments);
                                 const searchQuery = args.query || args.search || toolCall.function.arguments;
                                 console.log(`[Chat] Executing search_web with query: "${searchQuery}"`);
-                                
+
                                 const results = await searchWeb(searchQuery);
                                 const toolOutput = {
                                     role: 'tool' as const,
@@ -362,16 +364,16 @@ export const useChat = ({
 
                     loopCount++;
                 }
-                
+
                 // Final attempt after reaching limit
                 const finalPrompt = "SYSTEM: You have reached the maximum number of searches allowed for this turn. Please synthesize all the information gathered so far (including the web search results above) and provide your final comprehensive answer to the user now.";
                 const finalResponse = await callGenerateContent(selectedModel, apiKey, [{ role: 'system' as const, content: getSystemPrompt() }, ...currentHistory, { role: 'user', content: finalPrompt }], []);
 
-                setChatHistory([...currentHistory, { 
-                    role: 'model', 
-                    content: finalResponse.text || "I reached my search limit without a final answer.", 
-                    tokenUsage: perRequestTokenUsage, 
-                    elapsedTime: Date.now() - startTime 
+                setChatHistory([...currentHistory, {
+                    role: 'model',
+                    content: finalResponse.text || "I reached my search limit without a final answer.",
+                    tokenUsage: perRequestTokenUsage,
+                    elapsedTime: Date.now() - startTime
                 }]);
                 setIsLoading(false);
                 setAbortController(null);
@@ -380,7 +382,7 @@ export const useChat = ({
 
             let decision = 'GENERAL_CONVERSATION';
             let complexity: 'factoid' | 'overview' | 'synthesis' | 'comparison' | 'reasoning' | 'unknown' = 'unknown';
-            
+
             const routerPrompt = `Router Agent: GENERAL_CONVERSATION or KNOWLEDGE_SEARCH. Query: "${query}"`;
             const routerResponse = await callGenerateContent(selectedModel, apiKey, [{ role: 'user', content: routerPrompt }]);
             decision = (routerResponse.text || '').trim().toUpperCase().includes('KNOWLEDGE_SEARCH') ? 'KNOWLEDGE_SEARCH' : 'GENERAL_CONVERSATION';
@@ -395,7 +397,7 @@ export const useChat = ({
                         }
                         return await p;
                     };
-                    
+
                     if (!vectorStore?.current) throw new Error("Vector store not initialized.");
 
                     const route = await decideRouteV2({
@@ -412,7 +414,7 @@ export const useChat = ({
                     });
                     decision = route.mode === 'CHAT' ? 'GENERAL_CONVERSATION' : 'KNOWLEDGE_SEARCH';
                     complexity = route.complexity || 'unknown';
-                    
+
                     if (route.mode.startsWith('DEEP_ANALYSIS') && appSettings.enableDeepAnalysisV1) {
                         const { runDeepAnalysis } = await import('../agents/deep_analysis');
                         const level = appSettings.deepAnalysisLevel === 3 || route.mode === 'DEEP_ANALYSIS_L3' ? 3 : 2;
@@ -421,14 +423,14 @@ export const useChat = ({
                             model: selectedModel, apiKey, settings: appSettings, embedQuery: embedQueryFn,
                             rerank: appSettings.isRerankingEnabled ? async (rerankQuery, docs) => {
                                 const tasks: Omit<ComputeTask, 'jobId'>[] = [];
-                                docs.forEach((d, i) => tasks.push({ 
-                                    id: `rerank-${i}`, 
-                                    priority: TaskPriority.P1_Primary, 
-                                    payload: { 
-                                        type: TaskType.Rerank, 
-                                        query: rerankQuery, 
+                                docs.forEach((d, i) => tasks.push({
+                                    id: `rerank-${i}`,
+                                    priority: TaskPriority.P1_Primary,
+                                    payload: {
+                                        type: TaskType.Rerank,
+                                        query: rerankQuery,
                                         documents: [{ ...d, parentChunkIndex: (d as SearchResult).parentChunkIndex ?? -1 }]
-                                    } 
+                                    }
                                 }));
                                 const rerankPromise = new Promise<SearchResult[]>((resolve) => { if (rerankPromiseResolver) rerankPromiseResolver.current = { resolve, jobId: '', taskResults: [] }; });
                                 if (coordinator.current) {
@@ -468,30 +470,30 @@ export const useChat = ({
                 coordinator.current.addJob('Embed Query', [{ id: `query-${Date.now()}`, priority: TaskPriority.P1_Primary, payload: { type: TaskType.EmbedQuery, query } }]);
             }
             const queryEmbedding = await queryEmbeddingPromise;
-            
+
             if (!vectorStore?.current) throw new Error("Vector store not initialized.");
-            
+
             // DIAGNOSTIC LOGGING & DYNAMIC WINDOW
             const initialCandidates = vectorStore.current.search(queryEmbedding, appSettings.numInitialCandidates);
-            
+
             let finalChunkCount = appSettings.numFinalContextChunks;
             if (complexity === 'overview' || complexity === 'synthesis') {
                 finalChunkCount = Math.min(20, finalChunkCount * 2);
             }
 
             const searchResults = initialCandidates.slice(0, finalChunkCount);
-            
+
             if (appSettings.isLoggingEnabled) {
                 const maxSim = searchResults.length > 0 ? searchResults[0].similarity : 0;
                 console.log(`[RAG DEBUG] Complexity: ${complexity}, Chunks Requested: ${finalChunkCount}, Chunks Found: ${searchResults.length}, Max Similarity: ${maxSim.toFixed(4)}`);
             }
 
             if (searchResults.length === 0 && files.length > 0) {
-                setChatHistory([...newHistoryWithUser, { 
-                    role: 'model', 
+                setChatHistory([...newHistoryWithUser, {
+                    role: 'model',
                     content: `I couldn't find any relevant information in your documents for this query. The search threshold might be too restrictive, or the documents may not contain the answer.`,
-                    tokenUsage: perRequestTokenUsage, 
-                    elapsedTime: Date.now() - startTime 
+                    tokenUsage: perRequestTokenUsage,
+                    elapsedTime: Date.now() - startTime
                 }]);
                 setIsLoading(false);
                 return;
@@ -502,7 +504,7 @@ export const useChat = ({
 
             const context = searchResults.map((r, i) => `[${i + 1}] File: ${files.find(f => f.id === r.id)?.name || r.id} (ID: ${r.id})\n\n${r.chunk}`).join('\n\n---\n\n');
             const messages: ChatMessage[] = [{ role: 'system', content: getSystemPrompt(requiredDocIds) }, ...history, { role: 'user', content: `CONTEXT:\n---\n${context}\n---\n\nUSER QUESTION: ${query}` }];
-            
+
             const llmResponse = await callGenerateContent(selectedModel, apiKey, messages);
             setChatHistory([...newHistoryWithUser, { role: 'model', content: `${llmResponse.text || ''}<!--searchResults:${JSON.stringify(searchResults)}-->`, tokenUsage: perRequestTokenUsage, elapsedTime: Date.now() - startTime }]);
         } catch (error) {
@@ -552,7 +554,7 @@ export const useChat = ({
 
         // Robust regex to handle variations: [Source: ID], [ID], 【Source: ID】, 【ID】, and unbracketed Source: ID
         const citationRegex = /\[Source:\s*([^\]]+)\]|\[(\d+)\]|【Source:\s*([^】]+)】|【(\d+)】|\bSource:\s*([\w.-]+_\d+_\d+)\b/gi;
-        
+
         const finalHtml = (rawHtml as string).replace(citationRegex, (match, g1, g2, g3, g4, g5) => {
             const inside = (g1 || g2 || g3 || g4 || g5) as string;
             if (!inside) return match;
@@ -560,10 +562,10 @@ export const useChat = ({
             const tokens = inside.trim().split(',').map((t: string) => t.trim()).filter(Boolean);
             const items = tokens.map((tid: string) => {
                 const index = parseInt(tid, 10);
-                let sr = (!isNaN(index) && index > 0 && index <= searchResults.length) 
-                    ? searchResults[index - 1] 
+                let sr = (!isNaN(index) && index > 0 && index <= searchResults.length)
+                    ? searchResults[index - 1]
                     : undefined;
-                
+
                 if (!sr) {
                     sr = searchResults.find(r => r.id === tid);
                 }
@@ -589,7 +591,7 @@ export const useChat = ({
             const end = parseInt(btn.getAttribute('data-end') || '0');
             const parentIndex = parseInt(btn.getAttribute('data-parent-index') || '-1');
             const chunkText = btn.getAttribute('data-chunk') || '';
-            
+
             const file = files.find(f => f.id === fileId);
             if (file) {
                 // By default use the clicked chunk
@@ -610,7 +612,7 @@ export const useChat = ({
                             otherChunks.push({ id: fileId!, start: lStart, end: lEnd, parentChunkIndex: lParentIndex, chunk: lChunk, similarity: 1 });
                         }
                     });
-                    
+
                     // Sort combined chunks by their document position
                     allRelevantChunks = [...allRelevantChunks, ...otherChunks].sort((a, b) => a.start - b.start);
                 }
