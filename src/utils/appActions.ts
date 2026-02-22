@@ -4,6 +4,7 @@ import { TextItem } from 'pdfjs-dist/types/src/display/api';
 import { AppFile } from '../types';
 import { generateFileId } from './fileUtils';
 import { getFileFromHandle, FileSystemItem } from './fileExplorer';
+import { Document, Packer, Paragraph, TextRun, HeadingLevel } from 'docx';
 
 export const getMessageTextContent = (index: number, chatHistoryRef: React.RefObject<HTMLDivElement>): string => {
   const container = chatHistoryRef.current?.querySelectorAll('.message-container')[index] as HTMLElement | undefined;
@@ -12,8 +13,84 @@ export const getMessageTextContent = (index: number, chatHistoryRef: React.RefOb
   return (markupEl ? markupEl.innerText : (container.querySelector('.message-content') as HTMLElement | null)?.innerText) || '';
 };
 
-export const downloadMessage = async (text: string, index: number, rootDirectoryHandle: FileSystemDirectoryHandle | null) => {
-  const defaultName = `message-${index + 1}.txt`;
+export const downloadMessage = async (text: string, index: number, rootDirectoryHandle: FileSystemDirectoryHandle | null, format: 'txt' | 'md' | 'docx' = 'txt') => {
+  const extension = format;
+  const defaultName = `report-${index + 1}.${extension}`;
+  
+  let mimeType = 'text/plain';
+  let content: any = text;
+
+  if (format === 'md') {
+    mimeType = 'text/markdown';
+  } else if (format === 'docx') {
+    mimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+    
+    // Parse text into docx components
+    const lines = text.split('\n');
+    const docChildren: any[] = [];
+    
+    docChildren.push(new Paragraph({
+      text: "RAG Studio Case File Report",
+      heading: HeadingLevel.HEADING_1,
+    }));
+
+    let currentPara: string[] = [];
+    
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) {
+        if (currentPara.length > 0) {
+          docChildren.push(new Paragraph({
+            children: [new TextRun(currentPara.join(' '))],
+            spacing: { after: 200 }
+          }));
+          currentPara = [];
+        }
+        continue;
+      }
+
+      if (trimmed.startsWith('# ')) {
+        if (currentPara.length > 0) {
+          docChildren.push(new Paragraph({ children: [new TextRun(currentPara.join(' '))], spacing: { after: 200 } }));
+          currentPara = [];
+        }
+        docChildren.push(new Paragraph({
+          text: trimmed.replace(/^#\s+/, ''),
+          heading: HeadingLevel.HEADING_2,
+          spacing: { before: 400, after: 200 }
+        }));
+      } else if (trimmed.startsWith('## ')) {
+        if (currentPara.length > 0) {
+          docChildren.push(new Paragraph({ children: [new TextRun(currentPara.join(' '))], spacing: { after: 200 } }));
+          currentPara = [];
+        }
+        docChildren.push(new Paragraph({
+          text: trimmed.replace(/^##\s+/, ''),
+          heading: HeadingLevel.HEADING_3,
+          spacing: { before: 300, after: 150 }
+        }));
+      } else {
+        currentPara.push(trimmed);
+      }
+    }
+
+    if (currentPara.length > 0) {
+      docChildren.push(new Paragraph({
+        children: [new TextRun(currentPara.join(' '))],
+        spacing: { after: 200 }
+      }));
+    }
+
+    const doc = new Document({
+      sections: [{
+        properties: {},
+        children: docChildren,
+      }],
+    });
+
+    content = await Packer.toBlob(doc);
+  }
+
   const anyWindow = window as unknown as {
     showSaveFilePicker?: (options: {
       suggestedName: string;
@@ -22,15 +99,21 @@ export const downloadMessage = async (text: string, index: number, rootDirectory
     }) => Promise<FileSystemFileHandle>;
   };
 
+  const acceptMap: Record<string, Record<string, string[]>> = {
+    txt: { 'text/plain': ['.txt'] },
+    md: { 'text/markdown': ['.md'] },
+    docx: { 'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'] }
+  };
+
   if (anyWindow.showSaveFilePicker) {
     try {
       const handle = await anyWindow.showSaveFilePicker({
         suggestedName: defaultName,
-        types: [{ description: 'Text File', accept: { 'text/plain': ['.txt'] } }],
+        types: [{ description: `${format.toUpperCase()} File`, accept: acceptMap[format] }],
         startIn: (rootDirectoryHandle as unknown as FileSystemHandle) || undefined
       });
       const writable = await handle.createWritable();
-      await writable.write(text);
+      await writable.write(content);
       await writable.close();
       return;
     } catch (err) {
@@ -38,7 +121,7 @@ export const downloadMessage = async (text: string, index: number, rootDirectory
     }
   }
 
-  const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+  const blob = format === 'docx' ? (content as Blob) : new Blob([content], { type: `${mimeType};charset=utf-8` });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;

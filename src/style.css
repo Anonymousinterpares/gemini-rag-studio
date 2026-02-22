@@ -810,10 +810,63 @@ button:focus-visible {
   line-height: 1.5;
 }
 
-.doc-line-text mark {
-  background-color: rgba(255, 230, 109, 0.3);
-  color: inherit;
-  border-bottom: 1px solid var(--warning-orange);
+/* --- Download Report Button (Violet) --- */
+.download-report-container {
+  margin-top: 1rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  align-items: flex-start;
+}
+
+.download-report-btn {
+  background-color: #8e44ad !important; /* Violet */
+  color: white !important;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.download-report-btn:hover {
+  background-color: #9b59b6 !important;
+}
+
+.format-selector {
+  display: flex;
+  gap: 0.5rem;
+  background: rgba(0, 0, 0, 0.2);
+  padding: 0.4rem;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.format-option {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.8rem;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: var(--text-color-secondary);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.format-option:hover {
+  border-color: #8e44ad;
+  color: white;
+}
+
+.format-option.active {
+  background: #8e44ad;
+  color: white;
+  border-color: #8e44ad;
 }
 
 .doc-spacer {
@@ -964,8 +1017,7 @@ button:focus-visible {
 }
 
 .setting-row {
-  display: grid;
-  grid-template-columns: auto 1fr;
+  display: flex;
   align-items: center;
   gap: 0.75rem;
   margin-bottom: 0.75rem;

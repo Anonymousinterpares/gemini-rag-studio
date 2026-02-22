@@ -227,6 +227,9 @@ export const useChat = ({
 
         try {
             const apiKey = apiKeys[selectedProvider];
+            
+            // Prioritize explicit Case File requests
+            let isCaseFileMode = forceCaseFile;
 
             // Handle Case File Feedback Step
             if (caseFileState.isAwaitingFeedback && caseFileState.metadata) {
@@ -265,6 +268,7 @@ export const useChat = ({
                 setChatHistory([...newHistoryWithUser, { 
                     role: 'model', 
                     content: `${da.finalText}<!--searchResults:${JSON.stringify(da.usedResults)}-->`, 
+                    type: 'case_file_report',
                     tokenUsage: perRequestTokenUsage, 
                     elapsedTime: Date.now() - startTime 
                 }]);
@@ -272,8 +276,8 @@ export const useChat = ({
                 return;
             }
 
-            // If Chat Mode is ON, enable search capabilities
-            if (appSettings.isChatModeEnabled) {
+            // If Chat Mode is ON, enable search capabilities (UNLESS we are in Case File mode)
+            if (appSettings.isChatModeEnabled && !isCaseFileMode) {
                 const currentHistory = [...newHistoryWithUser];
                 const tools = [SEARCH_TOOL];
                 let loopCount = 0;
@@ -427,7 +431,6 @@ export const useChat = ({
 
             let decision = 'GENERAL_CONVERSATION';
             let complexity: 'factoid' | 'overview' | 'synthesis' | 'comparison' | 'reasoning' | 'case_file' | 'unknown' = 'unknown';
-            let isCaseFileMode = forceCaseFile;
 
             if (!isCaseFileMode) {
                 const routerPrompt = `Router Agent: GENERAL_CONVERSATION or KNOWLEDGE_SEARCH. Query: "${query}"`;
@@ -500,7 +503,7 @@ export const useChat = ({
                                 }));
                             }
                         });
-                        setChatHistory([...newHistoryWithUser, { role: 'model', content: `${da.finalText}<!--searchResults:${JSON.stringify(da.usedResults)}-->`, tokenUsage: perRequestTokenUsage, elapsedTime: Date.now() - startTime }]);
+                        setChatHistory([...newHistoryWithUser, { role: 'model', content: `${da.finalText}<!--searchResults:${JSON.stringify(da.usedResults)}-->`, type: 'case_file_report', tokenUsage: perRequestTokenUsage, elapsedTime: Date.now() - startTime }]);
                         setIsLoading(false);
                         return;
                     }
@@ -548,6 +551,7 @@ Or just tell me what specific aspects you'd like me to focus on.`;
                 setChatHistory([...newHistoryWithUser, { 
                     role: 'model', 
                     content: responseText, 
+                    type: 'case_file_analysis',
                     tokenUsage: perRequestTokenUsage, 
                     elapsedTime: Date.now() - startTime 
                 }]);

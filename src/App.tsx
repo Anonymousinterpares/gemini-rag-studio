@@ -21,6 +21,36 @@ import './style.css';
 import './progress-bar.css';
 import './Modal.css';
 
+const DownloadReportButton: FC<{ content: string; index: number; rootDirectoryHandle: FileSystemDirectoryHandle | null }> = ({ content, index, rootDirectoryHandle }) => {
+  const [format, setFormat] = useState<'txt' | 'md' | 'docx'>('md');
+  const [isSaving, setIsSaving] = useState(false);
+
+  const handleDownload = async () => {
+    setIsSaving(true);
+    try {
+      // Stripping internal RAG metadata if any
+      const cleanContent = content.replace(/<!--searchResults:(.*?)-->/, '');
+      await downloadMessage(cleanContent, index, rootDirectoryHandle, format);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <div className="download-report-container">
+      <div className="format-selector">
+        <button className={`format-option ${format === 'txt' ? 'active' : ''}`} onClick={() => setFormat('txt')}>.TXT</button>
+        <button className={`format-option ${format === 'md' ? 'active' : ''}`} onClick={() => setFormat('md')}>.MD</button>
+        <button className={`format-option ${format === 'docx' ? 'active' : ''}`} onClick={() => setFormat('docx')}>.DOCX</button>
+      </div>
+      <button className="download-report-btn" onClick={handleDownload} disabled={isSaving}>
+        <Download size={16} />
+        {isSaving ? 'Saving...' : 'Download Report File'}
+      </button>
+    </div>
+  );
+};
+
 export const App: FC = () => {
   const { appSettings, setAppSettings, modelsList, selectedModel, setSelectedModel, apiKeys, setApiKeys } = useSettingsStore();
   const { files, setFiles, fileTree, selectedFile, isDragging } = useFileStore();
@@ -49,7 +79,8 @@ export const App: FC = () => {
   const {
     userInput, setUserInput,
     chatHistory, setChatHistory,
-    tokenUsage, isLoading,
+    tokenUsage, setTokenUsage,
+    isLoading,
     submitQuery,
     handleRedo, handleSubmit, handleSourceClick, renderModelMessage,
     stopGeneration,
@@ -60,6 +91,49 @@ export const App: FC = () => {
   } = useChat({
     coordinator, vectorStore, queryEmbeddingResolver, rerankPromiseResolver, setRerankProgress: () => { }, setActiveSource, setIsModalOpen
   });
+
+  const handleSaveChatHistory = async () => {
+    const data = JSON.stringify({ chatHistory, tokenUsage }, null, 2);
+    const anyWindow = window as any;
+    if (anyWindow.showSaveFilePicker) {
+      try {
+        const handle = await anyWindow.showSaveFilePicker({
+          suggestedName: `chat-session-${new Date().toISOString().split('T')[0]}.json`,
+          types: [{ description: 'JSON File', accept: { 'application/json': ['.json'] } }]
+        });
+        const writable = await handle.createWritable();
+        await writable.write(data);
+        await writable.close();
+      } catch (e) { console.error(e); }
+    } else {
+      const blob = new Blob([data], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `chat-session.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+  };
+
+  const handleLoadChatHistory = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (prev) => {
+      try {
+        const loaded = JSON.parse(prev.target?.result as string);
+        if (loaded.chatHistory) {
+          setChatHistory(loaded.chatHistory);
+          if (loaded.tokenUsage) setTokenUsage(loaded.tokenUsage);
+        }
+      } catch (err) {
+        alert("Failed to load chat history: Invalid JSON");
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
 
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [editingContent, setEditingContent] = useState('');
@@ -91,6 +165,7 @@ export const App: FC = () => {
   const chatHistoryRef = useRef<HTMLDivElement>(null);
   const dropVideoRef = useRef<HTMLVideoElement>(null);
   const chatInputRef = useRef<HTMLTextAreaElement>(null);
+  const loadChatInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (chatInputRef.current) {
@@ -270,7 +345,12 @@ export const App: FC = () => {
                         </div>
                       </div>
                     ) : (
-                      msg.role === 'model' ? <div className='message-markup' dangerouslySetInnerHTML={renderModelMessage(msg.content)} /> : msg.content
+                      <>
+                        {msg.role === 'model' ? <div className='message-markup' dangerouslySetInnerHTML={renderModelMessage(msg.content)} /> : msg.content}
+                        {msg.content && (msg.type === 'case_file_report' || msg.content.startsWith('# Case File')) && (
+                          <DownloadReportButton content={msg.content} index={i} rootDirectoryHandle={rootDirectoryHandle} />
+                        )}
+                      </>
                     )}
                   </div>
                   <div className="message-actions">
@@ -367,6 +447,21 @@ export const App: FC = () => {
                 Build Case File
               </button>
             )}
+          </div>
+          <div className='setting-row' style={{ marginTop: '0.5rem' }}>
+            <button className="button secondary" onClick={handleSaveChatHistory} style={{ flex: 1 }}>
+              <Download size={14} style={{ marginRight: '6px' }} /> Download Session
+            </button>
+            <button className="button secondary" onClick={() => loadChatInputRef.current?.click()} style={{ flex: 1, marginLeft: '10px' }}>
+              <Edit2 size={14} style={{ marginRight: '6px' }} /> Load Session
+            </button>
+            <input 
+              type="file" 
+              ref={loadChatInputRef} 
+              style={{ display: 'none' }} 
+              accept=".json" 
+              onChange={handleLoadChatHistory} 
+            />
           </div>
         </div>
       </div>

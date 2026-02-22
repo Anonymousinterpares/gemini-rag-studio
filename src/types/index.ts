@@ -51,6 +51,7 @@ export interface ToolCall {
 export interface ChatMessage {
   role: 'user' | 'model' | 'system' | 'tool'
   content: string | null; // Content can be null for tool calls
+  type?: 'case_file_analysis' | 'case_file_report';
   tokenUsage?: TokenUsage;
   elapsedTime?: number;
   tool_calls?: ToolCall[];
