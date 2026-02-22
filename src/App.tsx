@@ -7,7 +7,7 @@ import { embeddingCache } from './cache/embeddingCache';
 import { summaryCache } from './cache/summaryCache';
 import Settings from './components/Settings';
 import CustomFileExplorer from './components/CustomFileExplorer';
-import { getMessageTextContent, downloadMessage, processExplorerItems } from './utils/appActions';
+import { downloadMessage, processExplorerItems } from './utils/appActions';
 import MemoizedFileTreeView from './components/FileTreeView';
 import MemoizedFileListView from './components/FileListView';
 import MemoizedDocViewer from './components/DocViewer';
@@ -162,7 +162,6 @@ export const App: FC = () => {
     vectorStore, docFontSize, coordinator, resetLLMResponseState: () => setHasLLMResponded(false)
   });
 
-  const chatHistoryRef = useRef<HTMLDivElement>(null);
   const dropVideoRef = useRef<HTMLVideoElement>(null);
   const chatInputRef = useRef<HTMLTextAreaElement>(null);
   const loadChatInputRef = useRef<HTMLInputElement>(null);
@@ -175,14 +174,14 @@ export const App: FC = () => {
   }, [userInput]);
 
   const handleCopy = useCallback(async (idx: number) => {
-    const text = getMessageTextContent(idx, chatHistoryRef);
-    if (text) await navigator.clipboard.writeText(text);
-  }, []);
+    const msg = chatHistory[idx];
+    if (msg?.content) await navigator.clipboard.writeText(msg.content);
+  }, [chatHistory]);
 
   const handleDownloadAction = useCallback(async (idx: number) => {
-    const text = getMessageTextContent(idx, chatHistoryRef);
-    if (text) await downloadMessage(text, idx, rootDirectoryHandle);
-  }, [rootDirectoryHandle]);
+    const msg = chatHistory[idx];
+    if (msg?.content) await downloadMessage(msg.content, idx, rootDirectoryHandle);
+  }, [chatHistory, rootDirectoryHandle]);
 
   useEffect(() => {
     if (coordinator.current) {
@@ -318,7 +317,7 @@ export const App: FC = () => {
       </div>
       <div className='panel chat-panel'>
         <div className='chat-panel-header'><div className='background-changer'><button className='background-btn' onClick={() => setAppSettings(p => ({ ...p, backgroundIndex: p.backgroundIndex === 0 ? backgroundImages.length : p.backgroundIndex - 1 }))}><ChevronLeft size={16} /></button><button className='background-btn' onClick={() => setAppSettings(p => ({ ...p, backgroundIndex: (p.backgroundIndex + 1) % (backgroundImages.length + 1) }))}><ChevronRight size={16} /></button></div></div>
-        <div className='panel-content' ref={chatHistoryRef} onClick={handleSourceClick} style={{ backgroundImage: backgroundImages[appSettings.backgroundIndex - 1] ? `url('${backgroundImages[appSettings.backgroundIndex - 1]}')` : 'none', backgroundSize: 'cover' }}>
+        <div className='panel-content' onClick={handleSourceClick} style={{ backgroundImage: backgroundImages[appSettings.backgroundIndex - 1] ? `url('${backgroundImages[appSettings.backgroundIndex - 1]}')` : 'none', backgroundSize: 'cover' }}>
           <div className='chat-history'>
             {chatHistory.map((msg, i) => ({ msg, i })).filter(({ msg }) => {
               // Hide intermediate tool calls and tool results from the UI

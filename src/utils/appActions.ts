@@ -6,13 +6,6 @@ import { generateFileId } from './fileUtils';
 import { getFileFromHandle, FileSystemItem } from './fileExplorer';
 import { Document, Packer, Paragraph, TextRun, HeadingLevel } from 'docx';
 
-export const getMessageTextContent = (index: number, chatHistoryRef: React.RefObject<HTMLDivElement>): string => {
-  const container = chatHistoryRef.current?.querySelectorAll('.message-container')[index] as HTMLElement | undefined;
-  if (!container) return '';
-  const markupEl = container.querySelector('.message-markup') as HTMLElement | null;
-  return (markupEl ? markupEl.innerText : (container.querySelector('.message-content') as HTMLElement | null)?.innerText) || '';
-};
-
 export const downloadMessage = async (text: string, index: number, rootDirectoryHandle: FileSystemDirectoryHandle | null, format: 'txt' | 'md' | 'docx' = 'txt') => {
   const extension = format;
   const defaultName = `report-${index + 1}.${extension}`;
