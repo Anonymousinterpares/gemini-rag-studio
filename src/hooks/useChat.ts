@@ -195,7 +195,7 @@ export const useChat = ({
         await Promise.all(promises);
     }, [coordinator]);
 
-    const submitQuery = useCallback(async (query: string, history: ChatMessage[]) => {
+    const submitQuery = useCallback(async (query: string, history: ChatMessage[], forceCaseFile: boolean = false) => {
         if (!query.trim() || isLoading || !coordinator?.current) return;
         // If not in chat mode, we MUST have a vector store
         if (!appSettings.isChatModeEnabled && !vectorStore?.current) return;
@@ -427,8 +427,10 @@ export const useChat = ({
 
             let decision = 'GENERAL_CONVERSATION';
             let complexity: 'factoid' | 'overview' | 'synthesis' | 'comparison' | 'reasoning' | 'case_file' | 'unknown' = 'unknown';
+            let isCaseFileMode = forceCaseFile;
 
-            const routerPrompt = `Router Agent: GENERAL_CONVERSATION or KNOWLEDGE_SEARCH. Query: "${query}"`;
+            if (!isCaseFileMode) {
+                const routerPrompt = `Router Agent: GENERAL_CONVERSATION or KNOWLEDGE_SEARCH. Query: "${query}"`;
             const routerResponse = await callGenerateContent(selectedModel, apiKey, [{ role: 'user', content: routerPrompt }]);
             decision = (routerResponse.text || '').trim().toUpperCase().includes('KNOWLEDGE_SEARCH') ? 'KNOWLEDGE_SEARCH' : 'GENERAL_CONVERSATION';
 
@@ -461,47 +463,7 @@ export const useChat = ({
                     complexity = route.complexity || 'unknown';
 
                     if (route.mode === 'CASE_FILE') {
-                        const { analyzeChatForCaseFile } = await import('../agents/case_file');
-                        const analysis = await analyzeChatForCaseFile({
-                            history: newHistoryWithUser,
-                            model: selectedModel,
-                            apiKey,
-                            onTokenUsage: (usage) => {
-                                perRequestTokenUsage.promptTokens += usage.promptTokens;
-                                perRequestTokenUsage.completionTokens += usage.completionTokens;
-                                setTokenUsage(prev => ({
-                                    promptTokens: prev.promptTokens + usage.promptTokens,
-                                    completionTokens: prev.completionTokens + usage.completionTokens
-                                }));
-                            }
-                        });
-
-                        setCaseFileState({
-                            isAwaitingFeedback: true,
-                            metadata: {
-                                initialAnalysis: analysis.initialAnalysis,
-                                suggestedQuestions: analysis.suggestedQuestions
-                            }
-                        });
-
-                        const responseText = `I've analyzed our conversation and I'm ready to build an extensive Case File (report) for you.
-
-**Initial Analysis:**
-${analysis.initialAnalysis}
-
-To make the report as robust and relevant as possible, please let me know:
-${analysis.suggestedQuestions.map(q => `- ${q}`).join('\n')}
-
-Or just tell me what specific aspects you'd like me to focus on.`;
-
-                        setChatHistory([...newHistoryWithUser, { 
-                            role: 'model', 
-                            content: responseText, 
-                            tokenUsage: perRequestTokenUsage, 
-                            elapsedTime: Date.now() - startTime 
-                        }]);
-                        setIsLoading(false);
-                        return;
+                        isCaseFileMode = true;
                     }
 
                     if (route.mode.startsWith('DEEP_ANALYSIS') && appSettings.enableDeepAnalysisV1) {
@@ -545,6 +507,52 @@ Or just tell me what specific aspects you'd like me to focus on.`;
                 } catch (_e) {
                     if (appSettings.isLoggingEnabled) console.warn('[RouterV2] Failed', _e);
                 }
+            }
+
+            }
+
+            if (isCaseFileMode) {
+                const { analyzeChatForCaseFile } = await import('../agents/case_file');
+                const analysis = await analyzeChatForCaseFile({
+                    history: newHistoryWithUser,
+                    model: selectedModel,
+                    apiKey,
+                    onTokenUsage: (usage) => {
+                        perRequestTokenUsage.promptTokens += usage.promptTokens;
+                        perRequestTokenUsage.completionTokens += usage.completionTokens;
+                        setTokenUsage(prev => ({
+                            promptTokens: prev.promptTokens + usage.promptTokens,
+                            completionTokens: prev.completionTokens + usage.completionTokens
+                        }));
+                    }
+                });
+
+                setCaseFileState({
+                    isAwaitingFeedback: true,
+                    metadata: {
+                        initialAnalysis: analysis.initialAnalysis,
+                        suggestedQuestions: analysis.suggestedQuestions
+                    }
+                });
+
+                const responseText = `I've analyzed our conversation and I'm ready to build an extensive Case File (report) for you.
+
+**Initial Analysis:**
+${analysis.initialAnalysis}
+
+To make the report as robust and relevant as possible, please let me know:
+${analysis.suggestedQuestions.map(q => `- ${q}`).join('\n')}
+
+Or just tell me what specific aspects you'd like me to focus on.`;
+
+                setChatHistory([...newHistoryWithUser, { 
+                    role: 'model', 
+                    content: responseText, 
+                    tokenUsage: perRequestTokenUsage, 
+                    elapsedTime: Date.now() - startTime 
+                }]);
+                setIsLoading(false);
+                return;
             }
 
             if (decision === 'GENERAL_CONVERSATION') {
@@ -717,6 +725,7 @@ Or just tell me what specific aspects you'd like me to focus on.`;
         chatHistory, setChatHistory,
         tokenUsage, setTokenUsage,
         isLoading, setIsLoading,
+        submitQuery,
         handleRedo, handleSubmit, handleSourceClick, renderModelMessage,
         stopGeneration,
         handleClearConversation: () => clearHistory(initialChatHistory),

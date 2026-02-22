@@ -50,6 +50,7 @@ export const App: FC = () => {
     userInput, setUserInput,
     chatHistory, setChatHistory,
     tokenUsage, isLoading,
+    submitQuery,
     handleRedo, handleSubmit, handleSourceClick, renderModelMessage,
     stopGeneration,
     handleClearConversation, handleRemoveMessage,
@@ -356,9 +357,7 @@ export const App: FC = () => {
             ) : (
               <button 
                 onClick={() => {
-                  const fakeEvent = { preventDefault: () => {} } as React.FormEvent;
-                  setUserInput("Generate a comprehensive Case File based on our conversation.");
-                  setTimeout(() => handleSubmit(fakeEvent), 0);
+                  submitQuery("Generate a comprehensive Case File based on our conversation.", chatHistory, true);
                 }} 
                 className="button secondary"
                 disabled={isLoading || (files.length === 0 && !appSettings.isChatModeEnabled)}
