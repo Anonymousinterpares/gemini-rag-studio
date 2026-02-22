@@ -1,6 +1,11 @@
 import { create } from 'zustand';
 import { ChatMessage, TokenUsage } from '../types';
 
+export interface CaseFileMetadata {
+  initialAnalysis: string;
+  suggestedQuestions: string[];
+}
+
 interface ChatState {
   chatHistory: ChatMessage[];
   userInput: string;
@@ -8,6 +13,12 @@ interface ChatState {
   tokenUsage: TokenUsage;
   isLoading: boolean;
   abortController: AbortController | null;
+  
+  // Case File specific state
+  caseFileState: {
+    isAwaitingFeedback: boolean;
+    metadata?: CaseFileMetadata;
+  };
   
   // Actions
   setChatHistory: (updater: ChatMessage[] | ((prev: ChatMessage[]) => ChatMessage[])) => void;
@@ -19,6 +30,7 @@ interface ChatState {
   clearHistory: (initialHistory: ChatMessage[]) => void;
   updateMessage: (index: number, content: string) => void;
   truncateHistory: (index: number) => void;
+  setCaseFileState: (state: Partial<ChatState['caseFileState']>) => void;
 }
 
 export const useChatStore = create<ChatState>((set) => ({
@@ -33,6 +45,9 @@ export const useChatStore = create<ChatState>((set) => ({
   tokenUsage: { promptTokens: 0, completionTokens: 0 },
   isLoading: false,
   abortController: null,
+  caseFileState: {
+    isAwaitingFeedback: false,
+  },
 
   setChatHistory: (updater) => set((state) => ({
     chatHistory: typeof updater === 'function' ? updater(state.chatHistory) : updater
@@ -55,7 +70,8 @@ export const useChatStore = create<ChatState>((set) => ({
     tokenUsage: { promptTokens: 0, completionTokens: 0 },
     userInput: '',
     pendingQuery: null,
-    abortController: null
+    abortController: null,
+    caseFileState: { isAwaitingFeedback: false }
   }),
 
   updateMessage: (index, content) => set((state) => {
@@ -68,5 +84,9 @@ export const useChatStore = create<ChatState>((set) => ({
 
   truncateHistory: (index) => set((state) => ({
     chatHistory: state.chatHistory.slice(0, index + 1)
+  })),
+
+  setCaseFileState: (state) => set((prev) => ({
+    caseFileState: { ...prev.caseFileState, ...state }
   })),
 }));

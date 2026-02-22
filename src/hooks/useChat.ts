@@ -3,7 +3,7 @@ import { marked } from 'marked';
 import { AppFile, ChatMessage, JobProgress, Model, SearchResult, TokenUsage } from '../types';
 import { summaryCache } from '../cache/summaryCache';
 import { ComputeTask, TaskPriority, TaskType } from '../compute/types';
-import { generateContent, Tool } from '../api/llm-provider';
+import { generateContent, Tool, SchemaType } from '../api/llm-provider';
 import { ComputeCoordinator } from '../compute/coordinator';
 import { VectorStore } from '../rag/pipeline';
 import { useChatStore, useFileStore, useSettingsStore } from '../store';
@@ -15,7 +15,7 @@ const SEARCH_TOOL: Tool = {
         name: 'search_web',
         description: 'Search the internet for current information, news, or specific data not present in your training knowledge.',
         parameters: {
-            type: 'object',
+            type: SchemaType.OBJECT,
             properties: {
                 query: {
                     type: 'string',
@@ -87,7 +87,8 @@ export const useChat = ({
         tokenUsage, setTokenUsage,
         isLoading, setIsLoading,
         abortController, setAbortController,
-        clearHistory, updateMessage, truncateHistory
+        clearHistory, updateMessage, truncateHistory,
+        caseFileState, setCaseFileState
     } = useChatStore();
 
     const { files } = useFileStore();
@@ -226,6 +227,50 @@ export const useChat = ({
 
         try {
             const apiKey = apiKeys[selectedProvider];
+
+            // Handle Case File Feedback Step
+            if (caseFileState.isAwaitingFeedback && caseFileState.metadata) {
+                const { generateCaseFile, filterVisibleHistory } = await import('../agents/case_file');
+                const embedQueryFn = async (q: string) => {
+                    const p = new Promise<number[]>((resolve) => { if (queryEmbeddingResolver) queryEmbeddingResolver.current = resolve; });
+                    if (coordinator.current) {
+                        coordinator.current.addJob('Embed Query', [{ id: `query-${Date.now()}`, priority: TaskPriority.P1_Primary, payload: { type: TaskType.EmbedQuery, query: q } }]);
+                    }
+                    return await p;
+                };
+
+                const da = await generateCaseFile({
+                    userFeedback: query,
+                    caseFileContext: {
+                        initialAnalysis: caseFileState.metadata.initialAnalysis,
+                        suggestedQuestions: caseFileState.metadata.suggestedQuestions,
+                        visibleHistory: filterVisibleHistory(history)
+                    },
+                    vectorStore: vectorStore?.current ?? null,
+                    model: selectedModel,
+                    apiKey,
+                    settings: appSettings,
+                    embedQuery: embedQueryFn,
+                    onTokenUsage: (usage) => {
+                        perRequestTokenUsage.promptTokens += usage.promptTokens;
+                        perRequestTokenUsage.completionTokens += usage.completionTokens;
+                        setTokenUsage(prev => ({
+                            promptTokens: prev.promptTokens + usage.promptTokens,
+                            completionTokens: prev.completionTokens + usage.completionTokens
+                        }));
+                    }
+                });
+
+                setCaseFileState({ isAwaitingFeedback: false, metadata: undefined });
+                setChatHistory([...newHistoryWithUser, { 
+                    role: 'model', 
+                    content: `${da.finalText}<!--searchResults:${JSON.stringify(da.usedResults)}-->`, 
+                    tokenUsage: perRequestTokenUsage, 
+                    elapsedTime: Date.now() - startTime 
+                }]);
+                setIsLoading(false);
+                return;
+            }
 
             // If Chat Mode is ON, enable search capabilities
             if (appSettings.isChatModeEnabled) {
@@ -381,7 +426,7 @@ export const useChat = ({
             }
 
             let decision = 'GENERAL_CONVERSATION';
-            let complexity: 'factoid' | 'overview' | 'synthesis' | 'comparison' | 'reasoning' | 'unknown' = 'unknown';
+            let complexity: 'factoid' | 'overview' | 'synthesis' | 'comparison' | 'reasoning' | 'case_file' | 'unknown' = 'unknown';
 
             const routerPrompt = `Router Agent: GENERAL_CONVERSATION or KNOWLEDGE_SEARCH. Query: "${query}"`;
             const routerResponse = await callGenerateContent(selectedModel, apiKey, [{ role: 'user', content: routerPrompt }]);
@@ -414,6 +459,50 @@ export const useChat = ({
                     });
                     decision = route.mode === 'CHAT' ? 'GENERAL_CONVERSATION' : 'KNOWLEDGE_SEARCH';
                     complexity = route.complexity || 'unknown';
+
+                    if (route.mode === 'CASE_FILE') {
+                        const { analyzeChatForCaseFile } = await import('../agents/case_file');
+                        const analysis = await analyzeChatForCaseFile({
+                            history: newHistoryWithUser,
+                            model: selectedModel,
+                            apiKey,
+                            onTokenUsage: (usage) => {
+                                perRequestTokenUsage.promptTokens += usage.promptTokens;
+                                perRequestTokenUsage.completionTokens += usage.completionTokens;
+                                setTokenUsage(prev => ({
+                                    promptTokens: prev.promptTokens + usage.promptTokens,
+                                    completionTokens: prev.completionTokens + usage.completionTokens
+                                }));
+                            }
+                        });
+
+                        setCaseFileState({
+                            isAwaitingFeedback: true,
+                            metadata: {
+                                initialAnalysis: analysis.initialAnalysis,
+                                suggestedQuestions: analysis.suggestedQuestions
+                            }
+                        });
+
+                        const responseText = `I've analyzed our conversation and I'm ready to build an extensive Case File (report) for you.
+
+**Initial Analysis:**
+${analysis.initialAnalysis}
+
+To make the report as robust and relevant as possible, please let me know:
+${analysis.suggestedQuestions.map(q => `- ${q}`).join('\n')}
+
+Or just tell me what specific aspects you'd like me to focus on.`;
+
+                        setChatHistory([...newHistoryWithUser, { 
+                            role: 'model', 
+                            content: responseText, 
+                            tokenUsage: perRequestTokenUsage, 
+                            elapsedTime: Date.now() - startTime 
+                        }]);
+                        setIsLoading(false);
+                        return;
+                    }
 
                     if (route.mode.startsWith('DEEP_ANALYSIS') && appSettings.enableDeepAnalysisV1) {
                         const { runDeepAnalysis } = await import('../agents/deep_analysis');
@@ -517,7 +606,7 @@ export const useChat = ({
             setIsLoading(false);
             setAbortController(null);
         }
-    }, [isLoading, appSettings, coordinator, vectorStore, queryEmbeddingResolver, rerankPromiseResolver, apiKeys, selectedProvider, selectedModel, setIsLoading, setChatHistory, getSystemPrompt, waitForSummaries, files, setTokenUsage, setAbortController]);
+    }, [isLoading, appSettings, coordinator, vectorStore, queryEmbeddingResolver, rerankPromiseResolver, apiKeys, selectedProvider, selectedModel, setIsLoading, setChatHistory, getSystemPrompt, waitForSummaries, files, setTokenUsage, setAbortController, caseFileState, setCaseFileState]);
 
     const handleRedo = useCallback(async (index: number) => {
         const messageToRedo = chatHistory[index];
@@ -635,6 +724,7 @@ export const useChat = ({
         handleUpdateMessage: updateMessage,
         handleTruncateHistory: truncateHistory,
         pendingQuery, setPendingQuery,
-        initialChatHistory
+        initialChatHistory,
+        caseFileState, setCaseFileState
     };
 };

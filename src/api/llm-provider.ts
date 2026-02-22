@@ -1,12 +1,17 @@
-import { GoogleGenerativeAI, ChatSession, Content } from '@google/generative-ai'
+import { GoogleGenerativeAI, ChatSession, Content, SchemaType } from '@google/generative-ai'
 import { ChatMessage, Model } from '../types';
 
+export { SchemaType };
 export interface Tool {
   type: 'function';
   function: {
     name: string;
     description: string;
-    parameters: Record<string, unknown>;
+    parameters: {
+      type: SchemaType;
+      properties: any;
+      required?: string[];
+    };
   };
 }
 

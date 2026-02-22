@@ -56,7 +56,7 @@ export type Claim = {
 export async function runDeepAnalysis(opts: {
   query: string;
   history: ChatMessage[];
-  vectorStore: VectorStore;
+  vectorStore: VectorStore | null;
   model: Model;
   apiKey: string | undefined;
   settings: AppSettings;
@@ -122,7 +122,7 @@ export async function runDeepAnalysis(opts: {
   // 1) Quick horizon scan via pre-retrieval
   const qEmb = await embedQuery(query);
   const initialK = Math.min(30, Math.max(10, Math.floor((settings.numInitialCandidates || 20) * 1.5)));
-  const pre = vectorStore.search(qEmb, initialK);
+  const pre = vectorStore ? (vectorStore.search(qEmb, initialK) || []) : [];
 
   // 2) Planner (simple baseline plan)
   const plannerPrompt = `You are a planning agent. Given the user's query and the type of content available, propose a set of sections (3-8) to cover the topic thoroughly. Output JSON with {"sections":[{"name":"...","objective":"...","maxBullets":N}],"targetWordCount":number}. Query: ${query}`;
@@ -219,121 +219,123 @@ export async function runDeepAnalysis(opts: {
   // Narrative Sampler: sample 1–2 paragraphs per chapter/window to build a narrative skeleton
   const narrativeClaims: Claim[] = [];
   try {
-    const MAX_DOCS = 2;
-    const PER_CHAPTER_SAMPLES = 2;
-    const MAX_TOTAL_SAMPLES = 24;
-    const samples: { id: string; start: number; end: number; score: number }[] = [];
+    if (vectorStore) {
+      const MAX_DOCS = 2;
+      const PER_CHAPTER_SAMPLES = 2;
+      const MAX_TOTAL_SAMPLES = 24;
+      const samples: { id: string; start: number; end: number; score: number }[] = [];
 
-    // Helper: get text segment from parent chunks
-    const getTextSegment = (docId: string, start: number, end: number): string => {
-      const parents = opts.vectorStore.getParentChunks(docId) || [];
-      if (!parents.length) return '';
-      let out = '';
-      for (const pc of parents) {
-        const oStart = Math.max(start, pc.start);
-        const oEnd = Math.min(end, pc.end);
-        if (oStart < oEnd) {
-          const ls = oStart - pc.start;
-          const le = oEnd - pc.start;
-          out += pc.text.slice(ls, le) + '\n';
+      // Helper: get text segment from parent chunks
+      const getTextSegment = (docId: string, start: number, end: number): string => {
+        const parents = vectorStore.getParentChunks(docId) || [];
+        if (!parents.length) return '';
+        let out = '';
+        for (const pc of parents) {
+          const oStart = Math.max(start, pc.start);
+          const oEnd = Math.min(end, pc.end);
+          if (oStart < oEnd) {
+            const ls = oStart - pc.start;
+            const le = oEnd - pc.start;
+            out += pc.text.slice(ls, le) + '\n';
+          }
         }
-      }
-      return out.trim();
-    };
+        return out.trim();
+      };
 
-    // Build doc order from pre-retrieval results (unique by id)
-    const seenDoc = new Set<string>();
-    const preDocOrder: string[] = [];
-    for (const r of pre) { if (!seenDoc.has(r.id)) { seenDoc.add(r.id); preDocOrder.push(r.id); } }
+      // Build doc order from pre-retrieval results (unique by id)
+      const seenDoc = new Set<string>();
+      const preDocOrder: string[] = [];
+      for (const r of pre) { if (!seenDoc.has(r.id)) { seenDoc.add(r.id); preDocOrder.push(r.id); } }
 
-    const qEmbedding = qEmb;
-    const entityCandidates = Array.from(new Set((query.match(/\b([Z][A-Za-zÀ-ÖØ-öø-ÿ'-]+(?:\s+[A-Z][A-Za-zÀ-ÖØ-öø-ÿ'-]+)*)\b/g) || []).map(s => s.trim().toLowerCase())));
+      const qEmbedding = qEmb;
+      const entityCandidates = Array.from(new Set((query.match(/\b([Z][A-Za-zÀ-ÖØ-öø-ÿ'-]+(?:\s+[A-Z][A-Za-zÀ-ÖØ-öø-ÿ'-]+)*)\b/g) || []).map(s => s.trim().toLowerCase())));
 
-    for (const docId of preDocOrder.slice(0, MAX_DOCS)) {
-      const structure = opts.vectorStore.getStructure ? opts.vectorStore.getStructure(docId) : undefined;
-      if (!structure) continue;
-      const chapters = structure.chapters || [];
-      const paragraphs = structure.paragraphs || [];
-      if (opts.settings.isLoggingEnabled) console.log(`[NarrativeSampler] Doc ${docId}: chapters=${chapters.length}, paragraphs=${paragraphs.length}`);
+      for (const docId of preDocOrder.slice(0, MAX_DOCS)) {
+        const structure = vectorStore.getStructure ? vectorStore.getStructure(docId) : undefined;
+        if (!structure) continue;
+        const chapters = structure.chapters || [];
+        const paragraphs = structure.paragraphs || [];
+        if (opts.settings.isLoggingEnabled) console.log(`[NarrativeSampler] Doc ${docId}: chapters=${chapters.length}, paragraphs=${paragraphs.length}`);
 
-      // Precompute doc-local retrieval for scoring
-      const localResults = opts.vectorStore.search(qEmbedding, 80, docId) || [];
+        // Precompute doc-local retrieval for scoring
+        const localResults = vectorStore.search(qEmbedding, 80, docId) || [];
 
-      let pickedCount = 0;
-      for (const ch of chapters) {
-        // Find paragraphs within chapter bounds
-        const paras = paragraphs.filter(p => p.start >= ch.start && p.end <= ch.end);
-        if (paras.length === 0) continue;
-        // Score each paragraph by local similarity and entity proximity
-        const scored = paras.map(p => {
-          let sim = 0;
-          for (const lr of localResults) {
-            const ov = !(lr.end <= p.start || lr.start >= p.end);
-            if (ov) { sim = Math.max(sim, lr.similarity); }
-          }
-          // Entity bonus
-          let nearest = Infinity;
-          for (const e of entityCandidates) {
-            const mentions = typeof opts.vectorStore.getEntityMentions === 'function' ? opts.vectorStore.getEntityMentions(docId, e) : [];
-            for (const m of mentions) {
-              const dist = Math.min(Math.abs(m - p.start), Math.abs(m - p.end));
-              if (dist < nearest) nearest = dist;
+        let pickedCount = 0;
+        for (const ch of chapters) {
+          // Find paragraphs within chapter bounds
+          const paras = paragraphs.filter(p => p.start >= ch.start && p.end <= ch.end);
+          if (paras.length === 0) continue;
+          // Score each paragraph by local similarity and entity proximity
+          const scored = paras.map(p => {
+            let sim = 0;
+            for (const lr of localResults) {
+              const ov = !(lr.end <= p.start || lr.start >= p.end);
+              if (ov) { sim = Math.max(sim, lr.similarity); }
             }
-          }
-          const bonus = Number.isFinite(nearest) ? Math.max(0, 1 - Math.min(nearest, 4000) / 4000) * 0.1 : 0;
-          return { para: p, score: sim + bonus };
-        }).sort((a,b)=>b.score - a.score);
-
-        // MMR within chapter
-        const lambda = 0.7;
-        const windowSize = Math.max(1000, Math.floor((ch.end - ch.start) / 6));
-        const chosen: { para: { start: number; end: number }; score: number }[] = [];
-        const cand = scored.slice();
-        while (chosen.length < PER_CHAPTER_SAMPLES && cand.length > 0) {
-          let bestI = 0; let bestS = -Infinity;
-          for (let i = 0; i < cand.length; i++) {
-            const c = cand[i];
-            const rel = c.score;
-            let red = 0;
-            for (const sel of chosen) {
-              const dist = Math.abs(((sel.para.start + sel.para.end) / 2) - ((c.para.start + c.para.end) / 2));
-              red = Math.max(red, Math.max(0, (windowSize - dist) / windowSize));
+            // Entity bonus
+            let nearest = Infinity;
+            for (const e of entityCandidates) {
+              const mentions = typeof vectorStore.getEntityMentions === 'function' ? vectorStore.getEntityMentions(docId, e) : [];
+              for (const m of mentions) {
+                const dist = Math.min(Math.abs(m - p.start), Math.abs(m - p.end));
+                if (dist < nearest) nearest = dist;
+              }
             }
-            const s = lambda * rel - (1 - lambda) * red;
-            if (s > bestS) { bestS = s; bestI = i; }
-          }
-          chosen.push(cand.splice(bestI, 1)[0]);
-        }
+            const bonus = Number.isFinite(nearest) ? Math.max(0, 1 - Math.min(nearest, 4000) / 4000) * 0.1 : 0;
+            return { para: p, score: sim + bonus };
+          }).sort((a,b)=>b.score - a.score);
 
-        for (const sel of chosen) {
-          samples.push({ id: docId, start: sel.para.start, end: sel.para.end, score: sel.score });
-          pickedCount++;
+          // MMR within chapter
+          const lambda = 0.7;
+          const windowSize = Math.max(1000, Math.floor((ch.end - ch.start) / 6));
+          const chosen: { para: { start: number; end: number }; score: number }[] = [];
+          const cand = scored.slice();
+          while (chosen.length < PER_CHAPTER_SAMPLES && cand.length > 0) {
+            let bestI = 0; let bestS = -Infinity;
+            for (let i = 0; i < cand.length; i++) {
+              const c = cand[i];
+              const rel = c.score;
+              let red = 0;
+              for (const sel of chosen) {
+                const dist = Math.abs(((sel.para.start + sel.para.end) / 2) - ((c.para.start + c.para.end) / 2));
+                red = Math.max(red, Math.max(0, (windowSize - dist) / windowSize));
+              }
+              const s = lambda * rel - (1 - lambda) * red;
+              if (s > bestS) { bestS = s; bestI = i; }
+            }
+            chosen.push(cand.splice(bestI, 1)[0]);
+          }
+
+          for (const sel of chosen) {
+            samples.push({ id: docId, start: sel.para.start, end: sel.para.end, score: sel.score });
+            pickedCount++;
+            if (samples.length >= MAX_TOTAL_SAMPLES) break;
+          }
           if (samples.length >= MAX_TOTAL_SAMPLES) break;
         }
+        if (opts.settings.isLoggingEnabled) console.log(`[NarrativeSampler] Doc ${docId}: selected ${pickedCount} paragraph samples.`);
         if (samples.length >= MAX_TOTAL_SAMPLES) break;
       }
-      if (opts.settings.isLoggingEnabled) console.log(`[NarrativeSampler] Doc ${docId}: selected ${pickedCount} paragraph samples.`);
-      if (samples.length >= MAX_TOTAL_SAMPLES) break;
-    }
 
-    // Extract claims from samples
-    for (const s of samples) {
-      const paragraphText = getTextSegment(s.id, s.start, s.end);
-      if (!paragraphText) continue;
-      const context = `[#1] id:${s.id} start:${s.start} end:${s.end}\n${paragraphText}`;
-      const claimsPrompt = `Extract structured, persona-level claims from the paragraph context.\nReturn strict JSON array of claim objects: [{\n  "text": string,\n  "type": string,\n  "entities": string[],\n  "confidence": number,\n  "evidence": [{ "id": string, "start": number, "end": number, "quote"?: string }],\n  "negativeEvidence"?: [{ "id": string, "start": number, "end": number, "quote"?: string }],\n  "contradicts"?: string[],\n  "uncertaintyReason"?: string\n}]\nRules:\n- Cite EXACTLY with [Source: id] using the provided id/start/end. DO NOT use 【】 or other brackets.\n- Prefer persona-level generalizations over micro-events.\n- Include 1 short quote only if anchoring a major claim.\nContext:\n${context}`;
-      try {
-        const resp = await llm(claimsPrompt, 'narrative_claims_extraction');
-        const json = (resp as { text: string }).text.replace(/^```json\n?|```$/g, '').trim();
-        const parsed = JSON.parse(json) as Claim[];
-        if (Array.isArray(parsed)) narrativeClaims.push(...parsed);
-      } catch {
-        // ignore
+      // Extract claims from samples
+      for (const s of samples) {
+        const paragraphText = getTextSegment(s.id, s.start, s.end);
+        if (!paragraphText) continue;
+        const context = `[#1] id:${s.id} start:${s.start} end:${s.end}\n${paragraphText}`;
+        const claimsPrompt = `Extract structured, persona-level claims from the paragraph context.\nReturn strict JSON array of claim objects: [{\n  "text": string,\n  "type": string,\n  "entities": string[],\n  "confidence": number,\n  "evidence": [{ "id": string, "start": number, "end": number, "quote"?: string }],\n  "negativeEvidence"?: [{ "id": string, "start": number, "end": number, "quote"?: string }],\n  "contradicts"?: string[],\n  "uncertaintyReason"?: string\n}]\nRules:\n- Cite EXACTLY with [Source: id] using the provided id/start/end. DO NOT use 【】 or other brackets.\n- Prefer persona-level generalizations over micro-events.\n- Include 1 short quote only if anchoring a major claim.\nContext:\n${context}`;
+        try {
+          const resp = await llm(claimsPrompt, 'narrative_claims_extraction');
+          const json = (resp as { text: string }).text.replace(/^```json\n?|```$/g, '').trim();
+          const parsed = JSON.parse(json) as Claim[];
+          if (Array.isArray(parsed)) narrativeClaims.push(...parsed);
+        } catch {
+          // ignore
+        }
       }
     }
 
     if (narrativeClaims.length && opts.settings.isLoggingEnabled) {
-      console.log(`[NarrativeSampler] Extracted ${narrativeClaims.length} claims from ${samples.length} paragraph samples.`);
+      console.log(`[NarrativeSampler] Extracted ${narrativeClaims.length} claims from narrative samples.`);
     }
   } catch (e) {
     if (opts.settings.isLoggingEnabled) console.warn('[NarrativeSampler] Failed:', e);
@@ -343,6 +345,8 @@ export async function runDeepAnalysis(opts: {
   const perSectionResults: Record<string, SearchResult[]> = {};
   
   const processSection = async (sec: PlanSection): Promise<{ name: string; results: SearchResult[] }> => {
+    if (!vectorStore) return { name: sec.name, results: [] };
+    
     // Generate 2-3 targeted sub-queries for this section
     let subQs: string[] = [];
     try {
@@ -360,7 +364,7 @@ export async function runDeepAnalysis(opts: {
     const k = Math.min(50, Math.max(15, (settings.numInitialCandidates || 20)));
     const searchPromises = subQs.map(async (sq) => {
       const emb = await embedSafe(sq); // serialize due to single resolver design
-      return opts.vectorStore.search(emb, k, undefined, { includeEmbeddings: true }) || [];
+      return vectorStore.search(emb, k, undefined, { includeEmbeddings: true }) || [];
     });
     const searchResults = await Promise.all(searchPromises);
     const merged: (SearchResult & { embedding: number[] })[] = searchResults.flat() as (SearchResult & { embedding: number[] })[];
@@ -381,7 +385,7 @@ export async function runDeepAnalysis(opts: {
       }
     }
 
-    // Entity-aware boost: if the query contains capitalized entities, soft-boost chunks near their mentions
+    // Entity-aware boost
     try {
       const entityCandidates = Array.from(new Set((query.match(/\b([A-Z][A-Za-zÀ-ÖØ-öø-ÿ'-]+(?:\s+[A-Z][A-Za-zÀ-ÖØ-öø-ÿ'-]+)*)\b/g) || []).map(s => s.trim().toLowerCase())));
       if (entityCandidates.length > 0 && typeof vectorStore.getEntityMentions === 'function') {
@@ -403,8 +407,6 @@ export async function runDeepAnalysis(opts: {
     }
 
     // Intelligent selection via native VectorStore diversification
-    // We use a lower lambda (0.4) for Deep Analysis to prioritize finding "different" evidence 
-    // across the document over just the most similar chunks.
     const target = Math.min(10, sec.maxBullets * 2);
     const picked = vectorStore.diversify(ranked, target, { lambda: 0.4, spanWeight: 0.2 });
 
@@ -441,9 +443,17 @@ export async function runDeepAnalysis(opts: {
   const allClaims: Claim[] = [];
   const extractClaimsForSection = async (sec: PlanSection): Promise<Claim[]> => {
     const picked = perSectionResults[sec.name] || [];
-    if (picked.length === 0) return [] as Claim[];
-    const context = picked.map((r, i) => `[#${i + 1}] id:${r.id} start:${r.start} end:${r.end}\n${r.chunk}`).join('\n\n');
-    const claimsPrompt = `Extract structured, persona-level claims relevant to dimension "${sec.name}" from the context.\nReturn strict JSON array of claim objects: [{\n  "text": string,\n  "type": string, // e.g., trait | relationship | arc | theme | event\n  "entities": string[],\n  "confidence": number, // 0..1\n  "evidence": [{ "id": string, "start": number, "end": number, "quote"?: string }],\n  "negativeEvidence"?: [{ "id": string, "start": number, "end": number, "quote"?: string }],\n  "contradicts"?: string[],\n  "uncertaintyReason"?: string\n}]\nRules:\n- Only cite evidence EXACTLY with [Source: id] using the explicit id/start/end from the numbered context. DO NOT use 【】 or other brackets.\n- Prefer persona-level generalizations over one-off micro-events.\n- Include 1 short quote only when it anchors a major claim.\n- If confidence < 0.6, provide an uncertaintyReason.\n- If evidence suggests a contradiction, include negativeEvidence and contradicts.\nContext:\n${context}`;
+    // If no vector store, we might still want to extract from visible history?
+    let context = picked.map((r, i) => `[#${i + 1}] id:${r.id} start:${r.start} end:${r.end}\n${r.chunk}`).join('\n\n');
+    
+    if (picked.length === 0) {
+        // Fallback: extract from history for this dimension
+        const visibleHistory = opts.history.filter(m => !m.isInternal && m.role !== 'tool');
+        context = visibleHistory.slice(-10).map(m => `${m.role.toUpperCase()}: ${m.content}`).join('\n\n');
+        if (!context) return [] as Claim[];
+    }
+
+    const claimsPrompt = `Extract structured, persona-level claims relevant to dimension "${sec.name}" from the context.\nReturn strict JSON array of claim objects: [{\n  "text": string,\n  "type": string, // e.g., trait | relationship | arc | theme | event\n  "entities": string[],\n  "confidence": number, // 0..1\n  "evidence": [{ "id": string, "start": number, "end": number, "quote"?: string }],\n  "negativeEvidence"?: [{ "id": string, "start": number, "end": number, "quote"?: string }],\n  "contradicts"?: string[],\n  "uncertaintyReason"?: string\n}]\nRules:\n- Only cite evidence EXACTLY with [Source: id] if IDs are available. Otherwise omit evidence.\n- Prefer persona-level generalizations over one-off micro-events.\n- Include 1 short quote only when it anchors a major claim.\n- If confidence < 0.6, provide an uncertaintyReason.\nContext:\n${context}`;
     try {
       const resp = await llm(claimsPrompt, 'claims_extraction');
       const json = (resp as { text: string }).text.replace(/^```json\n?|```$/g, '').trim();
@@ -466,9 +476,9 @@ export async function runDeepAnalysis(opts: {
   // 5) Multi-iteration refinement with budgets
   const summarizeClaims = (claims: Claim[]) => claims.slice(0, 30).map((c, i) => `(${i + 1}) ${c.text} [ev: ${c.evidence.map(e => e.id).join(', ')}]`).join('\n');
   const startTime = Date.now();
-  const MAX_ITERATIONS = 2;
+  const MAX_ITERATIONS = 1; // Lower for Case File to avoid infinite search loops
   const MAX_ELAPSED_MS = 120000; // 2 minutes
-  const MAX_LLM_CALLS = 40; // conservative cap per job
+  const MAX_LLM_CALLS = 40; 
 
   let iterations = 0;
   let sufficient = false;
@@ -477,39 +487,25 @@ export async function runDeepAnalysis(opts: {
   const evaluateSufficiency = async () => {
     const specTxt = JSON.stringify(answerSpec);
     const claimsTxt = summarizeClaims(allClaims);
-    const evalPrompt = `You are an evaluator. Judge whether current claims satisfy the Answer Spec.\nReturn strict JSON with keys: {\n  "sufficient": boolean,\n  "missing_dimensions": string[],\n  "issues": string[], // e.g., insufficient span coverage, micro-event-heavy, contradictions present\n  "needs_gaps_section": boolean,\n  "needs_contradictions_review": boolean,\n  "proposed_questions": string[] // up to 4 targeted questions to explore relations (X->Y), contradictions, or missing dimensions\n}\nAnswer Spec:\n${specTxt}\nCurrent Claims (sample):\n${claimsTxt}`;
+    const evalPrompt = `You are an evaluator. Judge whether current claims satisfy the Answer Spec.\nReturn strict JSON with keys: {\n  "sufficient": boolean,\n  "missing_dimensions": string[],\n  "issues": string[],\n  "needs_gaps_section": boolean,\n  "needs_contradictions_review": boolean,\n  "proposed_questions": string[]\n}\nAnswer Spec:\n${specTxt}\nCurrent Claims (sample):\n${claimsTxt}`;
     const r = await llm(evalPrompt, 'sufficiency_evaluation');
     const dec = JSON.parse((r as { text: string }).text.replace(/^```json\n?|```$/g, '').trim()) as { sufficient: boolean; missing_dimensions: string[]; proposed_questions: string[]; issues?: string[]; needs_gaps_section?: boolean; needs_contradictions_review?: boolean };
     return dec;
   };
 
-  while (iterations < MAX_ITERATIONS && (Date.now() - startTime) < MAX_ELAPSED_MS && llmCallCount < MAX_LLM_CALLS) {
+  while (vectorStore && iterations < MAX_ITERATIONS && (Date.now() - startTime) < MAX_ELAPSED_MS && llmCallCount < MAX_LLM_CALLS) {
     let dec: { sufficient: boolean; missing_dimensions: string[]; proposed_questions: string[] };
     try {
       dec = await evaluateSufficiency();
     } catch {
-      break; // if evaluator fails, stop iterating
+      break; 
     }
     lastDecision = dec;
     if (dec.sufficient) { sufficient = true; break; }
     if (!dec.proposed_questions || dec.proposed_questions.length === 0) break;
 
-    // Enhanced VoI scoring: prioritize questions that address missing dimensions and known entities
-    const knownEntities = new Set<string>();
-    for (const c of allClaims) (c.entities || []).forEach(e => knownEntities.add(e.toLowerCase()));
-    const followUpsRaw = dec.proposed_questions.slice(0, 6);
-    const scored = followUpsRaw.map(q => {
-      const ql = q.toLowerCase();
-      let dimScore = 0;
-      for (const d of (dec.missing_dimensions || [])) if (ql.includes(String(d).toLowerCase())) dimScore += 1;
-      let entScore = 0;
-      knownEntities.forEach(e => { if (e && ql.includes(e)) entScore += 1; });
-      const score = 2*dimScore + 1*entScore;
-      return { q, score };
-    }).sort((a,b)=>b.score - a.score).slice(0,3);
-    const followUps = scored.map(s => s.q);
+    const followUps = dec.proposed_questions.slice(0, 3);
 
-    // Execute follow-ups in parallel (LLM), coordinator ops serialized inside helpers
     const followUpTasks = followUps.map(async (q) => {
       try {
         const emb = await embedSafe(q);
@@ -521,7 +517,7 @@ export async function runDeepAnalysis(opts: {
         }
         const picked = ranked.slice(0, 10);
         const ctx = picked.map((r, i) => `[#${i + 1}] id:${r.id} start:${r.start} end:${r.end}\n${r.chunk}`).join('\n\n');
-        const morePrompt = `Extract additional claims relevant to: "${q}". Return strict JSON array of claim objects as previously specified.\nContext:\n${ctx}`;
+        const morePrompt = `Extract additional claims relevant to: "${q}". Return strict JSON array.\nContext:\n${ctx}`;
         const more = await llm(morePrompt, 'followup_claims_extraction');
         const json = (more as { text: string }).text.replace(/^```json\n?|```$/g, '').trim();
         const parsed = JSON.parse(json) as Claim[];
@@ -536,7 +532,7 @@ export async function runDeepAnalysis(opts: {
     iterations += 1;
   }
 
-  // 7) Compose final answer from claims and Answer Spec; include evaluation context and citation index
+  // 7) Compose final answer
   const claimsForComposer = JSON.stringify(allClaims.slice(0, 120));
   const citationSheet = uniqueDocIds.map((id, i) => `[#${i + 1}] id:${id}`).join('\n');
   const evalContext = JSON.stringify({
@@ -545,30 +541,18 @@ export async function runDeepAnalysis(opts: {
     needs_gaps_section: lastDecision?.needs_gaps_section || (!sufficient && iterations >= 1),
     needs_contradictions_review: lastDecision?.needs_contradictions_review || false,
   });
-  const composerPrompt = `Compose an organized answer that satisfies the Answer Spec.\nRules:\n- Use the induced dimensions to structure content, but adapt names naturally.\n- Prefer persona-level synthesis; avoid listing micro-events.\n- Use EXACTLY [Source: id] citations only (ids are in the citation sheet). Do not cite by number or use other brackets like 【】.\n- Include 1–3 short quotes only where they anchor important claims.\n- Keep language/style consistent with the Answer Spec.\n- If Evaluation Context indicates gaps, include a 'Gaps & Open Questions' section listing unresolved items.\n- If Evaluation Context indicates contradictions, include a 'Contradictions & Resolutions' section reconciling or flagging uncertainties.\nAnswer Spec:\n${JSON.stringify(answerSpec)}\nEvaluation Context:\n${evalContext}\nCitation Sheet (ids):\n${citationSheet}\nClaims (JSON):\n${claimsForComposer}\nUser Query: ${query}`;
+  const composerPrompt = `Compose an organized Case File that satisfies the Answer Spec.\nRules:\n- Use the induced dimensions to structure content.\n- Prefer persona-level synthesis.\n- Use EXACTLY [Source: id] citations ONLY for document evidence. Do NOT cite history as a Source ID.\n- Keep language/style professional and AAA-grade.\nAnswer Spec:\n${JSON.stringify(answerSpec)}\nEvaluation Context:\n${evalContext}\nCitation Sheet (ids):\n${citationSheet}\nClaims (JSON):\n${claimsForComposer}\nVisible History Context:\n${opts.history.slice(-10).map(m => `${m.role}: ${m.content}`).join('\n')}\nUser Query: ${query}`;
 
   const compResp = await llm(composerPrompt, 'final_composer');
   let compText = (compResp as { text: string }).text;
-  // Safety: strip any stray numeric [Source: N] to ids if they leaked (map by index order above)
   compText = compText.replace(/\[Source:\s*(\d+)\]/g, (_: string, n: string) => {
     const idx = parseInt(n, 10) - 1; const id = uniqueDocIds[idx]; return id ? `[Source: ${id}]` : `[Source: ${n}]`;
   });
 
-  // Clean up subscriptions and recovery state
   try { unsubscribeModelUpdate(); } catch {
-    // ignore
+    // Ignore unsubscription errors if the listener was already removed or never set
   }
   finalizeRecovery(recoveryId);
-
-  // Logging (final level and basic stats)
-  try {
-    if (opts.settings.isLoggingEnabled) {
-      const docCount = new Set(unionResults.map(r => r.id)).size;
-      console.info(`[Deep Analysis] Final Level: L${opts.level === 3 || iterations > 0 ? 3 : 2} | Evidence: ${unionResults.length} chunks from ${docCount} docs | Claims: ${allClaims.length}.`);
-    }
-  } catch {
-    // ignore
-  }
 
   return { plan, sections: [], finalText: compText, usedResults: unionResults, coverage, llmTokens: { promptTokens: totalPrompt, completionTokens: totalCompletion } };
 }

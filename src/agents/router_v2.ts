@@ -6,12 +6,13 @@ import { AppSettings } from '../config';
 import { ChatMessage, SearchResult } from '../types';
 import { generateContent } from '../api/llm-provider';
 import { Model } from '../types';
+import { filterVisibleHistory } from '../utils/chatUtils';
 
 export type RouteDecision = {
-  mode: 'CHAT' | 'RAG' | 'DEEP_ANALYSIS_L1' | 'DEEP_ANALYSIS_L2' | 'DEEP_ANALYSIS_L3';
+  mode: 'CHAT' | 'RAG' | 'DEEP_ANALYSIS_L1' | 'DEEP_ANALYSIS_L2' | 'DEEP_ANALYSIS_L3' | 'CASE_FILE';
   reason: string;
   preResults?: SearchResult[];
-  complexity?: 'factoid' | 'overview' | 'synthesis' | 'comparison' | 'reasoning' | 'unknown';
+  complexity?: 'factoid' | 'overview' | 'synthesis' | 'comparison' | 'reasoning' | 'case_file' | 'unknown';
 };
 
 export async function decideRouteV2(opts: {
@@ -58,24 +59,27 @@ export async function decideRouteV2(opts: {
   const docDiversity = docSet.size;
 
   // Small classifier to determine complexity (general-purpose, domain-agnostic)
-  let complexity: 'factoid' | 'overview' | 'synthesis' | 'comparison' | 'reasoning' | 'unknown' = 'unknown';
+  let complexity: 'factoid' | 'overview' | 'synthesis' | 'comparison' | 'reasoning' | 'case_file' | 'unknown' = 'unknown';
   try {
-    const historyText = history.slice(-5).map(m => `${m.role}: ${m.content}`).join('\n');
+    const visibleHistory = filterVisibleHistory(history);
+    const historyText = visibleHistory.slice(-5).map(m => `${m.role}: ${m.content}`).join('\n');
     const cls = await generateContent(model, apiKey, [
       { role: 'user', content: `Classify the task type for this user query.
 Context History:
 ${historyText}
 
 Query: ${query}
-Categories: factoid, overview, synthesis, comparison, reasoning
+Categories: factoid, overview, synthesis, comparison, reasoning, case_file
+Note: case_file is for requests to generate an extensive, structured report, document, or case study based on the discussion.
 Return only one word.` },
     ]);
     if (onTokenUsage) {
       onTokenUsage({ promptTokens: cls.usage.promptTokens, completionTokens: cls.usage.completionTokens });
     }
     const t = (cls.text || '').trim().toLowerCase();
-    if (['factoid', 'overview', 'synthesis', 'comparison', 'reasoning'].includes(t)) {
-      complexity = t as 'factoid' | 'overview' | 'synthesis' | 'comparison' | 'reasoning';
+    const categories = ['factoid', 'overview', 'synthesis', 'comparison', 'reasoning', 'case_file'];
+    if (categories.includes(t)) {
+      complexity = t as 'factoid' | 'overview' | 'synthesis' | 'comparison' | 'reasoning' | 'case_file';
     }
   } catch {
     // ignore; keep unknown
@@ -84,6 +88,10 @@ Return only one word.` },
   // Evidence-aware rules
   const tauLow = settings.relevanceThreshold ?? 0.25;
   const goodEvidence = maxSim >= tauLow && docDiversity >= 1;
+
+  if (complexity === 'case_file') {
+    return { mode: 'CASE_FILE', reason: 'User requested an extensive report (Case File).', preResults, complexity };
+  }
 
   if (!goodEvidence) {
     // Lack of evidence; still allow user to proceed with RAG if they want

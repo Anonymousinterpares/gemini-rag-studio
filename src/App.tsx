@@ -54,7 +54,8 @@ export const App: FC = () => {
     stopGeneration,
     handleClearConversation, handleRemoveMessage,
     handleUpdateMessage, handleTruncateHistory,
-    initialChatHistory
+    initialChatHistory,
+    caseFileState, setCaseFileState
   } = useChat({
     coordinator, vectorStore, queryEmbeddingResolver, rerankPromiseResolver, setRerankProgress: () => { }, setActiveSource, setIsModalOpen
   });
@@ -88,6 +89,14 @@ export const App: FC = () => {
 
   const chatHistoryRef = useRef<HTMLDivElement>(null);
   const dropVideoRef = useRef<HTMLVideoElement>(null);
+  const chatInputRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (chatInputRef.current) {
+      chatInputRef.current.style.height = 'auto';
+      chatInputRef.current.style.height = `${chatInputRef.current.scrollHeight}px`;
+    }
+  }, [userInput]);
 
   const handleCopy = useCallback(async (idx: number) => {
     const text = getMessageTextContent(idx, chatHistoryRef);
@@ -277,7 +286,11 @@ export const App: FC = () => {
                 </div>
               </div>
             ))}
-            {isLoading && <div className='chat-message model'>Thinking...</div>}
+            {isLoading && (
+              <div className='chat-message model'>
+                {caseFileState.isAwaitingFeedback ? "Composing Case File... this may take a minute." : "Thinking..."}
+              </div>
+            )}
           </div>
         </div>
         <div className='chat-input-area'>
@@ -290,13 +303,26 @@ export const App: FC = () => {
             </div>
           )}
           <form className='chat-input-form' onSubmit={handleSubmit}>
-            <input
-              type='text'
+            <textarea
+              ref={chatInputRef}
               className='chat-input'
               value={userInput}
+              rows={1}
               onChange={(e) => setUserInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  if (userInput.trim() && !isLoading && activeJobCount === 0) {
+                    handleSubmit(e as any);
+                  }
+                }
+              }}
               disabled={isLoading || (files.length === 0 && !appSettings.isChatModeEnabled) || activeJobCount > 0}
-              placeholder={activeJobCount > 0 ? "Processing documents... please wait" : ""}
+              placeholder={
+                activeJobCount > 0 
+                  ? "Processing documents... please wait" 
+                  : (isLoading && caseFileState.isAwaitingFeedback ? "Building report..." : "")
+              }
             />
             {isLoading ? (
               <button type='button' className='button stop-button' onClick={stopGeneration}><Square size={16} /></button>
@@ -316,7 +342,33 @@ export const App: FC = () => {
               (In: {tokenUsage.promptTokens}, Out: {tokenUsage.completionTokens})
             </span>
           </div>
-          <div className='setting-row'><button onClick={() => setAppSettings(p => ({ ...p, isDeepAnalysisEnabled: !p.isDeepAnalysisEnabled }))} className={`toggle-button ${appSettings.isDeepAnalysisEnabled ? 'active' : ''}`}>Deep Analysis: {appSettings.isDeepAnalysisEnabled ? 'ON' : 'OFF'}</button></div>
+          <div className='setting-row'>
+            <button onClick={() => setAppSettings(p => ({ ...p, isDeepAnalysisEnabled: !p.isDeepAnalysisEnabled }))} className={`toggle-button ${appSettings.isDeepAnalysisEnabled ? 'active' : ''}`}>Deep Analysis: {appSettings.isDeepAnalysisEnabled ? 'ON' : 'OFF'}</button>
+            {caseFileState.isAwaitingFeedback ? (
+              <button 
+                onClick={() => setCaseFileState({ isAwaitingFeedback: false, metadata: undefined })} 
+                className="button secondary"
+                disabled={isLoading}
+                style={{ marginLeft: '10px', backgroundColor: isLoading ? '#440000' : '#8b0000', opacity: isLoading ? 0.6 : 1 }}
+              >
+                {isLoading ? "Generating Report..." : "Cancel Case File"}
+              </button>
+            ) : (
+              <button 
+                onClick={() => {
+                  const fakeEvent = { preventDefault: () => {} } as React.FormEvent;
+                  setUserInput("Generate a comprehensive Case File based on our conversation.");
+                  setTimeout(() => handleSubmit(fakeEvent), 0);
+                }} 
+                className="button secondary"
+                disabled={isLoading || (files.length === 0 && !appSettings.isChatModeEnabled)}
+                style={{ marginLeft: '10px' }}
+                title="Compose an extensive report based on the visible chat context"
+              >
+                Build Case File
+              </button>
+            )}
+          </div>
         </div>
       </div>
       <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)}>

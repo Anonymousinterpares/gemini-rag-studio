@@ -240,8 +240,8 @@ button:focus-visible {
 .app-container {
   display: flex;
   height: 100vh;
-  width: 100vw;
-  overflow: hidden;
+  min-width: 1000px;
+  overflow: auto;
 }
 
 .panel {
@@ -696,6 +696,13 @@ button:focus-visible {
   font-family: inherit;
   background-color: var(--input-bg-color);
   color: var(--text-color);
+  resize: none;
+  overflow-y: auto;
+  overflow-x: hidden;
+  max-height: 9.5em;
+  line-height: 1.5;
+  height: auto;
+  min-height: 2.7em;
 }
 
 /* --- Doc Viewer --- */
