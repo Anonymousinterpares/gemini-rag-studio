@@ -541,3 +541,23 @@
 .resend-with-comments-btn:hover {
   background-color: var(--monster-secondary) !important;
 }
+
+.resend-with-comments-btn-mini {
+  background-color: var(--monster-primary) !important;
+  color: white !important;
+  font-size: 0.75rem !important;
+  padding: 0.2rem 0.4rem !important;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  border-radius: 4px;
+}
+
+.resend-with-comments-btn-mini:hover:not(:disabled) {
+  background-color: var(--monster-secondary) !important;
+}
+
+.resend-with-comments-btn-mini:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

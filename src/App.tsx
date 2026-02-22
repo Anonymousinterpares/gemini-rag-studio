@@ -494,6 +494,14 @@ export const App: FC = () => {
                                     <div className="comment-actions">
                                       <button onClick={() => handleEditComment(i, s.id, s.comment || '')} title="Edit"><Edit2 size={12} /></button>
                                       <button onClick={() => handleDeleteComment(i, s.id)} title="Delete"><Trash2 size={12} /></button>
+                                      <button 
+                                        className="button resend-with-comments-btn-mini" 
+                                        onClick={() => resendWithComments(i)}
+                                        title="Resend message with all comments"
+                                        disabled={isLoading}
+                                      >
+                                        <RefreshCw size={12} /> Resend
+                                      </button>
                                     </div>
                                   </>
                                 )}
