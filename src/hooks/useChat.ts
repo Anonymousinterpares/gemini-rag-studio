@@ -794,14 +794,17 @@ Or just tell me what specific aspects you'd like me to focus on.`;
         setAbortController(controller);
 
         try {
-            const systemPrompt = `You are editing your previous response based on user comments.
-CRITICAL: You MUST provide your edits using a structured DIFF format.
-For each section you want to change, provide the section ID and the new content.
-Format your response as a JSON array of objects: [{"sectionId": "sec-0", "newContent": "..."}, ...]
-Only include sections that need changes. Do not rewrite everything.
-If you believe a full rewrite is absolutely necessary, respond with exactly: "FULL_REWRITE_REQUEST: <reason>"`;
+            const systemPrompt = `You are editing your previous response based on specific user comments.
+CRITICAL EDITING PROTOCOL:
+1. FOCUS ONLY on the commented section(s). 
+2. DO NOT move information from other sections into the edited section unless explicitly requested.
+3. PRESERVE the original structure and context of the message. 
+4. SURGICAL UPDATES: Only change what is necessary to address the comment.
+5. JSON FORMAT: You MUST provide your edits using a structured JSON DIFF format: [{"sectionId": "sec-N", "newContent": "..."}]
+6. DO NOT include sections that don't need changes.
+7. REWRITE REQUEST: If the comment requires a fundamental restructuring that makes the section-based DIFF approach impossible, respond with: "FULL_REWRITE_REQUEST: <reason>"`;
 
-            const userPrompt = `I have some remarks on your last response:\n${comments}\n\nPlease apply these changes using the requested JSON diff format.`;
+            const userPrompt = `I have specific remarks on parts of your last response:\n${comments}\n\nPlease apply these surgical changes using the requested JSON diff format. Focus only on the content within those specific sections.`;
 
             // We send the history up to that message, then our special request
             const historyToMessage = chatHistory.slice(0, index + 1);

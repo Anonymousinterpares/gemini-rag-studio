@@ -406,9 +406,16 @@
 
 .message-section {
   position: relative;
-  transition: background-color 0.2s;
-  padding: 0.25rem 0.5rem;
-  border-radius: 4px;
+  transition: all 0.2s ease-in-out;
+  padding: 0.5rem 0.75rem;
+  border-radius: 8px;
+  border: 1px solid transparent;
+}
+
+.message-section-wrapper:hover .message-section {
+  background-color: rgba(255, 255, 255, 0.03);
+  border-color: rgba(255, 255, 255, 0.1);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
 }
 
 .message-section.highlight-pending {
