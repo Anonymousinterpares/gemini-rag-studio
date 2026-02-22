@@ -417,52 +417,108 @@ export const App: FC = () => {
                             return (
                               <div className='message-markup'>
                                 {msg.pendingEdits?.some(e => e.sectionId === 'REWRITE') ? (
-                                  <div className="message-section highlight-pending">
-                                    <div style={{ fontWeight: 'bold', borderBottom: '1px solid var(--border-color)', marginBottom: '0.5rem', paddingBottom: '0.25rem' }}>FULL REWRITE REQUEST:</div>
-                                    <p>{msg.pendingEdits.find(e => e.sectionId === 'REWRITE')?.newContent}</p>
-                                    <div className="edit-actions-floating" style={{ marginTop: '1rem' }}>
-                                      <button className="button" onClick={() => {
-                                        // Special case for full rewrite - tell LLM to go ahead
-                                        handleUpdateMessage(i, { pendingEdits: [] });
-                                        submitQuery("Please perform the full rewrite as you suggested.", chatHistory.slice(0, i + 1));
-                                      }}>Confirm Rewrite</button>
-                                      <button className="button secondary" onClick={() => handleRejectAllEdits(i)}>Reject Rewrite</button>
+                                  <div className="message-section-row">
+                                    <div className="message-main-content">
+                                      <div className="message-section highlight-pending">
+                                        <div style={{ fontWeight: 'bold', borderBottom: '1px solid var(--border-color)', marginBottom: '0.5rem', paddingBottom: '0.25rem' }}>FULL REWRITE REQUEST:</div>
+                                        <p>{msg.pendingEdits.find(e => e.sectionId === 'REWRITE')?.newContent}</p>
+                                        <div className="edit-actions-floating" style={{ marginTop: '1rem' }}>
+                                          <button className="button" onClick={() => {
+                                            handleUpdateMessage(i, { pendingEdits: [] });
+                                            submitQuery("Please perform the full rewrite as you suggested.", chatHistory.slice(0, i + 1));
+                                          }}>Confirm Rewrite</button>
+                                          <button className="button secondary" onClick={() => handleRejectAllEdits(i)}>Reject Rewrite</button>
+                                        </div>
+                                      </div>
                                     </div>
+                                    <div className="section-comment-area" />
                                   </div>
                                 ) : sections.map((section) => {
                                   const pendingEdit = msg.pendingEdits?.find(e => e.sectionId === section.id);
+                                  const isActiveInput = activeCommentInput?.msgIndex === i && activeCommentInput?.sectionId === section.id;
+                                  
                                   return (
-                                    <div key={section.id} className="message-section-wrapper">
-                                      <div className={`message-section ${pendingEdit ? 'highlight-pending' : ''}`}>
-                                        <div dangerouslySetInnerHTML={renderModelMessage(section.content, msg.content)} />
-                                        {pendingEdit && (
-                                          <div className="pending-edit-preview">
-                                            <div style={{ fontWeight: 'bold', fontSize: '0.8rem', marginTop: '0.5rem', color: 'var(--warning-orange)' }}>PROPOSED CHANGE:</div>
-                                            <div dangerouslySetInnerHTML={renderModelMessage(pendingEdit.newContent, msg.content)} />
-                                            <div className="edit-actions-floating">
-                                              <button className="button btn-confirm-edit" onClick={() => handleConfirmEdit(i, section.id)} title="Confirm Change"><Check size={12} /> Confirm</button>
-                                              <button className="button btn-reject-edit" onClick={() => handleRejectEdit(i, section.id)} title="Reject Change"><XCircle size={12} /> Reject</button>
-                                            </div>
+                                    <div key={section.id} className="message-section-row">
+                                      <div className="message-main-content">
+                                        <div className="message-section-wrapper">
+                                          <div className={`message-section ${pendingEdit ? 'highlight-pending' : ''}`}>
+                                            <div dangerouslySetInnerHTML={renderModelMessage(section.content, msg.content)} />
+                                            {pendingEdit && (
+                                              <div className="pending-edit-preview">
+                                                <div style={{ fontWeight: 'bold', fontSize: '0.8rem', marginTop: '0.5rem', color: 'var(--warning-orange)' }}>PROPOSED CHANGE:</div>
+                                                <div dangerouslySetInnerHTML={renderModelMessage(pendingEdit.newContent, msg.content)} />
+                                                <div className="edit-actions-floating">
+                                                  <button className="button btn-confirm-edit" onClick={() => handleConfirmEdit(i, section.id)} title="Confirm Change"><Check size={12} /> Confirm</button>
+                                                  <button className="button btn-reject-edit" onClick={() => handleRejectEdit(i, section.id)} title="Reject Change"><XCircle size={12} /> Reject</button>
+                                                </div>
+                                              </div>
+                                            )}
+                                          </div>
+                                          {!pendingEdit && i === chatHistory.length - 1 && (
+                                            <button className="add-comment-trigger" onClick={() => handleStartComment(i, section.id)} title="Add Comment">+</button>
+                                          )}
+                                        </div>
+                                      </div>
+                                      
+                                      <div className="section-comment-area">
+                                        {(section.comment || isActiveInput) && (
+                                          <div className="comment-box">
+                                            {isActiveInput ? (
+                                              <div className="comment-input-overlay">
+                                                <textarea
+                                                  className="comment-textarea"
+                                                  value={commentText}
+                                                  onChange={(e) => setCommentText(e.target.value)}
+                                                  placeholder="Type your comment here..."
+                                                  autoFocus
+                                                />
+                                                <div className="comment-actions">
+                                                  <button className="button" onClick={() => handleAddComment(i, section.id)}>
+                                                    {section.isEditingComment ? 'Save' : 'Add Comment'}
+                                                  </button>
+                                                  <button className="button secondary" onClick={() => setActiveCommentInput(null)}>Cancel</button>
+                                                </div>
+                                              </div>
+                                            ) : (
+                                              <>
+                                                <div className="comment-content">{section.comment}</div>
+                                                <div className="comment-actions">
+                                                  <button onClick={() => handleEditComment(i, section.id, section.comment || '')} title="Edit"><Edit2 size={12} /></button>
+                                                  <button onClick={() => handleDeleteComment(i, section.id)} title="Delete"><Trash2 size={12} /></button>
+                                                  <button 
+                                                    className="button resend-with-comments-btn-mini" 
+                                                    onClick={() => resendWithComments(i)}
+                                                    title="Resend entire message with all comments"
+                                                    disabled={isLoading}
+                                                  >
+                                                    <RefreshCw size={12} /> Resend
+                                                  </button>
+                                                </div>
+                                              </>
+                                            )}
                                           </div>
                                         )}
                                       </div>
-                                      {!pendingEdit && i === chatHistory.length - 1 && (
-                                        <button className="add-comment-trigger" onClick={() => handleStartComment(i, section.id)} title="Add Comment">+</button>
-                                      )}
                                     </div>
                                   );
                                 })}
-                                {msg.pendingEdits && msg.pendingEdits.length > 0 && (
-                                  <div className="edit-message-actions" style={{ marginTop: '1rem', borderTop: '1px solid var(--border-color)', paddingTop: '0.5rem' }}>
-                                    <button onClick={() => handleConfirmAllEdits(i)} className="button">Confirm All Edits</button>
-                                    <button onClick={() => handleRejectAllEdits(i)} className="button secondary">Reject All Edits</button>
+                                
+                                <div className="message-section-row">
+                                  <div className="message-main-content">
+                                    {msg.pendingEdits && msg.pendingEdits.length > 0 && (
+                                      <div className="edit-message-actions" style={{ marginTop: '1rem', borderTop: '1px solid var(--border-color)', paddingTop: '0.5rem' }}>
+                                        <button onClick={() => handleConfirmAllEdits(i)} className="button">Confirm All Edits</button>
+                                        <button onClick={() => handleRejectAllEdits(i)} className="button secondary">Reject All Edits</button>
+                                      </div>
+                                    )}
+                                    {sections.some(s => s.comment) && i === chatHistory.length - 1 && (
+                                      <button className="button resend-with-comments-btn" onClick={() => resendWithComments(i)}>
+                                        <RefreshCw size={14} style={{ marginRight: '6px' }} /> Resend with Comments
+                                      </button>
+                                    )}
                                   </div>
-                                )}
-                                {sections.some(s => s.comment) && i === chatHistory.length - 1 && (
-                                  <button className="button resend-with-comments-btn" onClick={() => resendWithComments(i)}>
-                                    <RefreshCw size={14} style={{ marginRight: '6px' }} /> Resend with Comments
-                                  </button>
-                                )}
+                                  <div className="section-comment-area" />
+                                </div>
                               </div>
                             );
                           })() : msg.content}
@@ -470,45 +526,6 @@ export const App: FC = () => {
                             <DownloadReportButton content={msg.content} index={i} rootDirectoryHandle={rootDirectoryHandle} />
                           )}
                         </div>
-                        {msg.role === 'model' && (
-                          <div className="comment-sidebar">
-                            {(msg.sections || sectionizeMessage(msg.content || '')).filter(s => s.comment || (activeCommentInput?.msgIndex === i && activeCommentInput?.sectionId === s.id)).map(s => (
-                              <div key={s.id} className="comment-box">
-                                {activeCommentInput?.msgIndex === i && activeCommentInput?.sectionId === s.id ? (
-                                  <div className="comment-input-overlay">
-                                    <textarea
-                                      className="comment-textarea"
-                                      value={commentText}
-                                      onChange={(e) => setCommentText(e.target.value)}
-                                      placeholder="Type your comment here..."
-                                      autoFocus
-                                    />
-                                    <div className="comment-actions">
-                                      <button className="button" onClick={() => handleAddComment(i, s.id)}>{s.isEditingComment ? 'Save' : 'Add Comment'}</button>
-                                      <button className="button secondary" onClick={() => setActiveCommentInput(null)}>Cancel</button>
-                                    </div>
-                                  </div>
-                                ) : (
-                                  <>
-                                    <div className="comment-content">{s.comment}</div>
-                                    <div className="comment-actions">
-                                      <button onClick={() => handleEditComment(i, s.id, s.comment || '')} title="Edit"><Edit2 size={12} /></button>
-                                      <button onClick={() => handleDeleteComment(i, s.id)} title="Delete"><Trash2 size={12} /></button>
-                                      <button 
-                                        className="button resend-with-comments-btn-mini" 
-                                        onClick={() => resendWithComments(i)}
-                                        title="Resend message with all comments"
-                                        disabled={isLoading}
-                                      >
-                                        <RefreshCw size={12} /> Resend
-                                      </button>
-                                    </div>
-                                  </>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                        )}
                       </div>
                     )}
                   </div>

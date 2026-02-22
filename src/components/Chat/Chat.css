@@ -455,9 +455,16 @@
 /* Comment Sidebar Layout */
 .message-row {
   display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+.message-section-row {
+  display: flex;
   align-items: flex-start;
   gap: 1.5rem;
   width: 100%;
+  margin-bottom: 0.5rem;
 }
 
 .message-main-content {
@@ -465,12 +472,9 @@
   min-width: 0;
 }
 
-.comment-sidebar {
+.section-comment-area {
   flex: 0 0 250px;
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  padding-top: 1rem;
+  min-height: 20px;
 }
 
 .comment-box {
