@@ -1,0 +1,41 @@
+:root {
+  --primary-color: #646cff;
+  --primary-color-hover: #535bf2;
+  --secondary-color: #3a3a3a;
+  --secondary-color-hover: #4a4a4a;
+  --disabled-color: #2a2a2a;
+  --error-color: #ff6b6b;
+
+  /* Monster theme colors */
+  --monster-primary: #FF6B35;
+  --monster-secondary: #F7931E;
+  --success-green: #2ECC71;
+  --warning-orange: #FFE66D;
+  --sapphire-blue: #0066CC;
+  --deep-green: #27AE60;
+  --gradient-bg: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+
+  --panel-bg-color: #1e1e1e;
+  --message-bg-color: #2c2c2c;
+  --input-bg-color: #252525;
+  --avatar-bg-color: #383838;
+  --hover-bg-color: #2a2a2a;
+  --source-link-bg: #252525;
+
+  --text-color: rgba(255, 255, 255, 0.87);
+  --text-color-secondary: rgba(255, 255, 255, 0.6);
+  --border-color: #363636;
+
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+
+  color-scheme: dark;
+  color: var(--text-color);
+  background-color: #121212;
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}

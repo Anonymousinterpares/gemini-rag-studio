@@ -1,0 +1,54 @@
+/* --- Settings Panel --- */
+.settings-panel {
+  padding: 0.75rem;
+  margin: 0 0.5rem;
+  border-top: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-color);
+  overflow-y: auto;
+  overflow-x: hidden;
+  transition: max-height 0.3s ease-out, opacity 0.3s ease-out, padding 0.3s ease-out, margin 0.3s ease-out, border 0.3s ease-out;
+  max-height: 500px;
+  opacity: 1;
+  flex-shrink: 0;
+}
+
+.settings-panel.hidden {
+  max-height: 0;
+  opacity: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  margin-top: 0;
+  margin-bottom: 0;
+  border-top: none;
+  border-bottom: none;
+}
+
+.setting-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.setting-row:last-child {
+  margin-bottom: 0;
+}
+
+.setting-row label {
+  font-size: 0.9em;
+  color: var(--text-color-secondary);
+  white-space: nowrap;
+  text-align: right;
+}
+
+.settings-panel select,
+.settings-panel input {
+  width: 100%;
+  background-color: var(--input-bg-color);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  padding: 0.4em 0.6em;
+  color: var(--text-color);
+  font-size: 0.9em;
+  min-width: 0;
+}

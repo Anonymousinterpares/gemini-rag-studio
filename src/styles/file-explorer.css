@@ -1,0 +1,191 @@
+/* --- File Panel --- */
+.file-panel-header {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  border-bottom: 1px solid var(--border-color);
+  background-color: rgba(0, 0, 0, 0.1);
+}
+
+.file-panel-header button {
+  flex: 1;
+  min-width: 0;
+}
+
+.drag-drop-area {
+  padding: 1rem;
+  text-align: center;
+  border: 2px dashed var(--border-color);
+  margin: 0.5rem;
+  border-radius: 8px;
+  cursor: default;
+  transition: all 0.3s ease-in-out;
+  min-height: 320px;
+  position: relative;
+}
+
+.drag-drop-area.dragging,
+.drag-drop-area:hover {
+  background-color: var(--hover-bg-color);
+  border-color: var(--primary-color);
+}
+
+.drop-media-element {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.view-switcher {
+  display: flex;
+  padding: 0.5rem;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  border-top: 1px solid var(--border-color);
+}
+
+.file-list-container ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.file-list-container li div,
+.file-list-container li>span {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.8rem;
+  cursor: pointer;
+  border-radius: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.file-list-container li div:hover {
+  background-color: var(--hover-bg-color);
+}
+
+.file-list-container li div.selected {
+  background-color: var(--primary-color);
+  color: white;
+}
+
+/* --- Custom File Explorer --- */
+.custom-file-explorer-overlay {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100vw; height: 100vh;
+  background-color: rgba(0, 0, 0, 0.7);
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  z-index: 1000;
+}
+
+.custom-file-explorer-modal {
+  background-color: var(--panel-bg-color);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  width: 800px;
+  height: 500px;
+  display: flex;
+  flex-direction: column;
+  margin-right: 1rem;
+  overflow: hidden;
+}
+
+.custom-file-explorer-modal .modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border-color);
+  font-weight: bold;
+}
+
+.file-explorer-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem;
+  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 0.5rem;
+}
+
+.file-list {
+  flex-grow: 1;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  gap: 1rem;
+  padding: 0.5rem;
+  overflow-y: auto;
+}
+
+.file-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 0.5rem;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  text-align: center;
+  word-break: break-all;
+}
+
+.file-item:hover { background-color: var(--hover-bg-color); }
+.file-item.selected { background-color: var(--primary-color); color: white; }
+
+.remove-file-btn {
+  background: none;
+  border: none;
+  color: #999;
+  cursor: pointer;
+  font-size: 16px;
+  padding: 0 5px;
+  margin-left: auto;
+}
+
+.remove-file-btn:hover { color: #fff; }
+
+.summary-status.available { color: #28a745; }
+.summary-status.in-progress { color: #ffc107; }
+.summary-status.missing { color: #dc3545; }
+
+.language-indicator {
+  font-size: 0.75em;
+  background-color: var(--secondary-color);
+  color: var(--text-color);
+  padding: 0.1em 0.4em;
+  border-radius: 3px;
+  text-transform: uppercase;
+}
+
+.compute-status-indicator {
+  padding: 0.5rem;
+  font-size: 0.8rem;
+  color: var(--text-color-secondary);
+  border-top: 1px solid var(--border-color);
+  margin-top: 0.5rem;
+  background-color: rgba(0, 0, 0, 0.1);
+}
+
+.embedding-status {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  font-size: 0.8rem;
+  color: var(--text-color-secondary);
+  background-color: rgba(78, 205, 196, 0.1);
+  border: 1px solid var(--success-green);
+  border-radius: 4px;
+  margin: 0.5rem;
+}

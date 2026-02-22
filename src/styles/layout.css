@@ -1,0 +1,51 @@
+/* --- Main Layout --- */
+.app-container {
+  display: flex;
+  height: 100vh;
+  min-width: 1000px;
+  overflow: auto;
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--border-color);
+  background-color: var(--panel-bg-color);
+}
+
+.file-panel {
+  width: 35%;
+  min-width: 350px;
+  max-width: 500px;
+  flex-shrink: 0;
+  position: relative;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.chat-panel {
+  flex-grow: 1;
+}
+
+.doc-viewer-panel {
+  width: 35%;
+  min-width: 300px;
+}
+
+.panel-content {
+  flex-grow: 1;
+  overflow-y: auto;
+  padding: 0.5rem;
+}
+
+.placeholder-text {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-color-secondary);
+  text-align: center;
+  padding: 1rem;
+}

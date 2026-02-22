@@ -1,0 +1,121 @@
+/* --- Citation Bubbles & Source Links --- */
+.source-link.citation-bubble {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.4em;
+  height: 1.4em;
+  padding: 0 0.35em;
+  border-radius: 999px;
+  background: #2b6cb0;
+  color: white;
+  font-size: 0.85em;
+  line-height: 1;
+  border: none;
+  cursor: pointer;
+  margin: 0 0.2em;
+}
+
+.source-link.citation-bubble:hover {
+  background: #2c5282;
+}
+
+.source-link.citation-bubble .bubble-number {
+  font-weight: 700;
+}
+
+.source-link.citation-bubble .frag-letter {
+  margin-left: 0.15em;
+  opacity: 0.85;
+}
+
+.jump-to-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.2em;
+  height: 1.2em;
+  border-radius: 3px;
+  background: #3a3a3a;
+  color: #fff;
+  font-size: 0.8em;
+  margin-left: 0.2em;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease-in-out;
+}
+
+.citation-bubble:hover+.jump-to-badge,
+.citation-group:hover .jump-to-badge {
+  opacity: 1;
+}
+
+.jump-to-badge:hover {
+  background: #4a4a4a;
+}
+
+.citation-group {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: baseline;
+  position: relative;
+}
+
+.citation-group .citation-overflow-toggle {
+  background: #2b6cb0;
+  color: #fff;
+  border: none;
+  border-radius: 999px;
+  padding: 0 0.5em;
+  height: 1.4em;
+  font-size: 0.8em;
+  cursor: pointer;
+}
+
+.citation-group .citation-overflow-popover {
+  display: none;
+  position: absolute;
+  z-index: 50;
+  top: 1.8em;
+  left: 0;
+  background: var(--message-bg-color);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 0.4rem;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+  max-width: 60vw;
+  max-height: 40vh;
+  overflow: auto;
+}
+
+.citation-group[data-open="true"] .citation-overflow-popover {
+  display: block;
+}
+
+.source-link {
+  background-color: var(--source-link-bg);
+  border: 1px solid var(--border-color);
+  color: var(--primary-color);
+  padding: 0.2em 0.5em;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.85em;
+}
+
+.source-link:hover {
+  background-color: var(--hover-bg-color);
+}
+
+.processing-indicator {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  background-color: rgba(255, 230, 109, 0.1);
+  border: 1px solid rgba(255, 230, 109, 0.3);
+  border-radius: 4px;
+  margin-top: 0.5rem;
+  font-size: 0.85rem;
+  color: var(--warning-orange);
+}
