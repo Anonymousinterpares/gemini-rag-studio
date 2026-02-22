@@ -397,3 +397,140 @@
   font-style: italic;
   margin-left: 0.25rem;
 }
+
+/* --- Message Sections & Commenting --- */
+.message-section-wrapper {
+  position: relative;
+  margin-bottom: 0.5rem;
+}
+
+.message-section {
+  position: relative;
+  transition: background-color 0.2s;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+}
+
+.message-section.highlight-pending {
+  background-color: rgba(255, 230, 109, 0.3); /* Pale Yellow */
+  border: 1px dashed var(--warning-orange);
+}
+
+.add-comment-trigger {
+  position: absolute;
+  right: -30px;
+  top: 50%;
+  transform: translateY(-50%);
+  opacity: 0;
+  transition: opacity 0.2s, background-color 0.2s;
+  background: var(--primary-color);
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 10;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+.message-section-wrapper:hover .add-comment-trigger {
+  opacity: 1;
+}
+
+.add-comment-trigger:hover {
+  background-color: var(--primary-color-hover);
+}
+
+/* Comment Sidebar Layout */
+.message-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 1.5rem;
+  width: 100%;
+}
+
+.message-main-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.comment-sidebar {
+  flex: 0 0 250px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding-top: 1rem;
+}
+
+.comment-box {
+  background-color: var(--secondary-color);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 0.75rem;
+  font-size: 0.9rem;
+  position: relative;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+  animation: slide-in-right 0.3s ease-out;
+}
+
+@keyframes slide-in-right {
+  from { opacity: 0; transform: translateX(20px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+.comment-content {
+  color: var(--text-color);
+  margin-bottom: 0.5rem;
+}
+
+.comment-actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}
+
+.comment-input-overlay {
+  background-color: var(--input-bg-color);
+  border: 1px solid var(--primary-color);
+  border-radius: 8px;
+  padding: 0.5rem;
+  margin-top: 0.5rem;
+  width: 100%;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+}
+
+.comment-textarea {
+  width: 100%;
+  min-height: 60px;
+  background: transparent;
+  border: none;
+  color: var(--text-color);
+  resize: vertical;
+  font-family: inherit;
+  margin-bottom: 0.5rem;
+}
+
+.edit-actions-floating {
+  display: flex;
+  gap: 0.25rem;
+  margin-top: 0.25rem;
+}
+
+.btn-confirm-edit { background-color: var(--success-green) !important; color: white !important; }
+.btn-reject-edit { background-color: var(--error-color) !important; color: white !important; }
+
+.resend-with-comments-btn {
+  margin-top: 1rem;
+  background-color: var(--monster-primary) !important;
+  color: white !important;
+  font-weight: bold;
+  width: 100%;
+}
+
+.resend-with-comments-btn:hover {
+  background-color: var(--monster-secondary) !important;
+}

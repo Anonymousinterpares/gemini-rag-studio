@@ -11,7 +11,7 @@ export const downloadMessage = async (text: string, index: number, rootDirectory
   const defaultName = `report-${index + 1}.${extension}`;
   
   let mimeType = 'text/plain';
-  let content: any = text;
+  let content: string | Blob = text;
 
   if (format === 'md') {
     mimeType = 'text/markdown';
@@ -20,7 +20,7 @@ export const downloadMessage = async (text: string, index: number, rootDirectory
     
     // Parse text into docx components
     const lines = text.split('\n');
-    const docChildren: any[] = [];
+    const docChildren: Paragraph[] = [];
     
     docChildren.push(new Paragraph({
       text: "RAG Studio Case File Report",

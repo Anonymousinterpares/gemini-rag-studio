@@ -17,6 +17,7 @@ import SummaryModal from './components/SummaryModal';
 import { SpeechBubble, DigestParticles, FloatingArrows, RejectionBubble } from './components/Monster';
 import RecoveryDialogContainer from './components/RecoveryDialogContainer';
 import { useSettingsStore, useFileStore, useComputeStore } from './store';
+import { sectionizeMessage } from './utils/chatUtils';
 import './style.css';
 import './progress-bar.css';
 import './Modal.css';
@@ -87,17 +88,82 @@ export const App: FC = () => {
     handleClearConversation, handleRemoveMessage,
     handleUpdateMessage, handleTruncateHistory,
     initialChatHistory,
-    caseFileState, setCaseFileState
+    caseFileState, setCaseFileState,
+    resendWithComments
   } = useChat({
     coordinator, vectorStore, queryEmbeddingResolver, rerankPromiseResolver, setRerankProgress: () => { }, setActiveSource, setIsModalOpen
   });
 
+  const [activeCommentInput, setActiveCommentInput] = useState<{ msgIndex: number, sectionId: string } | null>(null);
+  const [commentText, setCommentText] = useState('');
+
+  const handleStartComment = (msgIndex: number, sectionId: string) => {
+    // Only latest model output can have comments
+    if (msgIndex !== chatHistory.length - 1) return;
+    setActiveCommentInput({ msgIndex, sectionId });
+    setCommentText('');
+  };
+
+  const handleAddComment = (msgIndex: number, sectionId: string) => {
+    if (!commentText.trim()) return;
+    const msg = chatHistory[msgIndex];
+    const sections = msg.sections || sectionizeMessage(msg.content || '');
+    const updatedSections = sections.map(s => s.id === sectionId ? { ...s, comment: commentText.trim(), isEditingComment: false } : s);
+    handleUpdateMessage(msgIndex, { sections: updatedSections });
+    setActiveCommentInput(null);
+  };
+
+  const handleEditComment = (msgIndex: number, sectionId: string, text: string) => {
+    const msg = chatHistory[msgIndex];
+    const updatedSections = (msg.sections || []).map(s => s.id === sectionId ? { ...s, isEditingComment: true } : s);
+    handleUpdateMessage(msgIndex, { sections: updatedSections });
+    setCommentText(text);
+    setActiveCommentInput({ msgIndex, sectionId });
+  };
+
+  const handleDeleteComment = (msgIndex: number, sectionId: string) => {
+    if (!window.confirm("Are you sure you want to delete this comment?")) return;
+    const msg = chatHistory[msgIndex];
+    const updatedSections = (msg.sections || []).map(s => s.id === sectionId ? { ...s, comment: undefined } : s);
+    handleUpdateMessage(msgIndex, { sections: updatedSections });
+  };
+
+  const handleConfirmEdit = (msgIndex: number, sectionId: string) => {
+    const msg = chatHistory[msgIndex];
+    if (!msg.pendingEdits) return;
+    const edit = msg.pendingEdits.find(e => e.sectionId === sectionId);
+    if (!edit) return;
+    const sections = (msg.sections || []).map(s => s.id === sectionId ? { ...s, content: edit.newContent, comment: undefined } : s);
+    const newContent = sections.map(s => s.content).join('\n\n');
+    handleUpdateMessage(msgIndex, { content: newContent, sections, pendingEdits: msg.pendingEdits.filter(e => e.sectionId !== sectionId) });
+  };
+
+  const handleRejectEdit = (msgIndex: number, sectionId: string) => {
+    const msg = chatHistory[msgIndex];
+    if (!msg.pendingEdits) return;
+    handleUpdateMessage(msgIndex, { pendingEdits: msg.pendingEdits.filter(e => e.sectionId !== sectionId) });
+  };
+
+  const handleConfirmAllEdits = (msgIndex: number) => {
+    const msg = chatHistory[msgIndex];
+    if (!msg.pendingEdits) return;
+    let sections = msg.sections || [];
+    msg.pendingEdits.forEach(edit => {
+      sections = sections.map(s => s.id === edit.sectionId ? { ...s, content: edit.newContent, comment: undefined } : s);
+    });
+    const newContent = sections.map(s => s.content).join('\n\n');
+    handleUpdateMessage(msgIndex, { content: newContent, sections, pendingEdits: [] });
+  };
+
+  const handleRejectAllEdits = (msgIndex: number) => {
+    handleUpdateMessage(msgIndex, { pendingEdits: [] });
+  };
+
   const handleSaveChatHistory = async () => {
     const data = JSON.stringify({ chatHistory, tokenUsage }, null, 2);
-    const anyWindow = window as any;
-    if (anyWindow.showSaveFilePicker) {
+    if ('showSaveFilePicker' in window) {
       try {
-        const handle = await anyWindow.showSaveFilePicker({
+        const handle = await (window as unknown as { showSaveFilePicker: (options: unknown) => Promise<FileSystemFileHandle> }).showSaveFilePicker({
           suggestedName: `chat-session-${new Date().toISOString().split('T')[0]}.json`,
           types: [{ description: 'JSON File', accept: { 'application/json': ['.json'] } }]
         });
@@ -127,7 +193,7 @@ export const App: FC = () => {
           setChatHistory(loaded.chatHistory);
           if (loaded.tokenUsage) setTokenUsage(loaded.tokenUsage);
         }
-      } catch (err) {
+      } catch {
         alert("Failed to load chat history: Invalid JSON");
       }
     };
@@ -150,7 +216,7 @@ export const App: FC = () => {
 
   const handleSaveAndRerun = async (idx: number) => {
     if (!editingContent.trim()) return;
-    handleUpdateMessage(idx, editingContent);
+    handleUpdateMessage(idx, { content: editingContent });
     handleTruncateHistory(idx);
     setEditingIndex(null);
     setEditingContent('');
@@ -344,12 +410,98 @@ export const App: FC = () => {
                         </div>
                       </div>
                     ) : (
-                      <>
-                        {msg.role === 'model' ? <div className='message-markup' dangerouslySetInnerHTML={renderModelMessage(msg.content)} /> : msg.content}
-                        {msg.content && (msg.type === 'case_file_report' || msg.content.startsWith('# Case File')) && (
-                          <DownloadReportButton content={msg.content} index={i} rootDirectoryHandle={rootDirectoryHandle} />
+                      <div className="message-row">
+                        <div className="message-main-content">
+                          {msg.role === 'model' ? (() => {
+                            const sections = msg.sections || sectionizeMessage(msg.content || '');
+                            return (
+                              <div className='message-markup'>
+                                {msg.pendingEdits?.some(e => e.sectionId === 'REWRITE') ? (
+                                  <div className="message-section highlight-pending">
+                                    <div style={{ fontWeight: 'bold', borderBottom: '1px solid var(--border-color)', marginBottom: '0.5rem', paddingBottom: '0.25rem' }}>FULL REWRITE REQUEST:</div>
+                                    <p>{msg.pendingEdits.find(e => e.sectionId === 'REWRITE')?.newContent}</p>
+                                    <div className="edit-actions-floating" style={{ marginTop: '1rem' }}>
+                                      <button className="button" onClick={() => {
+                                        // Special case for full rewrite - tell LLM to go ahead
+                                        handleUpdateMessage(i, { pendingEdits: [] });
+                                        submitQuery("Please perform the full rewrite as you suggested.", chatHistory.slice(0, i + 1));
+                                      }}>Confirm Rewrite</button>
+                                      <button className="button secondary" onClick={() => handleRejectAllEdits(i)}>Reject Rewrite</button>
+                                    </div>
+                                  </div>
+                                ) : sections.map((section) => {
+                                  const pendingEdit = msg.pendingEdits?.find(e => e.sectionId === section.id);
+                                  return (
+                                    <div key={section.id} className="message-section-wrapper">
+                                      <div className={`message-section ${pendingEdit ? 'highlight-pending' : ''}`}>
+                                        <div dangerouslySetInnerHTML={renderModelMessage(section.content, msg.content)} />
+                                        {pendingEdit && (
+                                          <div className="pending-edit-preview">
+                                            <div style={{ fontWeight: 'bold', fontSize: '0.8rem', marginTop: '0.5rem', color: 'var(--warning-orange)' }}>PROPOSED CHANGE:</div>
+                                            <div dangerouslySetInnerHTML={renderModelMessage(pendingEdit.newContent, msg.content)} />
+                                            <div className="edit-actions-floating">
+                                              <button className="button btn-confirm-edit" onClick={() => handleConfirmEdit(i, section.id)} title="Confirm Change"><Check size={12} /> Confirm</button>
+                                              <button className="button btn-reject-edit" onClick={() => handleRejectEdit(i, section.id)} title="Reject Change"><XCircle size={12} /> Reject</button>
+                                            </div>
+                                          </div>
+                                        )}
+                                      </div>
+                                      {!pendingEdit && i === chatHistory.length - 1 && (
+                                        <button className="add-comment-trigger" onClick={() => handleStartComment(i, section.id)} title="Add Comment">+</button>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                                {msg.pendingEdits && msg.pendingEdits.length > 0 && (
+                                  <div className="edit-message-actions" style={{ marginTop: '1rem', borderTop: '1px solid var(--border-color)', paddingTop: '0.5rem' }}>
+                                    <button onClick={() => handleConfirmAllEdits(i)} className="button">Confirm All Edits</button>
+                                    <button onClick={() => handleRejectAllEdits(i)} className="button secondary">Reject All Edits</button>
+                                  </div>
+                                )}
+                                {sections.some(s => s.comment) && i === chatHistory.length - 1 && (
+                                  <button className="button resend-with-comments-btn" onClick={() => resendWithComments(i)}>
+                                    <RefreshCw size={14} style={{ marginRight: '6px' }} /> Resend with Comments
+                                  </button>
+                                )}
+                              </div>
+                            );
+                          })() : msg.content}
+                          {msg.content && (msg.type === 'case_file_report' || msg.content.startsWith('# Case File')) && (
+                            <DownloadReportButton content={msg.content} index={i} rootDirectoryHandle={rootDirectoryHandle} />
+                          )}
+                        </div>
+                        {msg.role === 'model' && (
+                          <div className="comment-sidebar">
+                            {(msg.sections || sectionizeMessage(msg.content || '')).filter(s => s.comment || (activeCommentInput?.msgIndex === i && activeCommentInput?.sectionId === s.id)).map(s => (
+                              <div key={s.id} className="comment-box">
+                                {activeCommentInput?.msgIndex === i && activeCommentInput?.sectionId === s.id ? (
+                                  <div className="comment-input-overlay">
+                                    <textarea
+                                      className="comment-textarea"
+                                      value={commentText}
+                                      onChange={(e) => setCommentText(e.target.value)}
+                                      placeholder="Type your comment here..."
+                                      autoFocus
+                                    />
+                                    <div className="comment-actions">
+                                      <button className="button" onClick={() => handleAddComment(i, s.id)}>{s.isEditingComment ? 'Save' : 'Add Comment'}</button>
+                                      <button className="button secondary" onClick={() => setActiveCommentInput(null)}>Cancel</button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <>
+                                    <div className="comment-content">{s.comment}</div>
+                                    <div className="comment-actions">
+                                      <button onClick={() => handleEditComment(i, s.id, s.comment || '')} title="Edit"><Edit2 size={12} /></button>
+                                      <button onClick={() => handleDeleteComment(i, s.id)} title="Delete"><Trash2 size={12} /></button>
+                                    </div>
+                                  </>
+                                )}
+                              </div>
+                            ))}
+                          </div>
                         )}
-                      </>
+                      </div>
                     )}
                   </div>
                   <div className="message-actions">
@@ -393,7 +545,7 @@ export const App: FC = () => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault();
                   if (userInput.trim() && !isLoading && activeJobCount === 0) {
-                    handleSubmit(e as any);
+                    handleSubmit(e as unknown as React.FormEvent);
                   }
                 }
               }}

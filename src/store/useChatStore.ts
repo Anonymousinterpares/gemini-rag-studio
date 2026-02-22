@@ -28,7 +28,7 @@ interface ChatState {
   setIsLoading: (loading: boolean) => void;
   setAbortController: (controller: AbortController | null) => void;
   clearHistory: (initialHistory: ChatMessage[]) => void;
-  updateMessage: (index: number, content: string) => void;
+  updateMessage: (index: number, update: Partial<ChatMessage>) => void;
   truncateHistory: (index: number) => void;
   setCaseFileState: (state: Partial<ChatState['caseFileState']>) => void;
 }
@@ -74,10 +74,10 @@ export const useChatStore = create<ChatState>((set) => ({
     caseFileState: { isAwaitingFeedback: false }
   }),
 
-  updateMessage: (index, content) => set((state) => {
+  updateMessage: (index, update) => set((state) => {
     const newHistory = [...state.chatHistory];
     if (newHistory[index]) {
-      newHistory[index] = { ...newHistory[index], content };
+      newHistory[index] = { ...newHistory[index], ...update };
     }
     return { chatHistory: newHistory };
   }),

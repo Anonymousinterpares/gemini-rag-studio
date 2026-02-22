@@ -48,6 +48,13 @@ export interface ToolCall {
   };
 }
 
+export interface MessageSection {
+  id: string;
+  content: string;
+  comment?: string;
+  isEditingComment?: boolean;
+}
+
 export interface ChatMessage {
   role: 'user' | 'model' | 'system' | 'tool'
   content: string | null; // Content can be null for tool calls
@@ -58,6 +65,13 @@ export interface ChatMessage {
   tool_call_id?: string;
   name?: string;
   isInternal?: boolean;
+  sections?: MessageSection[];
+  pendingEdits?: {
+    sectionId: string;
+    newContent: string;
+    isConfirmed?: boolean;
+    isRejected?: boolean;
+  }[];
 }
 
 export interface JobProgress {

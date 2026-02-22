@@ -18,7 +18,7 @@ const SEARCH_TOOL: Tool = {
             type: SchemaType.OBJECT,
             properties: {
                 query: {
-                    type: 'string',
+                    type: SchemaType.STRING,
                     description: 'The search query to perform.',
                 },
             },
@@ -195,16 +195,23 @@ export const useChat = ({
         await Promise.all(promises);
     }, [coordinator]);
 
-    const submitQuery = useCallback(async (query: string, history: ChatMessage[], forceCaseFile: boolean = false) => {
+    const submitQuery = useCallback(async (query: string, history: ChatMessage[], forceCaseFile: boolean = false, updateIndex?: number) => {
         if (!query.trim() || isLoading || !coordinator?.current) return;
         // If not in chat mode, we MUST have a vector store
         if (!appSettings.isChatModeEnabled && !vectorStore?.current) return;
 
         const startTime = Date.now();
         const perRequestTokenUsage: TokenUsage = { promptTokens: 0, completionTokens: 0 };
-        const newHistoryWithUser: ChatMessage[] = [...history, { role: 'user', content: query }];
+        
+        let newHistory: ChatMessage[];
+        if (updateIndex !== undefined) {
+            newHistory = [...history];
+            // We don't add a new user message if we are rewriting
+        } else {
+            newHistory = [...history, { role: 'user', content: query }];
+            setChatHistory(newHistory);
+        }
 
-        setChatHistory(newHistoryWithUser);
         setIsLoading(true);
 
         const controller = new AbortController();
@@ -265,7 +272,7 @@ export const useChat = ({
                 });
 
                 setCaseFileState({ isAwaitingFeedback: false, metadata: undefined });
-                setChatHistory([...newHistoryWithUser, { 
+                setChatHistory([...newHistory, { 
                     role: 'model', 
                     content: `${da.finalText}<!--searchResults:${JSON.stringify(da.usedResults)}-->`, 
                     type: 'case_file_report',
@@ -278,7 +285,7 @@ export const useChat = ({
 
             // If Chat Mode is ON, enable search capabilities (UNLESS we are in Case File mode)
             if (appSettings.isChatModeEnabled && !isCaseFileMode) {
-                const currentHistory = [...newHistoryWithUser];
+                const currentHistory = [...newHistory];
                 const tools = [SEARCH_TOOL];
                 let loopCount = 0;
                 const MAX_LOOPS = appSettings.maxSearchLoops;
@@ -363,12 +370,17 @@ export const useChat = ({
 
                     // If no tool calls (and no fallback detected), we are done.
                     if (toolCalls.length === 0) {
-                        setChatHistory([...currentHistory, {
+                        const finalMsg: ChatMessage = {
                             role: 'model',
                             content: cleanResponseText,
                             tokenUsage: perRequestTokenUsage,
                             elapsedTime: Date.now() - startTime
-                        }]);
+                        };
+                        if (updateIndex !== undefined) {
+                            updateMessage(updateIndex, finalMsg);
+                        } else {
+                            setChatHistory([...currentHistory, finalMsg]);
+                        }
                         setIsLoading(false);
                         setAbortController(null);
                         return;
@@ -418,12 +430,17 @@ export const useChat = ({
                 const finalPrompt = "SYSTEM: You have reached the maximum number of searches allowed for this turn. Please synthesize all the information gathered so far (including the web search results above) and provide your final comprehensive answer to the user now.";
                 const finalResponse = await callGenerateContent(selectedModel, apiKey, [{ role: 'system' as const, content: getSystemPrompt() }, ...currentHistory, { role: 'user', content: finalPrompt }], []);
 
-                setChatHistory([...currentHistory, {
+                const finalMsg: ChatMessage = {
                     role: 'model',
                     content: finalResponse.text || "I reached my search limit without a final answer.",
                     tokenUsage: perRequestTokenUsage,
                     elapsedTime: Date.now() - startTime
-                }]);
+                };
+                if (updateIndex !== undefined) {
+                    updateMessage(updateIndex, finalMsg);
+                } else {
+                    setChatHistory([...currentHistory, finalMsg]);
+                }
                 setIsLoading(false);
                 setAbortController(null);
                 return;
@@ -473,7 +490,7 @@ export const useChat = ({
                         const { runDeepAnalysis } = await import('../agents/deep_analysis');
                         const level = appSettings.deepAnalysisLevel === 3 || route.mode === 'DEEP_ANALYSIS_L3' ? 3 : 2;
                         const da = await runDeepAnalysis({
-                            query, history: newHistoryWithUser, vectorStore: vectorStore.current,
+                            query, history: newHistory, vectorStore: vectorStore.current,
                             model: selectedModel, apiKey, settings: appSettings, embedQuery: embedQueryFn,
                             rerank: appSettings.isRerankingEnabled ? async (rerankQuery, docs) => {
                                 const tasks: Omit<ComputeTask, 'jobId'>[] = [];
@@ -503,7 +520,12 @@ export const useChat = ({
                                 }));
                             }
                         });
-                        setChatHistory([...newHistoryWithUser, { role: 'model', content: `${da.finalText}<!--searchResults:${JSON.stringify(da.usedResults)}-->`, type: 'case_file_report', tokenUsage: perRequestTokenUsage, elapsedTime: Date.now() - startTime }]);
+                        const finalMsg: ChatMessage = { role: 'model', content: `${da.finalText}<!--searchResults:${JSON.stringify(da.usedResults)}-->`, type: 'case_file_report', tokenUsage: perRequestTokenUsage, elapsedTime: Date.now() - startTime };
+                        if (updateIndex !== undefined) {
+                            updateMessage(updateIndex, finalMsg);
+                        } else {
+                            setChatHistory([...newHistory, finalMsg]);
+                        }
                         setIsLoading(false);
                         return;
                     }
@@ -517,7 +539,7 @@ export const useChat = ({
             if (isCaseFileMode) {
                 const { analyzeChatForCaseFile } = await import('../agents/case_file');
                 const analysis = await analyzeChatForCaseFile({
-                    history: newHistoryWithUser,
+                    history: newHistory,
                     model: selectedModel,
                     apiKey,
                     onTokenUsage: (usage) => {
@@ -548,20 +570,30 @@ ${analysis.suggestedQuestions.map(q => `- ${q}`).join('\n')}
 
 Or just tell me what specific aspects you'd like me to focus on.`;
 
-                setChatHistory([...newHistoryWithUser, { 
+                const finalMsg: ChatMessage = { 
                     role: 'model', 
                     content: responseText, 
                     type: 'case_file_analysis',
                     tokenUsage: perRequestTokenUsage, 
                     elapsedTime: Date.now() - startTime 
-                }]);
+                };
+                if (updateIndex !== undefined) {
+                    updateMessage(updateIndex, finalMsg);
+                } else {
+                    setChatHistory([...newHistory, finalMsg]);
+                }
                 setIsLoading(false);
                 return;
             }
 
             if (decision === 'GENERAL_CONVERSATION') {
-                const llmResponse = await callGenerateContent(selectedModel, apiKey, [{ role: 'system', content: getSystemPrompt() }, ...newHistoryWithUser]);
-                setChatHistory([...newHistoryWithUser, { role: 'model', content: llmResponse.text || '', tokenUsage: perRequestTokenUsage, elapsedTime: Date.now() - startTime }]);
+                const llmResponse = await callGenerateContent(selectedModel, apiKey, [{ role: 'system', content: getSystemPrompt() }, ...newHistory]);
+                const finalMsg: ChatMessage = { role: 'model', content: llmResponse.text || '', tokenUsage: perRequestTokenUsage, elapsedTime: Date.now() - startTime };
+                if (updateIndex !== undefined) {
+                    updateMessage(updateIndex, finalMsg);
+                } else {
+                    setChatHistory([...newHistory, finalMsg]);
+                }
                 setIsLoading(false);
                 return;
             }
@@ -590,12 +622,17 @@ Or just tell me what specific aspects you'd like me to focus on.`;
             }
 
             if (searchResults.length === 0 && files.length > 0) {
-                setChatHistory([...newHistoryWithUser, {
+                const finalMsg: ChatMessage = {
                     role: 'model',
                     content: `I couldn't find any relevant information in your documents for this query. The search threshold might be too restrictive, or the documents may not contain the answer.`,
                     tokenUsage: perRequestTokenUsage,
                     elapsedTime: Date.now() - startTime
-                }]);
+                };
+                if (updateIndex !== undefined) {
+                    updateMessage(updateIndex, finalMsg);
+                } else {
+                    setChatHistory([...newHistory, finalMsg]);
+                }
                 setIsLoading(false);
                 return;
             }
@@ -607,18 +644,28 @@ Or just tell me what specific aspects you'd like me to focus on.`;
             const messages: ChatMessage[] = [{ role: 'system', content: getSystemPrompt(requiredDocIds) }, ...history, { role: 'user', content: `CONTEXT:\n---\n${context}\n---\n\nUSER QUESTION: ${query}` }];
 
             const llmResponse = await callGenerateContent(selectedModel, apiKey, messages);
-            setChatHistory([...newHistoryWithUser, { role: 'model', content: `${llmResponse.text || ''}<!--searchResults:${JSON.stringify(searchResults)}-->`, tokenUsage: perRequestTokenUsage, elapsedTime: Date.now() - startTime }]);
+            const finalMsg: ChatMessage = { role: 'model', content: `${llmResponse.text || ''}<!--searchResults:${JSON.stringify(searchResults)}-->`, tokenUsage: perRequestTokenUsage, elapsedTime: Date.now() - startTime };
+            if (updateIndex !== undefined) {
+                updateMessage(updateIndex, finalMsg);
+            } else {
+                setChatHistory([...newHistory, finalMsg]);
+            }
         } catch (error) {
             if (error instanceof Error && error.name === 'AbortError') {
                 console.log('[Chat] Generation aborted by user.');
             } else {
-                setChatHistory([...newHistoryWithUser, { role: 'model', content: `Sorry, I encountered an error: ${error instanceof Error ? error.message : 'Unknown error'}` }]);
+                const errorMsg: ChatMessage = { role: 'model', content: `Sorry, I encountered an error: ${error instanceof Error ? error.message : 'Unknown error'}` };
+                if (updateIndex !== undefined) {
+                    updateMessage(updateIndex, errorMsg);
+                } else {
+                    setChatHistory([...newHistory, errorMsg]);
+                }
             }
         } finally {
             setIsLoading(false);
             setAbortController(null);
         }
-    }, [isLoading, appSettings, coordinator, vectorStore, queryEmbeddingResolver, rerankPromiseResolver, apiKeys, selectedProvider, selectedModel, setIsLoading, setChatHistory, getSystemPrompt, waitForSummaries, files, setTokenUsage, setAbortController, caseFileState, setCaseFileState]);
+    }, [isLoading, appSettings, coordinator, vectorStore, queryEmbeddingResolver, rerankPromiseResolver, apiKeys, selectedProvider, selectedModel, setIsLoading, setChatHistory, getSystemPrompt, waitForSummaries, files, setTokenUsage, setAbortController, caseFileState, setCaseFileState, updateMessage]);
 
     const handleRedo = useCallback(async (index: number) => {
         const messageToRedo = chatHistory[index];
@@ -632,15 +679,21 @@ Or just tell me what specific aspects you'd like me to focus on.`;
         setUserInput('');
     }, [userInput, chatHistory, submitQuery, setUserInput]);
 
-    const renderModelMessage = useCallback((content: string | null) => {
+    const renderModelMessage = useCallback((content: string | null, fullContent?: string | null) => {
         if (!content) return { __html: '' };
         let searchResults: SearchResult[] = [];
-        const contentWithoutResults = content.replace(/<!--searchResults:(.*?)-->/, (_, resultsJson) => {
+        
+        // Use full content to extract search results if available
+        const contextForResults = fullContent || content;
+        contextForResults.replace(/<!--searchResults:(.*?)-->/, (_, resultsJson) => {
             try { searchResults = JSON.parse(resultsJson); } catch {
                 // ignore
             }
             return '';
         });
+
+        // Strip results from current content if they are there
+        const contentWithoutResults = content.replace(/<!--searchResults:(.*?)-->/, '');
 
         const renderer = new marked.Renderer();
         const originalLink = renderer.link.bind(renderer);
@@ -724,12 +777,78 @@ Or just tell me what specific aspects you'd like me to focus on.`;
         }
     }, [files, setActiveSource, setIsModalOpen]);
 
+    const resendWithComments = useCallback(async (index: number) => {
+        const msg = chatHistory[index];
+        if (!msg || !msg.sections || isLoading || !coordinator?.current) return;
+
+        const comments = msg.sections
+            .filter(s => s.comment)
+            .map(s => `Section ID ${s.id}: ${s.comment}`)
+            .join('\n');
+
+        if (!comments) return;
+
+        setIsLoading(true);
+        const apiKey = apiKeys[selectedProvider];
+        const controller = new AbortController();
+        setAbortController(controller);
+
+        try {
+            const systemPrompt = `You are editing your previous response based on user comments.
+CRITICAL: You MUST provide your edits using a structured DIFF format.
+For each section you want to change, provide the section ID and the new content.
+Format your response as a JSON array of objects: [{"sectionId": "sec-0", "newContent": "..."}, ...]
+Only include sections that need changes. Do not rewrite everything.
+If you believe a full rewrite is absolutely necessary, respond with exactly: "FULL_REWRITE_REQUEST: <reason>"`;
+
+            const userPrompt = `I have some remarks on your last response:\n${comments}\n\nPlease apply these changes using the requested JSON diff format.`;
+
+            // We send the history up to that message, then our special request
+            const historyToMessage = chatHistory.slice(0, index + 1);
+            const messages: ChatMessage[] = [
+                { role: 'system', content: systemPrompt },
+                ...historyToMessage,
+                { role: 'user', content: userPrompt }
+            ];
+
+            const response = await generateContent(selectedModel, apiKey, messages, [], controller.signal);
+            const text = response.text || '';
+
+            if (text.startsWith('FULL_REWRITE_REQUEST:')) {
+                // Handle rewrite request (ask user)
+                updateMessage(index, { 
+                    pendingEdits: [{ sectionId: 'REWRITE', newContent: text.replace('FULL_REWRITE_REQUEST:', '').trim() }] 
+                });
+            } else {
+                try {
+                    // Try to parse JSON array from text
+                    const jsonMatch = text.match(/\[\s*\{.*\}\s*\]/s);
+                    if (jsonMatch) {
+                        const diffs = JSON.parse(jsonMatch[0]);
+                        updateMessage(index, { pendingEdits: diffs });
+                    } else {
+                        throw new Error("Could not parse diffs from response.");
+                    }
+                } catch (e) {
+                    console.error("Failed to parse diff response", e);
+                    // Fallback: just show the raw response if parsing fails? 
+                    // Better to error out or ask for retry.
+                }
+            }
+        } catch (error) {
+            console.error("Resend with comments failed", error);
+        } finally {
+            setIsLoading(false);
+            setAbortController(null);
+        }
+    }, [chatHistory, isLoading, coordinator, apiKeys, selectedProvider, selectedModel, setIsLoading, setAbortController, updateMessage]);
+
     return {
         userInput, setUserInput,
         chatHistory, setChatHistory,
         tokenUsage, setTokenUsage,
         isLoading, setIsLoading,
-        submitQuery,
+        submitQuery, resendWithComments,
         handleRedo, handleSubmit, handleSourceClick, renderModelMessage,
         stopGeneration,
         handleClearConversation: () => clearHistory(initialChatHistory),
