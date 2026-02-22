@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, useMemo } from 'react';
 import { marked } from 'marked';
-import { AppFile, ChatMessage, JobProgress, Model, SearchResult, TokenUsage } from '../types';
+import { AppFile, ChatMessage, JobProgress, Model, SearchResult, TokenUsage, SelectionComment } from '../types';
 import { summaryCache } from '../cache/summaryCache';
 import { ComputeTask, TaskPriority, TaskType } from '../compute/types';
 import { generateContent, Tool, SchemaType, countTokens } from '../api/llm-provider';
@@ -8,6 +8,7 @@ import { ComputeCoordinator } from '../compute/coordinator';
 import { VectorStore } from '../rag/pipeline';
 import { useChatStore, useFileStore, useSettingsStore } from '../store';
 import { searchWeb } from '../utils/search';
+import { sectionizeMessage } from '../utils/chatUtils';
 
 const SEARCH_TOOL: Tool = {
     type: 'function',
@@ -700,7 +701,7 @@ Or just tell me what specific aspects you'd like me to focus on.`;
         setUserInput('');
     }, [userInput, chatHistory, submitQuery, setUserInput]);
 
-    const renderModelMessage = useCallback((content: string | null, fullContent?: string | null) => {
+    const renderModelMessage = useCallback((content: string | null, fullContent?: string | null, selectionComments?: SelectionComment[]) => {
         if (!content) return { __html: '' };
         let searchResults: SearchResult[] = [];
         
@@ -723,14 +724,14 @@ Or just tell me what specific aspects you'd like me to focus on.`;
             return html.replace('<a ', '<a target="_blank" rel="noopener noreferrer" ');
         };
 
-        const rawHtml = marked.parse(contentWithoutResults, { renderer, gfm: true, breaks: true });
+        const rawHtml = marked.parse(contentWithoutResults, { renderer, gfm: true, breaks: true }) as string;
         const docNumbers = new Map<string, number>();
         let nextDocNumber = 1;
 
         // Robust regex to handle variations: [Source: ID], [ID], 【Source: ID】, 【ID】, and unbracketed Source: ID
         const citationRegex = /\[Source:\s*([^\]]+)\]|\[(\d+)\]|【Source:\s*([^】]+)】|【(\d+)】|\bSource:\s*([\w.-]+_\d+_\d+)\b/gi;
 
-        const finalHtml = (rawHtml as string).replace(citationRegex, (match, g1, g2, g3, g4, g5) => {
+        let finalHtml = rawHtml.replace(citationRegex, (match, g1, g2, g3, g4, g5) => {
             const inside = (g1 || g2 || g3 || g4 || g5) as string;
             if (!inside) return match;
 
@@ -754,6 +755,20 @@ Or just tell me what specific aspects you'd like me to focus on.`;
             }).join('');
             return items ? `<span class="citation-group">${items}</span>` : match;
         });
+
+        // Handle selection highlights (Surgical approach: replace text with <mark> if it doesn't break HTML tags)
+        if (selectionComments && selectionComments.length > 0) {
+            selectionComments.forEach(sc => {
+                if (!sc.text) return;
+                // Simple search-and-replace for the first version. 
+                // Using split/join to replace all occurrences.
+                // NOTE: This can be improved with a more robust HTML-safe replacer.
+                const escapedText = sc.text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                const regex = new RegExp(`(${escapedText})(?![^<]*>)`, 'gi'); // Don't replace inside HTML tags
+                finalHtml = finalHtml.replace(regex, `<mark class="inline-review-mark" data-comment-id="${sc.id}">$1<span class="inline-review-tooltip"><div class="inline-review-header">Selection Review:</div>${sc.comment}</span></mark>`);
+            });
+        }
+
         return { __html: finalHtml };
     }, []);
 
@@ -800,14 +815,19 @@ Or just tell me what specific aspects you'd like me to focus on.`;
 
     const resendWithComments = useCallback(async (index: number) => {
         const msg = chatHistory[index];
-        if (!msg || !msg.sections || isLoading || !coordinator?.current) return;
+        if (!msg || isLoading || !coordinator?.current) return;
 
-        const comments = msg.sections
-            .filter(s => s.comment)
-            .map(s => `Section ID ${s.id}: ${s.comment}`)
-            .join('\n');
+        const sectionComments = msg.sections
+            ? msg.sections.filter(s => s.comment).map(s => `Section ID ${s.id}: ${s.comment}`).join('\n')
+            : '';
 
-        if (!comments) return;
+        const selectionComments = msg.selectionComments
+            ? msg.selectionComments.map(sc => `Review for text "${sc.text}": ${sc.comment}`).join('\n')
+            : '';
+
+        const allComments = [sectionComments, selectionComments].filter(Boolean).join('\n\n');
+
+        if (!allComments) return;
 
         setIsLoading(true);
         const apiKey = apiKeys[selectedProvider];
@@ -816,22 +836,32 @@ Or just tell me what specific aspects you'd like me to focus on.`;
 
         try {
             const systemPrompt = `You are editing your previous response based on specific user comments.
+The previous message has been formatted with [Section ID: sec-N] tags for your reference.
 CRITICAL EDITING PROTOCOL:
-1. FOCUS ONLY on the commented section(s). 
-2. DO NOT move information from other sections into the edited section unless explicitly requested.
+1. FOCUS ONLY on the commented parts (sections or specific text selections). 
+2. DO NOT move information from other parts into the edited areas unless explicitly requested.
 3. PRESERVE the original structure and context of the message. 
-4. SURGICAL UPDATES: Only change what is necessary to address the comment.
+4. SURGICAL UPDATES: Only change what is necessary to address the comments.
 5. JSON FORMAT: You MUST provide your edits using a structured JSON DIFF format: [{"sectionId": "sec-N", "newContent": "..."}]
-6. DO NOT include sections that don't need changes.
-7. REWRITE REQUEST: If the comment requires a fundamental restructuring that makes the section-based DIFF approach impossible, respond with: "FULL_REWRITE_REQUEST: <reason>"`;
+6. SELECTION REVIEWS: If a comment refers to specific text (Selection Review), find the section containing that text and update it. Use the provided [Section ID: sec-N] to identify the correct section.
+7. DO NOT include the [Section ID: sec-N] tags in your "newContent". They are for reference only.
+8. DO NOT include sections that don't need changes.
+9. REWRITE REQUEST: If the comments require a fundamental restructuring that makes the section-based DIFF approach impossible, respond with: "FULL_REWRITE_REQUEST: <reason>"`;
 
-            const userPrompt = `I have specific remarks on parts of your last response:\n${comments}\n\nPlease apply these surgical changes using the requested JSON diff format. Focus only on the content within those specific sections.`;
+            const userPrompt = `I have specific remarks on parts of your last response:\n${allComments}\n\nPlease apply these surgical changes using the requested JSON diff format. Focus only on the content within those specific areas.`;
 
-            // We send the history up to that message, then our special request
-            const historyToMessage = chatHistory.slice(0, index + 1);
+            // We send the history up to that message, but we FORMAT the message-to-be-edited 
+            // to include explicit section IDs so the model knows what to reference.
+            const historyToMessage = chatHistory.slice(0, index);
+            const messageToBeEdited = chatHistory[index];
+            
+            const sections = messageToBeEdited.sections || sectionizeMessage(messageToBeEdited.content || '');
+            const formattedContent = sections.map(s => `[Section ID: ${s.id}]\n${s.content}`).join('\n\n');
+            
             const messages: ChatMessage[] = [
                 { role: 'system', content: systemPrompt },
                 ...historyToMessage,
+                { role: 'model', content: formattedContent },
                 { role: 'user', content: userPrompt }
             ];
 

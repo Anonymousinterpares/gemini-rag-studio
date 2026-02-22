@@ -97,6 +97,67 @@ export const App: FC = () => {
 
   const [activeCommentInput, setActiveCommentInput] = useState<{ msgIndex: number, sectionId: string } | null>(null);
   const [commentText, setCommentText] = useState('');
+  const [selectionPopover, setSelectionPopover] = useState<{
+    top: number;
+    left: number;
+    text: string;
+    msgIndex: number;
+  } | null>(null);
+
+  const handleMouseUp = (msgIndex: number) => () => {
+    if (msgIndex !== chatHistory.length - 1) return;
+    
+    const selection = window.getSelection();
+    if (selection && selection.toString().trim().length > 0) {
+      const range = selection.getRangeAt(0);
+      const rect = range.getBoundingClientRect();
+      setSelectionPopover({
+        top: rect.top + window.scrollY - 40,
+        left: rect.left + window.scrollX + rect.width / 2,
+        text: selection.toString().trim(),
+        msgIndex
+      });
+    }
+  };
+
+  // Clear selection popover when clicking elsewhere
+  useEffect(() => {
+    const handleGlobalClick = (e: MouseEvent) => {
+      if (selectionPopover && !(e.target as HTMLElement).closest('.selection-popover')) {
+        setSelectionPopover(null);
+      }
+    };
+    window.addEventListener('mousedown', handleGlobalClick);
+    return () => window.removeEventListener('mousedown', handleGlobalClick);
+  }, [selectionPopover]);
+
+  const handleAddSelectionComment = (msgIndex: number, text: string) => {
+    const comment = window.prompt(`Add a review comment for: "${text}"`);
+    if (!comment) {
+      setSelectionPopover(null);
+      return;
+    }
+    
+    const msg = chatHistory[msgIndex];
+    const selectionComments = msg.selectionComments || [];
+    const newComment = {
+      id: `sel-${Date.now()}`,
+      text,
+      comment
+    };
+    
+    handleUpdateMessage(msgIndex, { 
+      selectionComments: [...selectionComments, newComment] 
+    });
+    setSelectionPopover(null);
+  };
+
+  const handleDeleteSelectionComment = (msgIndex: number, id: string) => {
+    if (!window.confirm("Delete this selection review?")) return;
+    const msg = chatHistory[msgIndex];
+    const updated = (msg.selectionComments || []).filter(sc => sc.id !== id);
+    handleUpdateMessage(msgIndex, { selectionComments: updated });
+  };
 
   const handleStartComment = (msgIndex: number, sectionId: string) => {
     // Only latest model output can have comments
@@ -393,7 +454,7 @@ export const App: FC = () => {
               if (msg.isInternal) return false;
               return true;
             }).map(({ msg, i }) => (
-              <div key={i} className={`message-container ${msg.role}`}>
+              <div key={i} className={`message-container ${msg.role}`} onMouseUp={handleMouseUp(i)}>
                 <div className={`chat-message ${msg.role} bubble-${appSettings.chatBubbleColor}`}>
                   <div className='avatar'>{msg.role === 'model' ? <Bot size={20} /> : <User size={20} />}</div>
                   <div className='message-content'>
@@ -443,11 +504,11 @@ export const App: FC = () => {
                                       <div className="message-main-content">
                                         <div className="message-section-wrapper">
                                           <div className={`message-section ${pendingEdit ? 'highlight-pending' : ''}`}>
-                                            <div dangerouslySetInnerHTML={renderModelMessage(section.content, msg.content)} />
+                                            <div dangerouslySetInnerHTML={renderModelMessage(section.content, msg.content, msg.selectionComments)} />
                                             {pendingEdit && (
                                               <div className="pending-edit-preview">
                                                 <div style={{ fontWeight: 'bold', fontSize: '0.8rem', marginTop: '0.5rem', color: 'var(--warning-orange)' }}>PROPOSED CHANGE:</div>
-                                                <div dangerouslySetInnerHTML={renderModelMessage(pendingEdit.newContent, msg.content)} />
+                                                <div dangerouslySetInnerHTML={renderModelMessage(pendingEdit.newContent, msg.content, msg.selectionComments)} />
                                                 <div className="edit-actions-floating">
                                                   <button className="button btn-confirm-edit" onClick={() => handleConfirmEdit(i, section.id)} title="Confirm Change"><Check size={12} /> Confirm</button>
                                                   <button className="button btn-reject-edit" onClick={() => handleRejectEdit(i, section.id)} title="Reject Change"><XCircle size={12} /> Reject</button>
@@ -503,6 +564,32 @@ export const App: FC = () => {
                                     </div>
                                   );
                                 })}
+
+                                {msg.selectionComments && msg.selectionComments.length > 0 && (
+                                  <div className="message-section-row">
+                                    <div className="message-main-content" />
+                                    <div className="section-comment-area">
+                                      <div style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#8e44ad', marginBottom: '0.5rem', textTransform: 'uppercase' }}>Selection Reviews:</div>
+                                      {msg.selectionComments.map(sc => (
+                                        <div key={sc.id} className="comment-box" style={{ borderLeft: '3px solid #8e44ad', marginBottom: '0.5rem' }}>
+                                          <div className="selection-comment-sidebar-text">"{sc.text}"</div>
+                                          <div className="comment-content">{sc.comment}</div>
+                                          <div className="comment-actions">
+                                            <button onClick={() => handleDeleteSelectionComment(i, sc.id)} title="Delete"><Trash2 size={12} /></button>
+                                            <button 
+                                              className="button resend-with-comments-btn-mini" 
+                                              onClick={() => resendWithComments(i)}
+                                              title="Resend entire message with all comments"
+                                              disabled={isLoading}
+                                            >
+                                              <RefreshCw size={12} /> Resend
+                                            </button>
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
                                 
                                 <div className="message-section-row">
                                   <div className="message-main-content">
@@ -512,7 +599,7 @@ export const App: FC = () => {
                                         <button onClick={() => handleRejectAllEdits(i)} className="button secondary">Reject All Edits</button>
                                       </div>
                                     )}
-                                    {sections.some(s => s.comment) && i === chatHistory.length - 1 && (
+                                    {(sections.some(s => s.comment) || (msg.selectionComments && msg.selectionComments.length > 0)) && i === chatHistory.length - 1 && (
                                       <button className="button resend-with-comments-btn" onClick={() => resendWithComments(i)}>
                                         <RefreshCw size={14} style={{ marginRight: '6px' }} /> Resend with Comments
                                       </button>
@@ -661,6 +748,16 @@ export const App: FC = () => {
         addFilesAndEmbed(toAdd); setIsExplorerOpen(false);
       }} />
       <RecoveryDialogContainer availableModels={modelsList} currentModel={selectedModel} apiKeys={apiKeys} onModelChange={(m: Model, k?: string) => { setSelectedModel(m); if (k) setApiKeys(prev => ({ ...prev, [m.provider]: k })); }} />
+      
+      {selectionPopover && (
+        <div 
+          className="selection-popover"
+          style={{ top: selectionPopover.top, left: selectionPopover.left }}
+          onClick={() => handleAddSelectionComment(selectionPopover.msgIndex, selectionPopover.text)}
+        >
+          <Edit2 size={14} /> Review Selection
+        </div>
+      )}
     </div>
   );
 };

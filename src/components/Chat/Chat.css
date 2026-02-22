@@ -565,3 +565,108 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+/* --- Text Selection Review --- */
+.selection-popover {
+  position: fixed;
+  z-index: 1000;
+  background-color: var(--primary-color);
+  color: white;
+  padding: 0.4rem 0.8rem;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  transform: translateX(-50%);
+  animation: pop-up 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+@keyframes pop-up {
+  from { opacity: 0; transform: translateX(-50%) translateY(10px) scale(0.9); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+}
+
+.selection-popover:hover {
+  background-color: var(--primary-color-hover);
+}
+
+.inline-review-mark {
+  background-color: rgba(142, 68, 173, 0.25); /* Violet translucent */
+  border-bottom: 2px solid #8e44ad;
+  cursor: pointer;
+  position: relative;
+  border-radius: 2px;
+  padding: 0 1px;
+  transition: background-color 0.2s;
+  display: inline;
+}
+
+.inline-review-mark:hover {
+  background-color: rgba(142, 68, 173, 0.45);
+}
+
+.inline-review-tooltip {
+  visibility: hidden;
+  position: absolute;
+  bottom: 125%;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: #2c3e50;
+  color: #fff;
+  text-align: left;
+  border-radius: 6px;
+  padding: 10px 14px;
+  z-index: 1001;
+  width: max-content;
+  max-width: 320px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+  font-size: 0.9rem;
+  line-height: 1.4;
+  opacity: 0;
+  transition: opacity 0.2s;
+  pointer-events: none;
+  white-space: normal;
+  border: 1px solid rgba(255,255,255,0.1);
+}
+
+.inline-review-mark:hover .inline-review-tooltip {
+  visibility: visible;
+  opacity: 1;
+}
+
+.inline-review-tooltip::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  margin-left: -5px;
+  border-width: 5px;
+  border-style: solid;
+  border-color: #2c3e50 transparent transparent transparent;
+}
+
+.inline-review-header {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #bdc3c7;
+  margin-bottom: 4px;
+  font-weight: bold;
+}
+
+.selection-comment-sidebar {
+  margin-top: 0.5rem;
+  padding: 0.5rem;
+  border-left: 3px solid #8e44ad;
+  background: rgba(142, 68, 173, 0.05);
+  font-size: 0.85rem;
+}
+
+.selection-comment-sidebar-text {
+  font-style: italic;
+  color: var(--text-color-secondary);
+  margin-bottom: 0.25rem;
+}

@@ -55,6 +55,12 @@ export interface MessageSection {
   isEditingComment?: boolean;
 }
 
+export interface SelectionComment {
+  id: string;
+  text: string;
+  comment: string;
+}
+
 export interface ChatMessage {
   role: 'user' | 'model' | 'system' | 'tool'
   content: string | null; // Content can be null for tool calls
@@ -66,6 +72,7 @@ export interface ChatMessage {
   name?: string;
   isInternal?: boolean;
   sections?: MessageSection[];
+  selectionComments?: SelectionComment[];
   pendingEdits?: {
     sectionId: string;
     newContent: string;
