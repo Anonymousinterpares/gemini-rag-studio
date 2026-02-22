@@ -81,6 +81,7 @@ export const App: FC = () => {
     userInput, setUserInput,
     chatHistory, setChatHistory,
     tokenUsage, setTokenUsage,
+    currentContextTokens,
     isLoading,
     submitQuery,
     handleRedo, handleSubmit, handleSourceClick, renderModelMessage,
@@ -598,6 +599,9 @@ export const App: FC = () => {
             <span className="token-usage-split">
               (In: {tokenUsage.promptTokens}, Out: {tokenUsage.completionTokens})
             </span>
+          </div>
+          <div className="token-usage-display" style={{ borderTop: 'none', paddingTop: 0 }}>
+             Current Context: {currentContextTokens}
           </div>
           <div className='setting-row'>
             <button onClick={() => setAppSettings(p => ({ ...p, isDeepAnalysisEnabled: !p.isDeepAnalysisEnabled }))} className={`toggle-button ${appSettings.isDeepAnalysisEnabled ? 'active' : ''}`}>Deep Analysis: {appSettings.isDeepAnalysisEnabled ? 'ON' : 'OFF'}</button>

@@ -445,7 +445,55 @@ export async function generateContent(
         },
       };
     }
-    default:
-      throw new Error(`Unsupported provider: ${model.provider}`);
-  }
-}
+        default:
+          throw new Error(`Unsupported provider: ${model.provider}`);
+      }
+    }
+    
+    export async function countTokens(
+      model: Model,
+      apiKeyFromUI: string | undefined,
+      messages: ChatMessage[]
+    ): Promise<number> {
+      const getApiKey = (provider: 'google' | 'openai' | 'openrouter' | 'ollama'): string | undefined => {
+        switch (provider) {
+            case 'google':
+                return import.meta.env.VITE_GOOGLE_API_KEY || apiKeyFromUI;
+            case 'openai':
+                return import.meta.env.VITE_OPENAI_API_KEY || apiKeyFromUI;
+            case 'openrouter':
+                 return import.meta.env.VITE_OPENROUTER_API_KEY || apiKeyFromUI;
+            default:
+                return apiKeyFromUI;
+        }
+      }
+    
+      const apiKey = getApiKey(model.provider as 'google' | 'openai' | 'openrouter' | 'ollama');
+    
+      if (model.provider === 'google' && apiKey) {
+        try {
+          const ai = new GoogleGenerativeAI(apiKey);
+          const gemini = ai.getGenerativeModel({ model: model.id });
+          const { history, systemPrompt } = sanitizeHistory([...messages]);
+          
+          const contents: Content[] = history.map(m => ({
+              role: m.role === 'model' ? 'model' : 'user',
+              parts: [{ text: m.content || '' }]
+          }));
+          
+          if (systemPrompt) {
+              contents.unshift({ role: 'user', parts: [{ text: systemPrompt }] });
+          }
+    
+          const result = await gemini.countTokens({ contents });
+          return result.totalTokens;
+        } catch (e) {
+          console.error("Gemini countTokens failed", e);
+        }
+      }
+      
+      // Heuristic for others: ~4 chars per token or ~1.3 tokens per word
+      const totalText = messages.map(m => m.content || '').join(' ');
+      return Math.ceil(totalText.length / 4);
+    }
+    

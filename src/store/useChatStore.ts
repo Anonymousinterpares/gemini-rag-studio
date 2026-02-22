@@ -11,6 +11,7 @@ interface ChatState {
   userInput: string;
   pendingQuery: string | null;
   tokenUsage: TokenUsage;
+  currentContextTokens: number;
   isLoading: boolean;
   abortController: AbortController | null;
   
@@ -25,6 +26,7 @@ interface ChatState {
   setUserInput: (input: string) => void;
   setPendingQuery: (query: string | null) => void;
   setTokenUsage: (updater: TokenUsage | ((prev: TokenUsage) => TokenUsage)) => void;
+  setCurrentContextTokens: (tokens: number) => void;
   setIsLoading: (loading: boolean) => void;
   setAbortController: (controller: AbortController | null) => void;
   clearHistory: (initialHistory: ChatMessage[]) => void;
@@ -43,6 +45,7 @@ export const useChatStore = create<ChatState>((set) => ({
   userInput: '',
   pendingQuery: null,
   tokenUsage: { promptTokens: 0, completionTokens: 0 },
+  currentContextTokens: 0,
   isLoading: false,
   abortController: null,
   caseFileState: {
@@ -60,6 +63,8 @@ export const useChatStore = create<ChatState>((set) => ({
   setTokenUsage: (updater) => set((state) => ({
     tokenUsage: typeof updater === 'function' ? updater(state.tokenUsage) : updater
   })),
+
+  setCurrentContextTokens: (tokens) => set({ currentContextTokens: tokens }),
 
   setIsLoading: (loading) => set({ isLoading: loading }),
 
