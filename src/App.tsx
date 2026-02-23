@@ -12,6 +12,9 @@ import CustomFileExplorer from './components/CustomFileExplorer';
 import RecoveryDialogContainer from './components/RecoveryDialogContainer';
 import { processExplorerItems, downloadMessage } from './utils/appActions';
 import { useSettingsStore, useFileStore, useComputeStore } from './store';
+import { useCaseFileStore } from './store/useCaseFileStore';
+import { useCaseFileIO } from './hooks/useCaseFileIO';
+import { useChatStore } from './store/useChatStore';
 import { Edit2 } from 'lucide-react';
 
 // Extracted Components and Hooks
@@ -21,6 +24,7 @@ import { useChatHistoryIO } from './hooks/useChatHistoryIO';
 import { useAppUI } from './hooks/useAppUI';
 import { FilePanel } from './components/FilePanel';
 import { ChatPanel } from './components/ChatPanel';
+import { CaseFilePanel } from './components/CaseFile/CaseFilePanel';
 
 import './style.css';
 import './progress-bar.css';
@@ -53,17 +57,29 @@ export const App: FC = () => {
     currentContextTokens,
     isLoading,
     submitQuery,
-    handleRedo, handleSubmit, handleSourceClick, renderModelMessage,
+    handleRedo: handleRerunQuery, handleSubmit, handleSourceClick, renderModelMessage,
     stopGeneration,
     handleClearConversation, handleRemoveMessage,
     handleUpdateMessage, handleTruncateHistory,
     initialChatHistory,
     caseFileState, setCaseFileState,
     resendWithComments,
-    hoveredSelectionId, setHoveredSelectionId
+    hoveredSelectionId, setHoveredSelectionId,
+    submitCaseFileComment
   } = useChat({
     coordinator, vectorStore, queryEmbeddingResolver, rerankPromiseResolver, setRerankProgress: () => { }, setActiveSource, setIsModalOpen
   });
+
+  // ── Case file store + IO ──────────────────────────────────────────────────
+  const {
+    undo: undoCaseFile,
+    redo: redoCaseFile,
+    caseFile,
+    setOverlayOpen
+  } = useCaseFileStore();
+  const { handleLoadCaseFile } = useCaseFileIO();
+  // Chat redo lives in useChatStore (separate from useChat return)
+  const { redo: redoChatFn, redoStack: chatRedoStack } = useChatStore();
 
   const {
     activeCommentInput, setActiveCommentInput,
@@ -100,6 +116,26 @@ export const App: FC = () => {
     showDropVideo, setShowDropVideo
   } = useAppUI({ isLoading, isEmbedding, activeJobCount, files, chatHistory, jobTimers, setJobTimers });
 
+  // ── Combined undo / redo ────────────────────────────────
+  const handleUndo = () => { undo(); undoCaseFile(); };
+  const handleRedo = () => { redoChatFn(); redoCaseFile(); };
+
+  // Keyboard shortcuts: Ctrl+Z = undo, Ctrl+Y / Ctrl+Shift+Z = redo
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !isLoading) {
+        e.preventDefault();
+        undo(); undoCaseFile();
+      } else if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey)) && !isLoading) {
+        e.preventDefault();
+        redoChatFn(); redoCaseFile();
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoading]);
+
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [editingContent, setEditingContent] = useState('');
 
@@ -119,7 +155,7 @@ export const App: FC = () => {
     handleTruncateHistory(idx);
     setEditingIndex(null);
     setEditingContent('');
-    await handleRedo(idx);
+    await handleRerunQuery(idx);
   };
 
   const { handleDrop, handleClearFiles, addFilesAndEmbed } = useFileState({
@@ -196,8 +232,20 @@ export const App: FC = () => {
     renderModelMessage, setHoveredSelectionId, resendWithComments,
     handleStartComment, handleAddComment, handleEditComment, handleDeleteComment,
     handleDeleteSelectionComment, setActiveCommentInput, setCommentText,
-    handleCopy, handleDownloadAction, handleStartEdit, handleRedo, handleRemoveMessage,
-    handleMouseUp
+    handleCopy, handleDownloadAction, handleStartEdit,
+    // "handleRedo" in MessageItemHandlers = per-message re-run (renamed to avoid collision)
+    handleRedo: handleRerunQuery,
+    handleRemoveMessage, handleMouseUp,
+    onOpenInCaseFile: (content: string, title?: string) => {
+      // Parse the LLM markdown/JSON into a CaseFile and load it into the overlay
+      import('./utils/caseFileUtils').then(({ parseCaseFileFromMarkdown }) => {
+        // Strip trailing <!--searchResults:...--> comment if present
+        const clean = content.replace(/<!--searchResults:.*?-->/, '').trim();
+        const cf = parseCaseFileFromMarkdown(clean, title ?? 'Case File');
+        useCaseFileStore.getState().loadCaseFile(cf);
+        useCaseFileStore.getState().setOverlayOpen(true);
+      });
+    }
   };
 
   const onOpenExplorer = async () => {
@@ -216,10 +264,14 @@ export const App: FC = () => {
         showRejectionBubble={showRejectionBubble} showDropVideo={showDropVideo} dropVideoSrc={dropVideoSrc}
         setShowDropVideo={setShowDropVideo} handleClearFiles={handleClearFiles}
         initialChatHistory={initialChatHistory} handleClearConversation={handleClearConversation}
-        chatHistory={chatHistory} undo={undo} historyStack={historyStack} handleClear={handleClear}
+        chatHistory={chatHistory} undo={handleUndo} redo={handleRedo}
+        historyStack={historyStack} redoStack={chatRedoStack} handleClear={handleClear}
         computeDevice={computeDevice} mlWorkerCount={mlWorkerCount} viewMode={viewMode}
         setViewMode={setViewMode} fileTree={fileTree} handleShowSum={handleShowSum}
         onOpenExplorer={onOpenExplorer}
+        onLoadCaseFile={handleLoadCaseFile}
+        onOpenCaseFile={() => setOverlayOpen(true)}
+        hasCaseFile={!!caseFile}
       />
       <ChatPanel
         appSettings={appSettings} setAppSettings={setAppSettings}
@@ -252,6 +304,16 @@ export const App: FC = () => {
         addFilesAndEmbed(toAdd); setIsExplorerOpen(false);
       }} />
       <RecoveryDialogContainer availableModels={modelsList} currentModel={selectedModel} apiKeys={apiKeys} onModelChange={(m: Model, k?: string) => { setSelectedModel(m); if (k) setApiKeys(prev => ({ ...prev, [m.provider]: k })); }} />
+
+      {/* ── Case File Panel overlay ── */}
+      <CaseFilePanel
+        onResolveComment={async (cf, sId, comment) => {
+          // submitCaseFileComment handles both success (store.resolveComment) and failure (append to chat)
+          await submitCaseFileComment(cf, sId, comment, (resolvedSectionId, commentId, newContent) => {
+            useCaseFileStore.getState().resolveComment(resolvedSectionId, commentId, newContent);
+          });
+        }}
+      />
 
       {selectionPopover && (
         <div className="selection-popover" style={{ top: selectionPopover.top, left: selectionPopover.left }}>

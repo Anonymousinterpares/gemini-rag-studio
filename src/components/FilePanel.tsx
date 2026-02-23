@@ -1,5 +1,5 @@
 import { FC, useRef } from 'react';
-import { Trash2, X, RefreshCw, LayoutGrid, List as ListIcon, FolderTree, RotateCcw } from 'lucide-react';
+import { Trash2, X, RefreshCw, LayoutGrid, List as ListIcon, FolderTree, RotateCcw, RotateCw, FolderOpen, FileText } from 'lucide-react';
 import { SpeechBubble, DigestParticles, FloatingArrows, RejectionBubble } from './Monster';
 import Settings from './Settings';
 import MemoizedFileTreeView from './FileTreeView';
@@ -25,7 +25,9 @@ interface FilePanelProps {
     handleClearConversation: () => void;
     chatHistory: any[];
     undo: () => void;
+    redo: () => void;
     historyStack: any[];
+    redoStack: any[];
     handleClear: () => void;
     computeDevice: string;
     mlWorkerCount: number;
@@ -34,15 +36,19 @@ interface FilePanelProps {
     fileTree: any;
     handleShowSum: (f: AppFile) => void;
     onOpenExplorer: () => void;
+    // Case file
+    onLoadCaseFile: () => void;
+    onOpenCaseFile: () => void;
+    hasCaseFile: boolean;
 }
 
 export const FilePanel: FC<FilePanelProps> = ({
     showSettings, setShowSettings, glowType, isDragging, handleDropValidate, files,
     activeJobCount, isLoading, isEmbedding, showRejectionBubble, showDropVideo,
     dropVideoSrc, setShowDropVideo, handleClearFiles, initialChatHistory,
-    handleClearConversation, chatHistory, undo, historyStack, handleClear,
+    handleClearConversation, chatHistory, undo, redo, historyStack, redoStack, handleClear,
     computeDevice, mlWorkerCount, viewMode, setViewMode, fileTree, handleShowSum,
-    onOpenExplorer
+    onOpenExplorer, onLoadCaseFile, onOpenCaseFile, hasCaseFile
 }) => {
     const dropVideoRef = useRef<HTMLVideoElement>(null);
 
@@ -51,6 +57,26 @@ export const FilePanel: FC<FilePanelProps> = ({
             <div className='file-panel-header'>
                 <button className='button secondary' onClick={onOpenExplorer}>Open Explorer</button>
                 <button className='button secondary' onClick={() => setShowSettings(p => !p)}>Settings</button>
+            </div>
+            {/* Case File buttons */}
+            <div className='flex gap-2' style={{ padding: '4px 8px' }}>
+                <button
+                    className='button secondary'
+                    title='Load a case file (.json or .md) from your computer'
+                    onClick={onLoadCaseFile}
+                    style={{ flex: 1 }}
+                >
+                    <FileText size={14} /> Load Case File
+                </button>
+                <button
+                    className='button secondary'
+                    title='Open the loaded case file in the overlay panel'
+                    onClick={onOpenCaseFile}
+                    disabled={!hasCaseFile}
+                    style={{ flex: 1 }}
+                >
+                    <FolderOpen size={14} /> Open Case File
+                </button>
             </div>
             <Settings className={showSettings ? '' : 'hidden'} />
             <div className={`drag-drop-area glow-${glowType} ${isDragging ? 'dragging' : ''}`} onDrop={handleDropValidate} onDragOver={(e) => e.preventDefault()} onDragLeave={() => { }}>
@@ -69,7 +95,22 @@ export const FilePanel: FC<FilePanelProps> = ({
             <div className='flex gap-2'>
                 <button className='button secondary' onClick={() => handleClearFiles(initialChatHistory)} disabled={files.length === 0 || isEmbedding} title="Clear Files"><Trash2 size={16} /></button>
                 <button className='button secondary' onClick={handleClearConversation} disabled={chatHistory.length <= 1 || isLoading || isEmbedding} title="Clear Chat"><X size={16} /></button>
-                <button className='button secondary' onClick={undo} disabled={historyStack.length === 0 || isLoading || isEmbedding} title="Undo last action"><RotateCcw size={16} /></button>
+                <button
+                    className='button secondary'
+                    onClick={undo}
+                    disabled={historyStack.length === 0 || isLoading || isEmbedding}
+                    title="Undo last action – reverses comment additions, LLM replacements, and content appended to chat since your last message"
+                >
+                    <RotateCcw size={16} />
+                </button>
+                <button
+                    className='button secondary'
+                    onClick={redo}
+                    disabled={redoStack.length === 0 || isLoading || isEmbedding}
+                    title="Redo – re-applies the last undone action"
+                >
+                    <RotateCw size={16} />
+                </button>
                 <button className='button secondary' onClick={handleClear} title="Reset App"><RefreshCw size={16} /></button>
             </div>
             <div className='compute-status-indicator'>Compute: {computeDevice.toUpperCase()} ({mlWorkerCount} ML)</div>

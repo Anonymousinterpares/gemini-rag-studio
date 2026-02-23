@@ -125,14 +125,14 @@ const Settings: FC<{ className?: string }> = ({ className }) => {
           <div className="setting-row nested">
             <label>Sub-questions:</label>
             <div className="worker-controls">
-              <button onClick={() => setAppSettings(p => ({...p, numSubQuestions: Math.max(1, p.numSubQuestions - 1)}))}><Minus size={14} /></button>
+              <button onClick={() => setAppSettings(p => ({ ...p, numSubQuestions: Math.max(1, p.numSubQuestions - 1) }))}><Minus size={14} /></button>
               <span>{appSettings.numSubQuestions}</span>
-              <button onClick={() => setAppSettings(p => ({...p, numSubQuestions: p.numSubQuestions + 1}))}><Plus size={14} /></button>
+              <button onClick={() => setAppSettings(p => ({ ...p, numSubQuestions: p.numSubQuestions + 1 }))}><Plus size={14} /></button>
             </div>
           </div>
           <div className="setting-row nested">
             <label>DA Level:</label>
-            <select name="deepAnalysisLevel" value={appSettings.deepAnalysisLevel} onChange={(e) => setAppSettings(p => ({...p, deepAnalysisLevel: parseInt(e.target.value) as 2|3}))}>
+            <select name="deepAnalysisLevel" value={appSettings.deepAnalysisLevel} onChange={(e) => setAppSettings(p => ({ ...p, deepAnalysisLevel: parseInt(e.target.value) as 2 | 3 }))}>
               <option value={2}>Level 2 (Discovery)</option>
               <option value={3}>Level 3 (Gap Analysis)</option>
             </select>
@@ -142,37 +142,42 @@ const Settings: FC<{ className?: string }> = ({ className }) => {
 
       <div className="setting-row">
         <label>Query Transform:</label>
-        <button onClick={() => setAppSettings(p => ({...p, isLightQueryTransformationEnabled: !p.isLightQueryTransformationEnabled}))} className={`toggle-button ${appSettings.isLightQueryTransformationEnabled ? 'active' : ''}`}>{appSettings.isLightQueryTransformationEnabled ? 'ON' : 'OFF'}</button>
+        <button onClick={() => setAppSettings(p => ({ ...p, isLightQueryTransformationEnabled: !p.isLightQueryTransformationEnabled }))} className={`toggle-button ${appSettings.isLightQueryTransformationEnabled ? 'active' : ''}`}>{appSettings.isLightQueryTransformationEnabled ? 'ON' : 'OFF'}</button>
       </div>
 
       <div className="setting-row">
         <label>Doc-Only Mode:</label>
-        <button onClick={() => setAppSettings(p => ({...p, docOnlyMode: !p.docOnlyMode}))} className={`toggle-button ${appSettings.docOnlyMode ? 'active' : ''}`}>{appSettings.docOnlyMode ? 'ON' : 'OFF'}</button>
+        <button onClick={() => setAppSettings(p => ({ ...p, docOnlyMode: !p.docOnlyMode }))} className={`toggle-button ${appSettings.docOnlyMode ? 'active' : ''}`}>{appSettings.docOnlyMode ? 'ON' : 'OFF'}</button>
       </div>
 
       <div className="setting-row">
         <label>Chat Mode:</label>
-        <button onClick={() => setAppSettings(p => ({...p, isChatModeEnabled: !p.isChatModeEnabled}))} className={`toggle-button ${appSettings.isChatModeEnabled ? 'active' : ''}`}>{appSettings.isChatModeEnabled ? 'ON' : 'OFF'}</button>
+        <button onClick={() => setAppSettings(p => ({ ...p, isChatModeEnabled: !p.isChatModeEnabled }))} className={`toggle-button ${appSettings.isChatModeEnabled ? 'active' : ''}`}>{appSettings.isChatModeEnabled ? 'ON' : 'OFF'}</button>
+      </div>
+
+      <div className="setting-row">
+        <label title='Allow the LLM to search the web when resolving comments in the case file overlay'>CF Internet Search:</label>
+        <button onClick={() => setAppSettings(p => ({ ...p, caseFileInternetSearch: !p.caseFileInternetSearch }))} className={`toggle-button ${appSettings.caseFileInternetSearch ? 'active' : ''}`}>{appSettings.caseFileInternetSearch ? 'ON' : 'OFF'}</button>
       </div>
 
       <div className="setting-row">
         <label>Search Limit:</label>
         <div className="worker-controls">
-          <button onClick={() => setAppSettings(p => ({...p, maxSearchLoops: Math.max(1, p.maxSearchLoops - 1)}))}><Minus size={14} /></button>
+          <button onClick={() => setAppSettings(p => ({ ...p, maxSearchLoops: Math.max(1, p.maxSearchLoops - 1) }))}><Minus size={14} /></button>
           <span>{appSettings.maxSearchLoops}</span>
-          <button onClick={() => setAppSettings(p => ({...p, maxSearchLoops: p.maxSearchLoops + 1}))}><Plus size={14} /></button>
+          <button onClick={() => setAppSettings(p => ({ ...p, maxSearchLoops: p.maxSearchLoops + 1 }))}><Plus size={14} /></button>
         </div>
       </div>
 
       <div className="setting-row">
         <label>Semantic Chunk:</label>
-        <button onClick={() => setAppSettings(p => ({...p, isSemanticChunkingEnabled: !p.isSemanticChunkingEnabled}))} className={`toggle-button ${appSettings.isSemanticChunkingEnabled ? 'active' : ''}`}>{appSettings.isSemanticChunkingEnabled ? 'ON' : 'OFF'}</button>
+        <button onClick={() => setAppSettings(p => ({ ...p, isSemanticChunkingEnabled: !p.isSemanticChunkingEnabled }))} className={`toggle-button ${appSettings.isSemanticChunkingEnabled ? 'active' : ''}`}>{appSettings.isSemanticChunkingEnabled ? 'ON' : 'OFF'}</button>
       </div>
 
       <div className="setting-row">
         <label>Threshold:</label>
         <div className="worker-controls" style={{ gap: '8px' }}>
-          <input type="range" name="relevanceThreshold" min="0.05" max="0.95" step="0.05" value={appSettings.relevanceThreshold} onChange={(e) => setAppSettings(p => ({...p, relevanceThreshold: parseFloat(e.target.value)}))} style={{ width: '80px' }} />
+          <input type="range" name="relevanceThreshold" min="0.05" max="0.95" step="0.05" value={appSettings.relevanceThreshold} onChange={(e) => setAppSettings(p => ({ ...p, relevanceThreshold: parseFloat(e.target.value) }))} style={{ width: '80px' }} />
           <span style={{ fontSize: '0.8em', minWidth: '35px' }}>{appSettings.relevanceThreshold}</span>
         </div>
       </div>
@@ -190,26 +195,26 @@ const Settings: FC<{ className?: string }> = ({ className }) => {
       <div className="setting-row">
         <label>Candidates:</label>
         <div className="worker-controls">
-          <button onClick={() => setAppSettings(p => ({...p, numInitialCandidates: Math.max(1, p.numInitialCandidates - 5)}))}><Minus size={14} /></button>
+          <button onClick={() => setAppSettings(p => ({ ...p, numInitialCandidates: Math.max(1, p.numInitialCandidates - 5) }))}><Minus size={14} /></button>
           <span>{appSettings.numInitialCandidates}</span>
-          <button onClick={() => setAppSettings(p => ({...p, numInitialCandidates: p.numInitialCandidates + 5}))}><Plus size={14} /></button>
+          <button onClick={() => setAppSettings(p => ({ ...p, numInitialCandidates: p.numInitialCandidates + 5 }))}><Plus size={14} /></button>
         </div>
       </div>
       <div className='setting-row'>
         <label>ML Workers:</label>
         <div className="worker-controls">
-          <button onClick={() => setAppSettings(p => ({...p, numMlWorkers: Math.max(2, p.numMlWorkers - 1)}))} disabled={appSettings.numMlWorkers <= 2}><Minus size={14} /></button>
+          <button onClick={() => setAppSettings(p => ({ ...p, numMlWorkers: Math.max(2, p.numMlWorkers - 1) }))} disabled={appSettings.numMlWorkers <= 2}><Minus size={14} /></button>
           <span>{appSettings.numMlWorkers}</span>
-          <button onClick={() => setAppSettings(p => ({...p, numMlWorkers: p.numMlWorkers + 1}))} disabled={appSettings.numMlWorkers >= (navigator.hardwareConcurrency || 4) - 1}><Plus size={14} /></button>
+          <button onClick={() => setAppSettings(p => ({ ...p, numMlWorkers: p.numMlWorkers + 1 }))} disabled={appSettings.numMlWorkers >= (navigator.hardwareConcurrency || 4) - 1}><Plus size={14} /></button>
         </div>
       </div>
       <div className='setting-row'>
         <label>Reranker:</label>
-        <button onClick={() => setAppSettings(p => ({...p, isRerankingEnabled: !p.isRerankingEnabled}))} className={`toggle-button ${appSettings.isRerankingEnabled ? 'active' : ''}`}>{appSettings.isRerankingEnabled ? 'ON' : 'OFF'}</button>
+        <button onClick={() => setAppSettings(p => ({ ...p, isRerankingEnabled: !p.isRerankingEnabled }))} className={`toggle-button ${appSettings.isRerankingEnabled ? 'active' : ''}`}>{appSettings.isRerankingEnabled ? 'ON' : 'OFF'}</button>
       </div>
       <div className='setting-row'>
         <label>Logging:</label>
-        <button onClick={() => setAppSettings(p => ({...p, isLoggingEnabled: !p.isLoggingEnabled}))} className={`toggle-button ${appSettings.isLoggingEnabled ? 'active' : ''}`}>{appSettings.isLoggingEnabled ? 'ON' : 'OFF'}</button>
+        <button onClick={() => setAppSettings(p => ({ ...p, isLoggingEnabled: !p.isLoggingEnabled }))} className={`toggle-button ${appSettings.isLoggingEnabled ? 'active' : ''}`}>{appSettings.isLoggingEnabled ? 'ON' : 'OFF'}</button>
       </div>
       <div className='setting-row'>
         <label>Bubble:</label>

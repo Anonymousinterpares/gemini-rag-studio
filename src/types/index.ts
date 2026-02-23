@@ -62,6 +62,30 @@ export interface SelectionComment {
   comment: string;
 }
 
+// ─── Case File Types ──────────────────────────────────────────────────────────
+
+export interface CaseFileComment {
+  id: string;
+  sectionId: string;
+  selectedText: string;   // text that was highlighted – sent to LLM for context only
+  instruction: string;    // user's instruction for the LLM
+  createdAt: number;
+}
+
+export interface CaseFileSection {
+  id: string;             // e.g. "sec-0", "sec-1"
+  title?: string;         // optional heading extracted at parse time
+  content: string;        // raw markdown
+  comments: CaseFileComment[];
+}
+
+export interface CaseFile {
+  version: 1;
+  title: string;
+  createdAt: number;
+  sections: CaseFileSection[];
+}
+
 export interface ChatMessage {
   role: 'user' | 'model' | 'system' | 'tool'
   content: string | null; // Content can be null for tool calls

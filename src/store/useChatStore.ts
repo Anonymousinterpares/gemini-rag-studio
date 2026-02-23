@@ -9,22 +9,24 @@ export interface CaseFileMetadata {
 interface ChatState {
   chatHistory: ChatMessage[];
   historyStack: ChatMessage[][];
+  redoStack: ChatMessage[][];
   userInput: string;
   pendingQuery: string | null;
   tokenUsage: TokenUsage;
   currentContextTokens: number;
   isLoading: boolean;
   abortController: AbortController | null;
-  
+
   // Case File specific state
   caseFileState: {
     isAwaitingFeedback: boolean;
     metadata?: CaseFileMetadata;
   };
-  
+
   // Actions
   setChatHistory: (updater: ChatMessage[] | ((prev: ChatMessage[]) => ChatMessage[])) => void;
   undo: () => void;
+  redo: () => void;
   pushToStack: (history: ChatMessage[]) => void;
   setUserInput: (input: string) => void;
   setPendingQuery: (query: string | null) => void;
@@ -46,6 +48,7 @@ export const useChatStore = create<ChatState>((set) => ({
     },
   ],
   historyStack: [],
+  redoStack: [],
   userInput: '',
   pendingQuery: null,
   tokenUsage: { promptTokens: 0, completionTokens: 0 },
@@ -58,10 +61,10 @@ export const useChatStore = create<ChatState>((set) => ({
 
   setChatHistory: (updater) => set((state) => {
     const nextHistory = typeof updater === 'function' ? updater(state.chatHistory) : updater;
-    return { 
+    return {
       // We only push to stack if the history actually changed to avoid redundant entries
       historyStack: state.chatHistory !== nextHistory ? [...state.historyStack, state.chatHistory].slice(-20) : state.historyStack,
-      chatHistory: nextHistory 
+      chatHistory: nextHistory
     };
   }),
 
@@ -70,7 +73,18 @@ export const useChatStore = create<ChatState>((set) => ({
     const previous = state.historyStack[state.historyStack.length - 1];
     return {
       chatHistory: previous,
-      historyStack: state.historyStack.slice(0, -1)
+      historyStack: state.historyStack.slice(0, -1),
+      redoStack: state.chatHistory ? [...state.redoStack, state.chatHistory].slice(-20) : state.redoStack
+    };
+  }),
+
+  redo: () => set((state) => {
+    if (state.redoStack.length === 0) return state;
+    const next = state.redoStack[state.redoStack.length - 1];
+    return {
+      chatHistory: next,
+      redoStack: state.redoStack.slice(0, -1),
+      historyStack: state.chatHistory ? [...state.historyStack, state.chatHistory].slice(-20) : state.historyStack
     };
   }),
 
@@ -79,9 +93,9 @@ export const useChatStore = create<ChatState>((set) => ({
   })),
 
   setUserInput: (input) => set({ userInput: input }),
-  
+
   setPendingQuery: (query) => set({ pendingQuery: query }),
-  
+
   setTokenUsage: (updater) => set((state) => ({
     tokenUsage: typeof updater === 'function' ? updater(state.tokenUsage) : updater
   })),
@@ -106,9 +120,9 @@ export const useChatStore = create<ChatState>((set) => ({
     if (newHistory[index]) {
       newHistory[index] = { ...newHistory[index], ...update };
     }
-    return { 
+    return {
       historyStack: [...state.historyStack, state.chatHistory].slice(-20),
-      chatHistory: newHistory 
+      chatHistory: newHistory
     };
   }),
 

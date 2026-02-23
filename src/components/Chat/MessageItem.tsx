@@ -1,5 +1,5 @@
 import { FC } from 'react';
-import { Bot, User, Check, XCircle, Trash2, RefreshCw, Edit2, Copy, Download } from 'lucide-react';
+import { Bot, User, Check, XCircle, Trash2, RefreshCw, Edit2, Copy, Download, FolderOpen } from 'lucide-react';
 import { ChatMessage } from '../../types';
 import { sectionizeMessage } from '../../utils/chatUtils';
 import { DownloadReportButton } from '../DownloadReportButton';
@@ -29,6 +29,8 @@ export interface MessageItemHandlers {
     handleRedo: (idx: number) => void;
     handleRemoveMessage: (idx: number) => void;
     handleMouseUp: (idx: number) => () => void;
+    /** Parse the case_file_report message content and open it in the overlay */
+    onOpenInCaseFile: (content: string, title?: string) => void;
 }
 
 interface MessageItemProps {
@@ -218,7 +220,20 @@ export const MessageItem: FC<MessageItemProps> = ({
                                     );
                                 })() : msg.content}
                                 {msg.content && (msg.type === 'case_file_report' || msg.content.startsWith('# Case File')) && (
-                                    <DownloadReportButton content={msg.content} index={i} rootDirectoryHandle={rootDirectoryHandle} />
+                                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '12px' }}>
+                                        <DownloadReportButton content={msg.content} index={i} rootDirectoryHandle={rootDirectoryHandle} />
+                                        <button
+                                            className='button secondary'
+                                            style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.82rem' }}
+                                            title='Parse this report and open it in the Case File overlay'
+                                            onClick={() => handlers.onOpenInCaseFile(
+                                                msg.content || '',
+                                                msg.content?.match(/^#+ ([^\n]+)/)?.[1] ?? 'Case File'
+                                            )}
+                                        >
+                                            <FolderOpen size={14} /> Open in Case File
+                                        </button>
+                                    </div>
                                 )}
                             </div>
                         </div>

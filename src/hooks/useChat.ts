@@ -929,6 +929,165 @@ CRITICAL RULES:
         }
     }, [chatHistory, isLoading, coordinator, apiKeys, selectedProvider, selectedModel, setIsLoading, setAbortController, updateMessage]);
 
+    /**
+     * Resolves a case file comment using the LLM.
+     * - Assembles context: full chat history + full case file text + the comment instruction.
+     * - Respects isChatModeEnabled / caseFileInternetSearch for web search.
+     * - On success: calls resolveCommentFn(sectionId, newContent) to update the case file.
+     * - On failure (bad parse / bad sectionId): appends the raw LLM response to chat.
+     */
+    const submitCaseFileComment = useCallback(async (
+        caseFile: import('../types').CaseFile,
+        sectionId: string,
+        comment: import('../types').CaseFileComment,
+        resolveCommentFn: (sId: string, commentId: string, newContent: string) => void
+    ) => {
+        if (!coordinator?.current) return;
+
+        const apiKey = apiKeys[selectedProvider];
+        setIsLoading(true);
+        const controller = new AbortController();
+        setAbortController(controller);
+        const perRequestTokenUsage: TokenUsage = { promptTokens: 0, completionTokens: 0 };
+
+        const callGen = async (messages: ChatMessage[], tools?: Tool[]) => {
+            const response = await generateContent(selectedModel, apiKey, messages, tools, controller.signal);
+            const { promptTokens, completionTokens } = response.usage;
+            perRequestTokenUsage.promptTokens += promptTokens;
+            perRequestTokenUsage.completionTokens += completionTokens;
+            setTokenUsage(prev => ({
+                promptTokens: prev.promptTokens + promptTokens,
+                completionTokens: prev.completionTokens + completionTokens
+            }));
+            return response;
+        };
+
+        // ── Build case file context ──────────────────────────────────────────
+        const caseFileText = caseFile.sections
+            .map(s => `[Section ID: ${s.id}]${s.title ? ` (${s.title})` : ''}\n${s.content}`)
+            .join('\n\n');
+
+        const systemPrompt = `You are editing a Case File document based on a user comment.
+
+CASE FILE CONTENT:
+${caseFileText}
+
+EDITING PROTOCOL:
+Return ONLY a JSON object with this exact shape (no prose, no fences):
+{"sectionId":"<id>","newContent":"<complete rewritten section markdown>"}
+
+CRITICAL RULES:
+- "newContent" MUST contain the ENTIRE rewritten section — not just the changed fragment.
+- The highlighted selection is context to understand WHAT to change, but output the FULL section.
+- Output ONLY pure Markdown in newContent values. No HTML tags.
+- If you need to search the web for additional information, you MAY use the search_web tool.
+- Return the JSON when you have all the information you need.`;
+
+        const userPrompt = `Rewrite section "${sectionId}" of the case file.\nUser highlighted: "${comment.selectedText}"\nInstruction: ${comment.instruction}\n\nReturn the JSON.`;
+
+        const visibleHistory = chatHistory.filter(m => !m.isInternal);
+        const messages: ChatMessage[] = [
+            { role: 'system', content: systemPrompt },
+            ...visibleHistory,
+            { role: 'user', content: userPrompt }
+        ];
+
+        try {
+            const useSearch = appSettings.caseFileInternetSearch && appSettings.isChatModeEnabled;
+            const tools = useSearch ? [SEARCH_TOOL] : [];
+            let currentMessages = [...messages];
+            let loopCount = 0;
+            const MAX_LOOPS = useSearch ? appSettings.maxSearchLoops : 1;
+            let finalText = '';
+
+            while (loopCount < MAX_LOOPS) {
+                if (controller.signal.aborted) return;
+
+                const response = await callGen(currentMessages, useSearch ? tools : []);
+                let toolCalls = response.toolCalls || [];
+                const responseText = response.text || '';
+
+                // If no tool calls → this is the final answer
+                if (toolCalls.length === 0) {
+                    finalText = responseText;
+                    break;
+                }
+
+                // Handle search tool calls
+                const assistantMsg: ChatMessage = { role: 'model', content: responseText || null, tool_calls: toolCalls };
+                currentMessages.push(assistantMsg);
+
+                for (const tc of toolCalls) {
+                    if (controller.signal.aborted) return;
+                    if (tc.function.name === 'search_web') {
+                        try {
+                            const args = JSON.parse(tc.function.arguments);
+                            const results = await searchWeb(args.query || args.search || tc.function.arguments);
+                            currentMessages.push({ role: 'tool', tool_call_id: tc.id, name: tc.function.name, content: JSON.stringify(results) });
+                        } catch (e) {
+                            currentMessages.push({ role: 'tool', tool_call_id: tc.id, name: tc.function.name, content: JSON.stringify({ error: 'Search failed' }) });
+                        }
+                    }
+                }
+                loopCount++;
+            }
+
+            // If loop ended without a text answer, do a final synthesis call
+            if (!finalText && loopCount >= MAX_LOOPS) {
+                const synthResponse = await callGen([
+                    ...currentMessages,
+                    { role: 'user', content: 'Now return the final JSON with the rewritten section.' }
+                ], []);
+                finalText = synthResponse.text || '';
+            }
+
+            // ── Parse the JSON envelope ─────────────────────────────────────
+            const { tryReplaceSection } = await import('../utils/caseFileUtils');
+            let parsed: { sectionId: string; newContent: string } | null = null;
+
+            // Strip potential markdown fences
+            const stripped = finalText.replace(/^```[\w]*\n?|\n?```$/g, '').trim();
+
+            const jsonMatch = stripped.match(/\{[\s\S]*"sectionId"[\s\S]*\}/);
+            if (jsonMatch) {
+                try { parsed = JSON.parse(jsonMatch[0]); } catch { /* fall through */ }
+            }
+
+            if (parsed && parsed.sectionId && parsed.newContent) {
+                const result = tryReplaceSection(caseFile, parsed.sectionId, parsed.newContent);
+                if (result.ok) {
+                    resolveCommentFn(parsed.sectionId, comment.id, parsed.newContent);
+                } else {
+                    // Section ID mismatch → append to chat
+                    setChatHistory(prev => [...prev, {
+                        role: 'model',
+                        content: `⚠️ **Case File replacement failed** (section not found).\n\nThe LLM produced the following content (not lost):\n\n${parsed!.newContent}`,
+                        tokenUsage: perRequestTokenUsage
+                    }]);
+                }
+            } else {
+                // Could not parse JSON → append raw response to chat
+                setChatHistory(prev => [...prev, {
+                    role: 'model',
+                    content: `⚠️ **Case File comment could not be applied** — LLM returned unstructured content (appended here so it is not lost):\n\n${finalText}`,
+                    tokenUsage: perRequestTokenUsage
+                }]);
+            }
+        } catch (error) {
+            if (error instanceof Error && error.name === 'AbortError') {
+                console.log('[CaseFile] LLM aborted.');
+            } else {
+                setChatHistory(prev => [...prev, {
+                    role: 'model',
+                    content: `Sorry, an error occurred while resolving the case file comment: ${error instanceof Error ? error.message : 'Unknown error'}`
+                }]);
+            }
+        } finally {
+            setIsLoading(false);
+            setAbortController(null);
+        }
+    }, [chatHistory, appSettings, coordinator, apiKeys, selectedProvider, selectedModel, setIsLoading, setChatHistory, setTokenUsage, setAbortController]);
+
     return {
         userInput, setUserInput,
         chatHistory, setChatHistory,
@@ -936,7 +1095,7 @@ CRITICAL RULES:
         tokenUsage, setTokenUsage,
         currentContextTokens, setCurrentContextTokens,
         isLoading, setIsLoading,
-        submitQuery, resendWithComments,
+        submitQuery, resendWithComments, submitCaseFileComment,
         handleRedo, handleSubmit, handleSourceClick, renderModelMessage,
         stopGeneration,
         handleClearConversation: () => clearHistory(initialChatHistory),

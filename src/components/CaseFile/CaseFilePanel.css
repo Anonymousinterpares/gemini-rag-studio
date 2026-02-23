@@ -1,0 +1,457 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+   Case File Panel – Overlay UI
+───────────────────────────────────────────────────────────────────────────── */
+
+.cf-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.75);
+    backdrop-filter: blur(12px);
+    animation: cf-fade-in 0.15s ease;
+}
+
+@keyframes cf-fade-in {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+.cf-panel {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    width: min(960px, 96vw);
+    max-height: 92vh;
+    background: #13131f;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 16px;
+    box-shadow: 0 32px 96px rgba(0, 0, 0, 0.7);
+    overflow: hidden;
+    animation: cf-slide-up 0.2s ease;
+}
+
+@keyframes cf-slide-up {
+    from {
+        transform: translateY(24px);
+        opacity: 0;
+    }
+
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+/* ── Header ──────────────────────────────────────────────────────────────── */
+
+.cf-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 20px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    background: #0d0d1a;
+    flex-shrink: 0;
+}
+
+.cf-header h2 {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 600;
+    color: #e0e0f0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.cf-header-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+.cf-close-btn {
+    background: none;
+    border: none;
+    color: #888;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 6px;
+    font-size: 1.2rem;
+    line-height: 1;
+    transition: color 0.15s, background 0.15s;
+}
+
+.cf-close-btn:hover {
+    color: #e0e0f0;
+    background: rgba(255, 255, 255, 0.08);
+}
+
+/* ── Hint bar ────────────────────────────────────────────────────────────── */
+
+.cf-hint-bar {
+    padding: 8px 20px;
+    font-size: 0.79rem;
+    color: #7a8ab0;
+    background: rgba(97, 130, 255, 0.06);
+    border-bottom: 1px solid rgba(97, 130, 255, 0.12);
+    flex-shrink: 0;
+}
+
+.cf-hint-bar strong {
+    color: #9aadff;
+}
+
+.cf-hint-bar em {
+    font-style: normal;
+    color: #bcc8f0;
+}
+
+/* ── Body ────────────────────────────────────────────────────────────────── */
+
+.cf-body {
+    overflow-y: auto;
+    padding: 28px 28px 40px;
+    flex: 1;
+    user-select: text;
+}
+
+/* ── Section ─────────────────────────────────────────────────────────────── */
+
+.cf-section {
+    margin-bottom: 32px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+    overflow: hidden;
+    transition: border-color 0.15s;
+}
+
+.cf-section:hover {
+    border-color: rgba(97, 130, 255, 0.2);
+}
+
+.cf-section-content {
+    padding: 18px 20px 12px;
+    background: rgba(255, 255, 255, 0.025);
+    color: #d8ddf0;
+    line-height: 1.72;
+    font-size: 0.92rem;
+}
+
+/* Markdown styles inside sections */
+.cf-section-content h1,
+.cf-section-content h2,
+.cf-section-content h3 {
+    color: #c8d0f0;
+    margin-top: 0.2em;
+    margin-bottom: 0.5em;
+    font-weight: 600;
+}
+
+.cf-section-content h1 {
+    font-size: 1.35rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    padding-bottom: 6px;
+}
+
+.cf-section-content h2 {
+    font-size: 1.15rem;
+}
+
+.cf-section-content h3 {
+    font-size: 1rem;
+}
+
+.cf-section-content p {
+    margin: 0.5em 0;
+}
+
+.cf-section-content ul,
+.cf-section-content ol {
+    padding-left: 1.6em;
+    margin: 0.4em 0;
+}
+
+.cf-section-content li {
+    margin: 0.25em 0;
+}
+
+.cf-section-content table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 0.8em 0;
+    font-size: 0.875rem;
+}
+
+.cf-section-content th {
+    background: rgba(97, 130, 255, 0.15);
+    color: #b0baef;
+    padding: 7px 12px;
+    text-align: left;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    font-weight: 600;
+}
+
+.cf-section-content td {
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    padding: 6px 12px;
+    vertical-align: top;
+}
+
+.cf-section-content tr:nth-child(even) td {
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.cf-section-content blockquote {
+    border-left: 3px solid rgba(97, 130, 255, 0.5);
+    margin: 0.5em 0;
+    padding: 4px 14px;
+    color: #8a96be;
+}
+
+.cf-section-content code {
+    background: rgba(100, 120, 255, 0.12);
+    border-radius: 4px;
+    padding: 1px 5px;
+    font-size: 0.85em;
+    color: #aabfff;
+}
+
+.cf-section-content pre {
+    background: rgba(0, 0, 0, 0.35);
+    border-radius: 8px;
+    padding: 12px 14px;
+    overflow-x: auto;
+    margin: 0.8em 0;
+}
+
+.cf-section-content pre code {
+    background: none;
+    padding: 0;
+    color: #c8d5ff;
+}
+
+.cf-section-content a {
+    color: #7a9fff;
+    text-decoration: underline;
+}
+
+/* ── Section toolbar ─────────────────────────────────────────────────────── */
+
+.cf-section-toolbar {
+    padding: 8px 14px;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+    background: rgba(0, 0, 0, 0.15);
+}
+
+.cf-add-comment-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 12px;
+    background: none;
+    border: 1px solid rgba(97, 130, 255, 0.3);
+    border-radius: 6px;
+    color: #7a9aef;
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.cf-add-comment-btn:hover {
+    background: rgba(97, 130, 255, 0.1);
+    border-color: rgba(97, 130, 255, 0.6);
+    color: #b0c4ff;
+}
+
+.cf-inline-comment-form {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+/* ── Comments under a section ────────────────────────────────────────────── */
+
+.cf-comments-area {
+    padding: 0 14px 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    background: rgba(0, 0, 0, 0.15);
+}
+
+.cf-comment-bubble {
+    background: rgba(97, 130, 255, 0.1);
+    border: 1px solid rgba(97, 130, 255, 0.28);
+    border-radius: 10px;
+    padding: 10px 14px;
+    font-size: 0.83rem;
+    color: #d0d8f5;
+}
+
+.cf-comment-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 8px;
+}
+
+.cf-comment-selected-text {
+    font-style: italic;
+    color: #6a7caa;
+    font-size: 0.77rem;
+    border-left: 2px solid rgba(97, 130, 255, 0.4);
+    padding-left: 8px;
+    margin-bottom: 6px;
+}
+
+.cf-comment-instruction {
+    font-weight: 500;
+    flex: 1;
+    line-height: 1.5;
+}
+
+.cf-comment-actions {
+    display: flex;
+    gap: 5px;
+    flex-shrink: 0;
+    align-items: center;
+}
+
+.cf-comment-edit-area {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.cf-comment-edit-textarea {
+    width: 100%;
+    min-height: 72px;
+    resize: vertical;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 7px;
+    padding: 8px 10px;
+    color: #d0d8f5;
+    font-size: 0.83rem;
+    font-family: inherit;
+    line-height: 1.5;
+    box-sizing: border-box;
+    outline: none;
+    transition: border-color 0.15s;
+}
+
+.cf-comment-edit-textarea:focus {
+    border-color: rgba(97, 130, 255, 0.5);
+}
+
+/* ── Selection Popover ───────────────────────────────────────────────────── */
+
+.cf-selection-popover {
+    position: fixed;
+    z-index: 1100;
+    transform: translateX(-50%);
+    background: #1a1a2e;
+    border: 1px solid rgba(97, 130, 255, 0.35);
+    border-radius: 10px;
+    box-shadow: 0 10px 36px rgba(0, 0, 0, 0.6);
+    min-width: 240px;
+    max-width: 360px;
+}
+
+.cf-selection-popover-btn {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 10px 16px;
+    background: none;
+    border: none;
+    color: #c0ccf5;
+    font-size: 0.85rem;
+    cursor: pointer;
+    border-radius: 10px;
+    width: 100%;
+    transition: background 0.15s;
+}
+
+.cf-selection-popover-btn:hover {
+    background: rgba(255, 255, 255, 0.07);
+}
+
+.cf-selection-popover-form {
+    padding: 12px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+}
+
+.cf-selection-popover-preview {
+    font-size: 0.76rem;
+    color: #6a7caa;
+    border-left: 2px solid rgba(97, 130, 255, 0.4);
+    padding-left: 8px;
+    line-height: 1.4;
+}
+
+.cf-selection-popover-preview em {
+    color: #8a98c8;
+    font-style: italic;
+}
+
+.cf-selection-popover-textarea {
+    width: 100%;
+    min-height: 72px;
+    resize: vertical;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 7px;
+    padding: 8px 10px;
+    color: #d0d8f5;
+    font-size: 0.83rem;
+    font-family: inherit;
+    box-sizing: border-box;
+    outline: none;
+}
+
+.cf-selection-popover-textarea:focus {
+    border-color: rgba(97, 130, 255, 0.5);
+}
+
+.cf-selection-popover-actions {
+    display: flex;
+    gap: 6px;
+    justify-content: flex-end;
+}
+
+/* ── Resolve spinner ────────────────────────────────────────────────────── */
+
+@keyframes cf-spin {
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.cf-spinner {
+    display: inline-block;
+    width: 11px;
+    height: 11px;
+    border: 2px solid rgba(255, 255, 255, 0.25);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: cf-spin 0.65s linear infinite;
+    vertical-align: middle;
+    margin-right: 4px;
+}

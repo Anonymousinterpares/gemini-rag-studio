@@ -23,6 +23,8 @@ export interface AppSettings {
   enableDeepAnalysisV1?: boolean;
   enableCitationGroupUX?: boolean;
   deepAnalysisLevel?: 2 | 3; // 2 = single pass, 3 = with gap analysis
+  // Case file
+  caseFileInternetSearch: boolean;
 }
 
 const SETTINGS_KEY = 'gemini-rag-studio-settings';
@@ -49,6 +51,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   enableDeepAnalysisV1: true,
   enableCitationGroupUX: true,
   deepAnalysisLevel: 2,
+  caseFileInternetSearch: true,
 };
 
 /**
