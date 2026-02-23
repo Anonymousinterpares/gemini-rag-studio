@@ -75,7 +75,9 @@ export const App: FC = () => {
     undo: undoCaseFile,
     redo: redoCaseFile,
     caseFile,
-    setOverlayOpen
+    setOverlayOpen,
+    undoStack: cfUndoStack,
+    redoStack: cfRedoStack
   } = useCaseFileStore();
   const { handleLoadCaseFile } = useCaseFileIO();
   // Chat redo lives in useChatStore (separate from useChat return)
@@ -303,6 +305,9 @@ export const App: FC = () => {
         setCaseFileState={setCaseFileState} submitQuery={submitQuery} tokenUsage={tokenUsage}
         currentContextTokens={currentContextTokens} handleSaveChatHistory={handleSaveChatHistory}
         handleLoadChatHistory={handleLoadChatHistory}
+        undo={handleUndo} redo={handleRedo}
+        canUndo={historyStack.length > 0 || cfUndoStack.length > 0}
+        canRedo={chatRedoStack.length > 0 || cfRedoStack.length > 0}
       />
 
       <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)}>

@@ -1,5 +1,5 @@
 import { FC, useRef, useEffect } from 'react';
-import { Info, Send, Square, RefreshCw, Download, Edit2 } from 'lucide-react';
+import { Info, Send, Square, RefreshCw, Download, Edit2, RotateCcw, RotateCw } from 'lucide-react';
 import { AppFile, ChatMessage, TokenUsage } from '../../types';
 
 interface ChatInputFormProps {
@@ -20,12 +20,16 @@ interface ChatInputFormProps {
     currentContextTokens: number;
     handleSaveChatHistory: () => Promise<void>;
     handleLoadChatHistory: (e: React.ChangeEvent<HTMLInputElement>) => void;
+    undo: () => void;
+    redo: () => void;
+    canUndo: boolean;
+    canRedo: boolean;
 }
 
 export const ChatInputForm: FC<ChatInputFormProps> = ({
     appSettings, setAppSettings, userInput, setUserInput, isLoading, activeJobCount, files, chatHistory,
     handleSubmit, stopGeneration, caseFileState, setCaseFileState, submitQuery, tokenUsage, currentContextTokens,
-    handleSaveChatHistory, handleLoadChatHistory
+    handleSaveChatHistory, handleLoadChatHistory, undo, redo, canUndo, canRedo
 }) => {
     const chatInputRef = useRef<HTMLTextAreaElement>(null);
     const loadChatInputRef = useRef<HTMLInputElement>(null);
@@ -72,7 +76,11 @@ export const ChatInputForm: FC<ChatInputFormProps> = ({
                 {isLoading ? (
                     <button type='button' className='button stop-button' onClick={stopGeneration}><Square size={16} /></button>
                 ) : (
-                    <button type='submit' className='button' disabled={!userInput.trim() || activeJobCount > 0}><Send size={16} /></button>
+                    <>
+                        <button type='button' className='button secondary' onClick={undo} disabled={!canUndo || isLoading} title="Undo last action (Ctrl+Z)"><RotateCcw size={16} /></button>
+                        <button type='button' className='button secondary' onClick={redo} disabled={!canRedo || isLoading} title="Redo last undone action (Ctrl+Y)"><RotateCw size={16} /></button>
+                        <button type='submit' className='button' disabled={!userInput.trim() || activeJobCount > 0}><Send size={16} /></button>
+                    </>
                 )}
             </form>
             {activeJobCount > 0 && (

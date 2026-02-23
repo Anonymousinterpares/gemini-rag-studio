@@ -36,6 +36,10 @@ interface ChatPanelProps {
     currentContextTokens: number;
     handleSaveChatHistory: () => Promise<void>;
     handleLoadChatHistory: (e: React.ChangeEvent<HTMLInputElement>) => void;
+    undo: () => void;
+    redo: () => void;
+    canUndo: boolean;
+    canRedo: boolean;
 }
 
 export const ChatPanel: FC<ChatPanelProps> = ({
@@ -43,7 +47,8 @@ export const ChatPanel: FC<ChatPanelProps> = ({
     isEmbedding, editingIndex, editingContent, setEditingContent, activeCommentInput, commentText,
     hoveredSelectionId, rootDirectoryHandle, caseFileState, handlers, userInput, setUserInput,
     activeJobCount, files, handleSubmit, stopGeneration, setCaseFileState, submitQuery,
-    tokenUsage, currentContextTokens, handleSaveChatHistory, handleLoadChatHistory
+    tokenUsage, currentContextTokens, handleSaveChatHistory, handleLoadChatHistory,
+    undo, redo, canUndo, canRedo
 }) => {
     return (
         <div className='panel chat-panel'>
@@ -88,6 +93,7 @@ export const ChatPanel: FC<ChatPanelProps> = ({
                 currentContextTokens={currentContextTokens}
                 handleSaveChatHistory={handleSaveChatHistory}
                 handleLoadChatHistory={handleLoadChatHistory}
+                undo={undo} redo={redo} canUndo={canUndo} canRedo={canRedo}
             />
         </div>
     );
