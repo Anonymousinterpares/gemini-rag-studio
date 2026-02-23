@@ -8,7 +8,7 @@ import { ComputeCoordinator } from '../compute/coordinator';
 import { VectorStore } from '../rag/pipeline';
 import { useChatStore, useFileStore, useSettingsStore } from '../store';
 import { searchWeb } from '../utils/search';
-import { sectionizeMessage, createFuzzyRegex } from '../utils/chatUtils';
+import { sectionizeMessage, createFuzzyRegex, findExactMatchLenient, isMarkdownTable, parseMarkdownTable } from '../utils/chatUtils';
 
 const SEARCH_TOOL: Tool = {
     type: 'function',
@@ -42,6 +42,12 @@ Use a separate citation for each piece of information. For example: "The sky is 
 **Do not group sources together.** For example, do not write "The sky is blue and the grass is green [Source: file-id-123, file-id-456]".
 If the answer is not in the files or the conversation history, say "I could not find an answer in the provided documents."
 
+FORMATTING RULES:
+- You MUST output ONLY pure Markdown.
+- DO NOT use HTML tags for formatting (e.g. no <br>, <table>, <td>).
+- If creating a table, use strictly Markdown pipe syntax.
+- If you need a multiline cell in a table, use a comma or semicolon instead of creating a line break.
+
 {date_section}`;
 
 const CHAT_MODE_PROMPT_TEMPLATE = `You are a helpful and expert AI assistant. Your user is a software developer.
@@ -58,6 +64,12 @@ CRITICAL INSTRUCTIONS:
 7. If you use information from the provided document contexts, you MUST cite your sources using the exact format [Source: uniqueId]. **DO NOT use any other brackets like 【】 or unbracketed "Source: ID".**
 8. If you use information from web search results, you MUST provide a direct link to the source using standard Markdown format: [Title](URL). Use ONLY the URLs provided in the search results; NEVER hallucinate or guess a URL.
 9. NOTE: Today is indeed in the year 2026. Do not be confused if your training data only goes up to a previous year; you are currently operating in 2026 and should accept this as the current date.
+
+FORMATTING RULES:
+- You MUST output ONLY pure Markdown.
+- DO NOT use HTML tags for formatting (e.g. no <br>, <table>, <td>).
+- If creating a table, use strictly Markdown pipe syntax.
+- If you need a multiline cell in a table, use a comma or semicolon instead of creating a line break.
 
 {date_section}
 
@@ -831,16 +843,62 @@ Or just tell me what specific aspects you'd like me to focus on.`;
         const msg = chatHistory[index];
         if (!msg || isLoading || !coordinator?.current) return;
 
-        const sectionComments = msg.sections
-            ? msg.sections.filter(s => s.comment).map(s => `Section ID ${s.id}: ${s.comment}`).join('\n')
-            : '';
+        const sections = msg.sections || sectionizeMessage(msg.content || '');
 
-        const selectionComments = msg.selectionComments
-            ? msg.selectionComments.map(sc => `Selection Review for text "${sc.text}" (ID: ${sc.id}): ${sc.comment}`).join('\n')
-            : '';
+        // ── Build comment blocks ─────────────────────────────────────────────
 
-        const allComments = [sectionComments, selectionComments].filter(Boolean).join('\n\n');
+        const sectionCommentBlocks = sections
+            .filter(s => s.comment)
+            .map(s => `Section Comment (ID: ${s.id}): ${s.comment}`)
+            .join('\n');
 
+        const selectionCommentBlocks = (msg.selectionComments || []).map(sc => {
+            const section = sections.find(s => s.id === sc.sectionId);
+            if (!section) {
+                return `Selection Comment (ID: ${sc.id}): ${sc.comment}\nUser selected text: "${sc.text}"`;
+            }
+
+            // ── Table path ───────────────────────────────────────────────────
+            if (isMarkdownTable(section.content)) {
+                const table = parseMarkdownTable(section.content);
+                if (table) {
+                    // Find which row the selection belongs to
+                    const rowIndex = table.rows.findIndex(row => {
+                        const rowText = row.join(' | ');
+                        return findExactMatchLenient(rowText, sc.text.trim()) !== null
+                            || row.some(cell => findExactMatchLenient(cell, sc.text.trim()) !== null);
+                    });
+
+                    if (rowIndex !== -1) {
+                        const rowJson = JSON.stringify(table.rows[rowIndex]);
+                        return [
+                            `TABLE ROW EDIT (sectionId: ${section.id}, fragmentId: ${sc.id}):`,
+                            `Row index: ${rowIndex} (0-based, excluding header and separator)`,
+                            `Column headers: ${JSON.stringify(table.headers)}`,
+                            `Current row cells (JSON): ${rowJson}`,
+                            `Comment: ${sc.comment}`
+                        ].join('\n');
+                    }
+                }
+            }
+
+            // ── Plain-text path ───────────────────────────────────────────────
+            // Find the exact snippet in the raw Markdown for the LLM to reference
+            const exactSnippet = findExactMatchLenient(section.content, sc.text.trim())
+                ?? createFuzzyRegex(sc.text, 'markdown').exec(section.content)?.[0]
+                ?? sc.text;
+
+            return [
+                `FRAGMENT EDIT (sectionId: ${section.id}, fragmentId: ${sc.id}):`,
+                `Original Markdown Snippet:`,
+                `\`\`\``,
+                exactSnippet,
+                `\`\`\``,
+                `Comment: ${sc.comment}`
+            ].join('\n');
+        }).join('\n\n');
+
+        const allComments = [sectionCommentBlocks, selectionCommentBlocks].filter(Boolean).join('\n\n');
         if (!allComments) return;
 
         setIsLoading(true);
@@ -850,40 +908,35 @@ Or just tell me what specific aspects you'd like me to focus on.`;
 
         try {
             const systemPrompt = `You are editing your previous response based on specific user comments.
-The previous message has been formatted with [Section ID: sec-N] tags for your reference.
-Selection Reviews (feedback on specific text fragments) are provided with unique IDs.
+The previous message has been split into [Section ID: sec-N] blocks for reference.
 
 CRITICAL EDITING PROTOCOL:
-1. FOCUS ONLY on the commented parts. 
-2. PRESERVE the original structure and context of the message. 
-3. SURGICAL UPDATES: 
-   - For a "Selection Review" (feedback on a fragment), you MUST return the replacement ONLY for that specific fragment.
-   - For a "Section Review" (feedback on ID sec-N), return the updated content for that ENTIRE section.
-4. JSON FORMAT: You MUST provide your edits using a structured JSON DIFF format:
-   [{"sectionId": "sec-N", "fragmentId": "sel-...", "newContent": "..."}]
-   - Use "fragmentId" ONLY for Selection Reviews.
-   - DO NOT use "fragmentId" for Section ID comments.
-5. SURGICAL ACCURACY:
-   - If a fragmentId is provided, the "newContent" will replace ONLY the original text associated with that ID.
-   - Keep the surrounding text EXACTLY the same.
-6. DO NOT include any tags or IDs in your "newContent".
-7. PRESERVE MARKDOWN STRUCTURE: If the text you are replacing spans across a Markdown table or list (e.g., separated by | characters), your "newContent" MUST maintain that exact formatting. Do not flatten tabular data into a simple string.
-8. DO NOT include sections that don't need changes.
-9. REWRITE REQUEST: If the comments require a fundamental restructuring that makes the section-based DIFF approach impossible, respond with: "FULL_REWRITE_REQUEST: <reason>"`;
+Return ONLY a JSON array of edit objects. No prose, no markdown fences around the outer array.
 
-            const userPrompt = `I have specific remarks on parts of your last response:\n${allComments}\n\nPlease apply these surgical changes using the requested JSON diff format. Focus only on the content within those specific areas.`;
+1. SECTION COMMENT → whole-section replacement:
+   {"sectionId":"sec-N","newContent":"...full updated section text..."}
 
-            // We send the history up to that message, but we FORMAT the message-to-be-edited 
-            // to include explicit section IDs so the model knows what to reference.
-            const historyToMessage = chatHistory.slice(0, index);
-            const messageToBeEdited = chatHistory[index];
+2. FRAGMENT EDIT → plain-text snippet replacement (non-table):
+   {"sectionId":"sec-N","fragmentId":"sel-...","newContent":"...replacement snippet only..."}
+   - "newContent" replaces EXACTLY the "Original Markdown Snippet" shown. Match its boundaries precisely.
+   - Do NOT add surrounding table pipes if they are not in the snippet.
 
-            const sections = messageToBeEdited.sections || sectionizeMessage(messageToBeEdited.content || '');
+3. TABLE ROW EDIT → structured row replacement:
+   {"sectionId":"sec-N","fragmentId":"sel-...","tableEdit":{"rowIndex":N,"cells":["col1","col2","col3"]}}
+   - Return ALL cells for the row, not just the changed one.
+   - Do NOT use "newContent" for TABLE ROW EDITs.
+
+FORMATTING RULES:
+- Output ONLY pure Markdown in newContent / cells values.
+- No HTML tags. Tables must use | pipe syntax.
+- FULL_REWRITE_REQUEST: <reason>  — use this string (not JSON) if a full rewrite is needed.`;
+
             const formattedContent = sections.map(s => `[Section ID: ${s.id}]\n${s.content}`).join('\n\n');
+            const userPrompt = `Here are my remarks:\n\n${allComments}\n\nReturn the JSON edit array.`;
 
             const messages: ChatMessage[] = [
                 { role: 'system', content: systemPrompt },
-                ...historyToMessage,
+                ...chatHistory.slice(0, index),
                 { role: 'model', content: formattedContent },
                 { role: 'user', content: userPrompt }
             ];
@@ -892,28 +945,20 @@ CRITICAL EDITING PROTOCOL:
             const text = response.text || '';
 
             if (text.startsWith('FULL_REWRITE_REQUEST:')) {
-                // Handle rewrite request (ask user)
                 updateMessage(index, {
                     pendingEdits: [{ sectionId: 'REWRITE', newContent: text.replace('FULL_REWRITE_REQUEST:', '').trim() }]
                 });
             } else {
-                try {
-                    // Try to parse JSON array from text
-                    const jsonMatch = text.match(/\[\s*\{.*\}\s*\]/s);
-                    if (jsonMatch) {
-                        const diffs = JSON.parse(jsonMatch[0]);
-                        updateMessage(index, { pendingEdits: diffs });
-                    } else {
-                        throw new Error("Could not parse diffs from response.");
-                    }
-                } catch (e) {
-                    console.error("Failed to parse diff response", e);
-                    // Fallback: just show the raw response if parsing fails? 
-                    // Better to error out or ask for retry.
+                const jsonMatch = text.match(/\[\s*\{[\s\S]*\}\s*\]/);
+                if (jsonMatch) {
+                    const diffs = JSON.parse(jsonMatch[0]);
+                    updateMessage(index, { pendingEdits: diffs });
+                } else {
+                    console.error('[resendWithComments] Could not parse JSON diffs from response:', text);
                 }
             }
         } catch (error) {
-            console.error("Resend with comments failed", error);
+            console.error('[resendWithComments] Failed:', error);
         } finally {
             setIsLoading(false);
             setAbortController(null);

@@ -1,9 +1,8 @@
 // src/utils/chatUtils.ts
 import { ChatMessage, MessageSection } from '../types';
 
-/**
- * Helper to filter chat history to only include what the user sees in the UI.
- */
+// ─── Chat History Utilities ───────────────────────────────────────────────────
+
 export function filterVisibleHistory(history: ChatMessage[]): ChatMessage[] {
   return history.filter(m => {
     if (m.isInternal) return false;
@@ -14,60 +13,156 @@ export function filterVisibleHistory(history: ChatMessage[]): ChatMessage[] {
 }
 
 /**
- * Splits message content into logical sections (e.g., paragraphs or Markdown headers).
+ * Splits message content into logical sections separated by blank lines or headers.
  */
 export function sectionizeMessage(content: string): MessageSection[] {
   if (!content) return [];
   const parts = content.split(/\n\s*\n|(?=\n#{1,6}\s)/);
-  return parts.map((p, idx) => ({
-    id: `sec-${idx}`,
-    content: p.trim()
-  })).filter(s => s.content.length > 0);
+  return parts
+    .map((p, idx) => ({ id: `sec-${idx}`, content: p.trim() }))
+    .filter(s => s.content.length > 0);
+}
+
+// ─── Markdown Table Codec ─────────────────────────────────────────────────────
+
+export interface MarkdownTable {
+  headers: string[];
+  alignments: string[];
+  rows: string[][];
+  raw: string;
 }
 
 /**
- * Normalizes a single character into a regex part.
+ * Returns true if the given text block contains a GFM Markdown table.
  */
-function getLenientCharPattern(c: string): string {
-  // Escape regex special chars
-  const escaped = c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+export function isMarkdownTable(block: string): boolean {
+  const lines = block.trim().split('\n').map(l => l.trim());
+  if (lines.length < 2) return false;
+  const sepLine = lines[1];
+  return /^\|?[\s\-:|]+\|/.test(sepLine);
+}
 
-  if (/[’‘’]/.test(c)) return "['’‘’]";
-  if (/[“”"″]/.test(c)) return '["“”"″]';
-  if (/[–—]/.test(c)) return '[–—-]';
+/**
+ * Parses a GFM Markdown table string into a structured object.
+ * Returns null if the block is not a recognizable Markdown table.
+ */
+export function parseMarkdownTable(block: string): MarkdownTable | null {
+  const lines = block.trim().split('\n').map(l => l.trim());
+  if (lines.length < 2) return null;
+
+  const splitRow = (line: string): string[] => {
+    const stripped = line.startsWith('|') ? line.slice(1) : line;
+    return stripped
+      .split('|')
+      .map(c => c.trim())
+      .slice(0, stripped.endsWith('|') ? -1 : undefined);
+  };
+
+  const headers = splitRow(lines[0]);
+  const sepParts = splitRow(lines[1]);
+
+  if (!sepParts.every(p => /^:?-+:?$/.test(p.trim()))) return null;
+
+  const alignments = sepParts.map(p => {
+    const t = p.trim();
+    if (t.startsWith(':') && t.endsWith(':')) return ':-:';
+    if (t.endsWith(':')) return '--:';
+    if (t.startsWith(':')) return ':--';
+    return '---';
+  });
+
+  const rows = lines.slice(2).map(splitRow);
+
+  return { headers, alignments, rows, raw: block };
+}
+
+/**
+ * Regenerates a clean GFM Markdown table string from a MarkdownTable structure.
+ */
+export function generateMarkdownTable(table: MarkdownTable): string {
+  const colCount = table.headers.length;
+
+  const colWidths = table.headers.map((h, i) => {
+    const cellWidths = [h.length, 3, ...table.rows.map(r => (r[i] ?? '').length)];
+    return Math.max(...cellWidths);
+  });
+
+  const formatRow = (cells: string[]): string => {
+    const padded = Array.from({ length: colCount }, (_, i) => {
+      const cell = cells[i] ?? '';
+      return cell.padEnd(colWidths[i]);
+    });
+    return `| ${padded.join(' | ')} |`;
+  };
+
+  const formatSep = (): string => {
+    const parts = table.alignments.map((a, i) => {
+      const w = colWidths[i];
+      if (a === ':-:') return `:${'-'.repeat(w - 2)}:`;
+      if (a === '--:') return `${'-'.repeat(w - 1)}:`;
+      if (a === ':--') return `:${'-'.repeat(w - 1)}`;
+      return '-'.repeat(w);
+    });
+    return `| ${parts.join(' | ')} |`;
+  };
+
+  const lines = [
+    formatRow(table.headers),
+    formatSep(),
+    ...table.rows.map(formatRow),
+  ];
+  return lines.join('\n');
+}
+
+// ─── Non-Table Fragment Matching ──────────────────────────────────────────────
+
+function getLenientCharPattern(c: string): string {
+  const escaped = c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  if (/[''']/.test(c)) return "['''']";
+  if (/["""″]/.test(c)) return '[""""″]';
+  if (/[–—‑-]/.test(c)) return '[–—‑-]';
   if (/[….]/.test(c)) return '[….]+';
   if (/\s/.test(c)) return '[\\s\\n\\r\\t\\u00A0\\u202F]+';
   if (/\d/.test(c)) return '(\\d+|\\[Source:.*?\\])';
-
   return escaped;
 }
 
 /**
- * Creates a fuzzy regex pattern to match a text fragment despite formatting or HTML tags.
+ * Searches source for an exact-ish match of target, tolerating differences
+ * in smart quotes, dashes, and whitespace but NOT crossing Markdown structure.
+ * Returns the matched substring from source, or null on failure.
+ */
+export function findExactMatchLenient(source: string, target: string): string | null {
+  const trimmed = target.trim();
+  if (!trimmed) return null;
+  const pattern = trimmed.split('').map(c => getLenientCharPattern(c)).join('');
+  try {
+    const match = source.match(new RegExp(pattern, 'i'));
+    return match ? match[0] : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Creates a fuzzy regex that tolerates HTML tags and Markdown formatting between words.
+ * Used as a last-resort fallback for non-table plain-text fragment replacement.
  */
 export function createFuzzyRegex(text: string, mode: 'markdown' | 'html' = 'markdown'): RegExp {
   const trimmed = text.trim();
   if (!trimmed) return /^$/;
 
-  // We split the ORIGINAL text by character to avoid splitting our own regex escape sequences later
-  const chars = trimmed.split('');
-
-  // Separator between characters
-  // For Markdown: allow markers (*, _, ~, `, |) and ANY whitespace/newlines
-  // For HTML: allow tags and ANY whitespace/newlines
   const fuzzySeparator = mode === 'markdown'
-    ? '[*_~`|\\s\\n\\r\\t\\u00A0\\u202F]*'
-    : '(?:<[^>]*>|\\s|\\n|[\\u00A0\\u202F])*';
+    ? '(?:<[^>]*>|[*_~`|\\s\\n\\r\\t\\u00A0\\u202F])*?'
+    : '(?:<[^>]*>|\\s|\\n|[\\u00A0\\u202F])*?';
 
-  const pattern = chars
-    .map((c, idx) => {
-      const charPart = getLenientCharPattern(c);
-      // Add the fuzzy separator AFTER every character except the last one
-      return idx < chars.length - 1 ? `${charPart}${fuzzySeparator}` : charPart;
+  const pattern = trimmed.split('')
+    .map((c, idx, arr) => {
+      const p = getLenientCharPattern(c);
+      return idx < arr.length - 1 ? `${p}${fuzzySeparator}` : p;
     })
     .join('');
 
-  const finalPattern = mode === 'html' ? `(${pattern})(?![^<]*>)` : pattern;
-
-  return new RegExp(finalPattern, 'gi');
+  const final = mode === 'html' ? `(${pattern})(?![^<]*>)` : pattern;
+  return new RegExp(final, 'gi');
 }

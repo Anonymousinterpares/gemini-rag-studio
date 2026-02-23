@@ -76,8 +76,12 @@ export interface ChatMessage {
   selectionComments?: SelectionComment[];
   pendingEdits?: {
     sectionId: string;
-    fragmentId?: string; // If present, only replace this selection
-    newContent: string;
+    fragmentId?: string;   // If present, targets a specific selection comment
+    newContent?: string;   // For non-table plain-text replacements
+    tableEdit?: {          // For structured table row replacements
+      rowIndex: number;    // 0-based data row index (excludes header/separator)
+      cells: string[];     // Full updated cells array for the row
+    };
     isConfirmed?: boolean;
     isRejected?: boolean;
   }[];

@@ -17,7 +17,7 @@ import SummaryModal from './components/SummaryModal';
 import { SpeechBubble, DigestParticles, FloatingArrows, RejectionBubble } from './components/Monster';
 import RecoveryDialogContainer from './components/RecoveryDialogContainer';
 import { useSettingsStore, useFileStore, useComputeStore } from './store';
-import { sectionizeMessage, createFuzzyRegex } from './utils/chatUtils';
+import { createFuzzyRegex, sectionizeMessage, findExactMatchLenient, isMarkdownTable, parseMarkdownTable, generateMarkdownTable } from './utils/chatUtils';
 import './style.css';
 import './progress-bar.css';
 import './Modal.css';
@@ -109,34 +109,60 @@ export const App: FC = () => {
 
   const handleMouseUp = (msgIndex: number) => () => {
     if (msgIndex !== chatHistory.length - 1) return;
-    
+
     const selection = window.getSelection();
     if (selection && selection.toString().trim().length > 0) {
       const range = selection.getRangeAt(0);
       const rect = range.getBoundingClientRect();
-      
+
       // Find the parent message-section to get its ID
       let node = range.commonAncestorContainer as Node | null;
       while (node && !(node instanceof HTMLElement && node.classList.contains('message-section-wrapper'))) {
         node = node.parentNode;
       }
-      
+
       let sectionId = 'sec-0'; // Fallback
-      
+
       // Better way: find the closest row and its key
       let row = range.commonAncestorContainer as Node | null;
       while (row && !(row instanceof HTMLElement && row.getAttribute('data-section-id'))) {
         row = row.parentNode;
       }
-      
+
       if (row instanceof HTMLElement) {
         sectionId = row.getAttribute('data-section-id') || 'sec-0';
+      }
+
+      // Extract text, preserving table structure if applicable
+      let extractedText = selection.toString().trim();
+      try {
+        const container = document.createElement('div');
+        container.appendChild(range.cloneContents());
+
+        // If selection contains table elements, try to format as markdown table
+        if (container.querySelector('td') || container.querySelector('th')) {
+          const rows = container.querySelectorAll('tr');
+          if (rows.length > 0) {
+            extractedText = Array.from(rows).map(tr => {
+              const cells = tr.querySelectorAll('td, th');
+              return '| ' + Array.from(cells).map(c => (c.textContent || '').trim().replace(/\\n/g, ' ')).join(' | ') + ' |';
+            }).join('\\n');
+          } else {
+            // Partial row selection
+            const cells = container.querySelectorAll('td, th');
+            if (cells.length > 0) {
+              extractedText = '| ' + Array.from(cells).map(c => (c.textContent || '').trim().replace(/\\n/g, ' ')).join(' | ') + ' |';
+            }
+          }
+        }
+      } catch (e) {
+        console.error("Failed to extract tabular selection:", e);
       }
 
       setSelectionPopover({
         top: rect.top + window.scrollY - 40,
         left: rect.left + window.scrollX + rect.width / 2,
-        text: selection.toString().trim(),
+        text: extractedText,
         msgIndex,
         sectionId
       });
@@ -160,7 +186,7 @@ export const App: FC = () => {
       setSelectionPopover(null);
       return;
     }
-    
+
     const msg = chatHistory[msgIndex];
     const selectionComments = msg.selectionComments || [];
     const newComment = {
@@ -169,9 +195,9 @@ export const App: FC = () => {
       text,
       comment
     };
-    
-    handleUpdateMessage(msgIndex, { 
-      selectionComments: [...selectionComments, newComment] 
+
+    handleUpdateMessage(msgIndex, {
+      selectionComments: [...selectionComments, newComment]
     });
     setSelectionPopover(null);
   };
@@ -214,56 +240,112 @@ export const App: FC = () => {
     handleUpdateMessage(msgIndex, { sections: updatedSections });
   };
 
+  // ─── Edit Apply Logic ─────────────────────────────────────────────────────
+
+  /**
+   * Applies a single pending edit to a sections array.
+   * Handles both table edits (via the codec) and plain-text fragment replacement.
+   * Returns the updated [sections, selectionComments] tuple.
+   */
+  const applyEditToSections = (
+    edit: NonNullable<typeof chatHistory[number]['pendingEdits']>[number],
+    sections: typeof chatHistory[number]['sections'] & object,
+    selectionComments: NonNullable<typeof chatHistory[number]['selectionComments']>
+  ) => {
+    let updatedSections = [...sections];
+    let updatedComments = [...selectionComments];
+
+    if (edit.tableEdit) {
+      // ── Structured table row replacement ──────────────────────────────────
+      updatedSections = updatedSections.map(s => {
+        if (s.id !== edit.sectionId) return s;
+        if (!isMarkdownTable(s.content)) return s;
+        const table = parseMarkdownTable(s.content);
+        if (!table) return s;
+        const newRows = table.rows.map((row, i) =>
+          i === edit.tableEdit!.rowIndex ? edit.tableEdit!.cells : row
+        );
+        return { ...s, content: generateMarkdownTable({ ...table, rows: newRows }) };
+      });
+      if (edit.fragmentId) {
+        updatedComments = updatedComments.filter(sc => sc.id !== edit.fragmentId);
+      }
+    } else if (edit.fragmentId && edit.newContent !== undefined) {
+      // ── Fragment replacement (plain text OR table row via codec) ──────────────────
+      const selection = updatedComments.find(sc => sc.id === edit.fragmentId);
+      if (selection) {
+        const targetId = selection.sectionId || edit.sectionId;
+        updatedSections = updatedSections.map(s => {
+          if (s.id !== targetId) return s;
+
+          // ── Auto-detect: LLM returned a full table row as newContent ──────────
+          // This handles models that use FRAGMENT EDIT format even for table rows.
+          const newContentTrimmed = edit.newContent!.trim();
+          const isFullRowReply = /^\|.*\|$/.test(newContentTrimmed);
+
+          if (isMarkdownTable(s.content) && isFullRowReply) {
+            const table = parseMarkdownTable(s.content);
+            if (table) {
+              // Find which existing row the selection corresponds to
+              const rowIndex = table.rows.findIndex(row => {
+                const rowText = row.join(' | ');
+                return (
+                  findExactMatchLenient(rowText, selection.text.trim()) !== null ||
+                  row.some(cell => findExactMatchLenient(cell, selection.text.trim()) !== null)
+                );
+              });
+              if (rowIndex !== -1) {
+                // Parse the new row cells from newContent (strip outer pipes, split by |)
+                const newCells = newContentTrimmed
+                  .slice(1, -1)           // remove leading and trailing |
+                  .split('|')
+                  .map(c => c.trim());
+                const newRows = table.rows.map((row, i) => i === rowIndex ? newCells : row);
+                console.log(`[applyEditToSections] Auto-routed table row edit at rowIndex=${rowIndex}`);
+                return { ...s, content: generateMarkdownTable({ ...table, rows: newRows }) };
+              }
+            }
+          }
+
+          // ── Plain-text fragment replacement ────────────────────────────────────
+          const lenientMatch = findExactMatchLenient(s.content, selection.text.trim());
+          let content = s.content;
+          if (lenientMatch) {
+            content = s.content.replace(lenientMatch, edit.newContent!);
+          } else {
+            content = s.content.replace(createFuzzyRegex(selection.text, 'markdown'), edit.newContent!);
+          }
+          if (content === s.content) {
+            console.warn('[applyEditToSections] Replacement did not change content', selection.text);
+          }
+          return { ...s, content };
+        });
+        updatedComments = updatedComments.filter(sc => sc.id !== edit.fragmentId);
+      }
+    } else if (edit.newContent !== undefined) {
+      // ── Whole-section replacement (section comment) ───────────────────────
+      updatedSections = updatedSections.map(s =>
+        s.id === edit.sectionId ? { ...s, content: edit.newContent!, comment: undefined } : s
+      );
+    }
+
+    return [updatedSections, updatedComments] as const;
+  };
+
   const handleConfirmEdit = (msgIndex: number, sectionId: string) => {
     const msg = chatHistory[msgIndex];
     if (!msg.pendingEdits) return;
     const edit = msg.pendingEdits.find(e => e.sectionId === sectionId);
     if (!edit) return;
 
-    let updatedSections = msg.sections && msg.sections.length > 0 
-      ? [...msg.sections] 
-      : sectionizeMessage(msg.content || '');
-    let updatedSelectionComments = [...(msg.selectionComments || [])];
+    const sections = msg.sections?.length ? [...msg.sections] : sectionizeMessage(msg.content || '');
+    const [updatedSections, updatedComments] = applyEditToSections(edit, sections, msg.selectionComments || []);
 
-    if (edit.fragmentId) {
-      // Surgical replacement of a fragment
-      const selection = updatedSelectionComments.find(sc => sc.id === edit.fragmentId);
-      if (selection) {
-        // We now use the selection's stored sectionId if available, otherwise fallback to model's suggested sectionId
-        const targetSectionId = selection.sectionId || sectionId;
-        
-        updatedSections = updatedSections.map(s => {
-          if (s.id === targetSectionId) {
-            // Flexible replacement: handle whitespace, special chars, and Markdown markers
-            const regex = createFuzzyRegex(selection.text, 'markdown');
-            const newContent = s.content.replace(regex, edit.newContent);
-            
-            if (s.content === newContent) {
-               console.warn("[handleConfirmEdit] Regex replacement failed to change content!", { 
-                 regex: regex.toString(), 
-                 content: s.content,
-                 selectionText: selection.text 
-               });
-            }
-            
-            return { ...s, content: newContent };
-          }
-          return s;
-        });
-        // Remove the selection comment as it's been addressed
-        updatedSelectionComments = updatedSelectionComments.filter(sc => sc.id !== edit.fragmentId);
-      }
-    } else {
-      // Full section replacement
-      updatedSections = updatedSections.map(s => s.id === sectionId ? { ...s, content: edit.newContent, comment: undefined } : s);
-    }
-
-    const newFullContent = updatedSections.map(s => s.content).join('\n\n');
-    handleUpdateMessage(msgIndex, { 
-      content: newFullContent, 
-      sections: updatedSections, 
-      selectionComments: updatedSelectionComments,
-      pendingEdits: msg.pendingEdits.filter(e => e !== edit) 
+    handleUpdateMessage(msgIndex, {
+      content: updatedSections.map(s => s.content).join('\n\n'),
+      sections: updatedSections,
+      selectionComments: updatedComments,
+      pendingEdits: msg.pendingEdits.filter(e => e !== edit)
     });
   };
 
@@ -276,43 +358,20 @@ export const App: FC = () => {
   const handleConfirmAllEdits = (msgIndex: number) => {
     const msg = chatHistory[msgIndex];
     if (!msg.pendingEdits) return;
-    
-    let updatedSections = msg.sections && msg.sections.length > 0 
-      ? [...msg.sections] 
-      : sectionizeMessage(msg.content || '');
-    let updatedSelectionComments = [...(msg.selectionComments || [])];
-    
-    msg.pendingEdits.forEach(edit => {
-      if (edit.fragmentId) {
-        const selection = updatedSelectionComments.find(sc => sc.id === edit.fragmentId);
-        if (selection) {
-          const targetSectionId = selection.sectionId || edit.sectionId;
-          updatedSections = updatedSections.map(s => {
-            if (s.id === targetSectionId) {
-              // Flexible replacement: handle whitespace, special chars, and Markdown markers
-              const regex = createFuzzyRegex(selection.text, 'markdown');
-              const newContent = s.content.replace(regex, edit.newContent);
-              
-              if (s.content === newContent) {
-                console.warn("[handleConfirmAllEdits] Regex replacement failed for fragment:", { 
-                  regex: regex.toString(), 
-                  content: s.content 
-                });
-              }
-              
-              return { ...s, content: newContent };
-            }
-            return s;
-          });
-          updatedSelectionComments = updatedSelectionComments.filter(sc => sc.id !== edit.fragmentId);
-        }
-      } else {
-        updatedSections = updatedSections.map(s => s.id === edit.sectionId ? { ...s, content: edit.newContent, comment: undefined } : s);
-      }
+
+    let sections = msg.sections?.length ? [...msg.sections] : sectionizeMessage(msg.content || '');
+    let comments = [...(msg.selectionComments || [])];
+
+    for (const edit of msg.pendingEdits) {
+      [sections, comments] = applyEditToSections(edit, sections, comments) as [typeof sections, typeof comments];
+    }
+
+    handleUpdateMessage(msgIndex, {
+      content: sections.map(s => s.content).join('\n\n'),
+      sections,
+      selectionComments: comments,
+      pendingEdits: []
     });
-    
-    const newFullContent = updatedSections.map(s => s.content).join('\n\n');
-    handleUpdateMessage(msgIndex, { content: newFullContent, sections: updatedSections, selectionComments: updatedSelectionComments, pendingEdits: [] });
   };
 
   const handleRejectAllEdits = (msgIndex: number) => {
@@ -597,30 +656,39 @@ export const App: FC = () => {
                                 ) : sections.map((section) => {
                                   const pendingEdit = msg.pendingEdits?.find(e => e.sectionId === section.id);
                                   const isActiveInput = activeCommentInput?.msgIndex === i && activeCommentInput?.sectionId === section.id;
-                                  
+
                                   return (
                                     <div key={section.id} className="message-section-row" data-section-id={section.id}>
                                       <div className="message-main-content">
                                         <div className="message-section-wrapper">
                                           <div className={`message-section ${pendingEdit ? 'highlight-pending' : ''}`}>
                                             <div dangerouslySetInnerHTML={renderModelMessage(section.content, msg.content, msg.selectionComments, hoveredSelectionId)} />
-                                            {pendingEdit && (
-                                              <div className="pending-edit-preview">
-                                                <div style={{ fontWeight: 'bold', fontSize: '0.8rem', marginTop: '0.5rem', color: 'var(--warning-orange)' }}>PROPOSED CHANGE:</div>
-                                                <div dangerouslySetInnerHTML={renderModelMessage(pendingEdit.newContent, msg.content, msg.selectionComments, hoveredSelectionId)} />
-                                                <div className="edit-actions-floating">
-                                                  <button className="button btn-confirm-edit" onClick={() => handleConfirmEdit(i, section.id)} title="Confirm Change"><Check size={12} /> Confirm</button>
-                                                  <button className="button btn-reject-edit" onClick={() => handleRejectEdit(i, section.id)} title="Reject Change"><XCircle size={12} /> Reject</button>
+                                            {pendingEdit && (() => {
+                                              // Build a human-readable preview for both edit types
+                                              let previewContent: string | null = null;
+                                              if (pendingEdit.tableEdit) {
+                                                previewContent = `*Row ${pendingEdit.tableEdit.rowIndex + 1} update:* | ${pendingEdit.tableEdit.cells.join(' | ')} |`;
+                                              } else if (pendingEdit.newContent != null) {
+                                                previewContent = pendingEdit.newContent;
+                                              }
+                                              return previewContent ? (
+                                                <div className="pending-edit-preview">
+                                                  <div style={{ fontWeight: 'bold', fontSize: '0.8rem', marginTop: '0.5rem', color: 'var(--warning-orange)' }}>PROPOSED CHANGE:</div>
+                                                  <div dangerouslySetInnerHTML={renderModelMessage(previewContent, msg.content, msg.selectionComments, hoveredSelectionId)} />
+                                                  <div className="edit-actions-floating">
+                                                    <button className="button btn-confirm-edit" onClick={() => handleConfirmEdit(i, section.id)} title="Confirm Change"><Check size={12} /> Confirm</button>
+                                                    <button className="button btn-reject-edit" onClick={() => handleRejectEdit(i, section.id)} title="Reject Change"><XCircle size={12} /> Reject</button>
+                                                  </div>
                                                 </div>
-                                              </div>
-                                            )}
+                                              ) : null;
+                                            })()}
                                           </div>
                                           {!pendingEdit && i === chatHistory.length - 1 && (
                                             <button className="add-comment-trigger" onClick={() => handleStartComment(i, section.id)} title="Add Comment">+</button>
                                           )}
                                         </div>
                                       </div>
-                                      
+
                                       <div className="section-comment-area">
                                         {(section.comment || isActiveInput) && (
                                           <div className="comment-box">
@@ -646,8 +714,8 @@ export const App: FC = () => {
                                                 <div className="comment-actions">
                                                   <button onClick={() => handleEditComment(i, section.id, section.comment || '')} title="Edit"><Edit2 size={12} /></button>
                                                   <button onClick={() => handleDeleteComment(i, section.id)} title="Delete"><Trash2 size={12} /></button>
-                                                  <button 
-                                                    className="button resend-with-comments-btn-mini" 
+                                                  <button
+                                                    className="button resend-with-comments-btn-mini"
                                                     onClick={() => resendWithComments(i)}
                                                     title="Resend entire message with all comments"
                                                     disabled={isLoading}
@@ -670,9 +738,9 @@ export const App: FC = () => {
                                     <div className="section-comment-area">
                                       <div style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#8e44ad', marginBottom: '0.5rem', textTransform: 'uppercase' }}>Selection Reviews:</div>
                                       {msg.selectionComments.map(sc => (
-                                        <div 
-                                          key={sc.id} 
-                                          className="comment-box" 
+                                        <div
+                                          key={sc.id}
+                                          className="comment-box"
                                           style={{ borderLeft: '3px solid #8e44ad', marginBottom: '0.5rem' }}
                                           onMouseEnter={() => setHoveredSelectionId(sc.id)}
                                           onMouseLeave={() => setHoveredSelectionId(null)}
@@ -681,8 +749,8 @@ export const App: FC = () => {
                                           <div className="comment-content">{sc.comment}</div>
                                           <div className="comment-actions">
                                             <button onClick={() => handleDeleteSelectionComment(i, sc.id)} title="Delete"><Trash2 size={12} /></button>
-                                            <button 
-                                              className="button resend-with-comments-btn-mini" 
+                                            <button
+                                              className="button resend-with-comments-btn-mini"
                                               onClick={() => resendWithComments(i)}
                                               title="Resend entire message with all comments"
                                               disabled={isLoading}
@@ -695,7 +763,7 @@ export const App: FC = () => {
                                     </div>
                                   </div>
                                 )}
-                                
+
                                 <div className="message-section-row">
                                   <div className="message-main-content">
                                     {msg.pendingEdits && msg.pendingEdits.length > 0 && (
@@ -769,8 +837,8 @@ export const App: FC = () => {
               }}
               disabled={isLoading || (files.length === 0 && !appSettings.isChatModeEnabled) || activeJobCount > 0}
               placeholder={
-                activeJobCount > 0 
-                  ? "Processing documents... please wait" 
+                activeJobCount > 0
+                  ? "Processing documents... please wait"
                   : (isLoading && caseFileState.isAwaitingFeedback ? "Building report..." : "")
               }
             />
@@ -793,13 +861,13 @@ export const App: FC = () => {
             </span>
           </div>
           <div className="token-usage-display" style={{ borderTop: 'none', paddingTop: 0 }}>
-             Current Context: {currentContextTokens}
+            Current Context: {currentContextTokens}
           </div>
           <div className='setting-row'>
             <button onClick={() => setAppSettings(p => ({ ...p, isDeepAnalysisEnabled: !p.isDeepAnalysisEnabled }))} className={`toggle-button ${appSettings.isDeepAnalysisEnabled ? 'active' : ''}`}>Deep Analysis: {appSettings.isDeepAnalysisEnabled ? 'ON' : 'OFF'}</button>
             {caseFileState.isAwaitingFeedback ? (
-              <button 
-                onClick={() => setCaseFileState({ isAwaitingFeedback: false, metadata: undefined })} 
+              <button
+                onClick={() => setCaseFileState({ isAwaitingFeedback: false, metadata: undefined })}
                 className="button secondary"
                 disabled={isLoading}
                 style={{ marginLeft: '10px', backgroundColor: isLoading ? '#440000' : '#8b0000', opacity: isLoading ? 0.6 : 1 }}
@@ -807,10 +875,10 @@ export const App: FC = () => {
                 {isLoading ? "Generating Report..." : "Cancel Case File"}
               </button>
             ) : (
-              <button 
+              <button
                 onClick={() => {
                   submitQuery("Generate a comprehensive Case File based on our conversation.", chatHistory, true);
-                }} 
+                }}
                 className="button secondary"
                 disabled={isLoading || (files.length === 0 && !appSettings.isChatModeEnabled)}
                 style={{ marginLeft: '10px' }}
@@ -827,12 +895,12 @@ export const App: FC = () => {
             <button className="button secondary" onClick={() => loadChatInputRef.current?.click()} style={{ flex: 1, marginLeft: '10px' }}>
               <Edit2 size={14} style={{ marginRight: '6px' }} /> Load Session
             </button>
-            <input 
-              type="file" 
-              ref={loadChatInputRef} 
-              style={{ display: 'none' }} 
-              accept=".json" 
-              onChange={handleLoadChatHistory} 
+            <input
+              type="file"
+              ref={loadChatInputRef}
+              style={{ display: 'none' }}
+              accept=".json"
+              onChange={handleLoadChatHistory}
             />
           </div>
         </div>
@@ -853,9 +921,9 @@ export const App: FC = () => {
         addFilesAndEmbed(toAdd); setIsExplorerOpen(false);
       }} />
       <RecoveryDialogContainer availableModels={modelsList} currentModel={selectedModel} apiKeys={apiKeys} onModelChange={(m: Model, k?: string) => { setSelectedModel(m); if (k) setApiKeys(prev => ({ ...prev, [m.provider]: k })); }} />
-      
+
       {selectionPopover && (
-        <div 
+        <div
           className="selection-popover"
           style={{ top: selectionPopover.top, left: selectionPopover.left }}
           onClick={() => handleAddSelectionComment(selectionPopover.msgIndex, selectionPopover.text, selectionPopover.sectionId)}
