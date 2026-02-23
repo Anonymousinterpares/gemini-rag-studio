@@ -18,7 +18,8 @@ import '@xyflow/react/dist/style.css';
 import { useCaseFileStore } from '../../../store/useCaseFileStore';
 import { EntityNode } from './nodes/EntityNode';
 import { GroupNode } from './nodes/GroupNode';
-import { Search } from 'lucide-react';
+import { useMapAI } from '../../../hooks/useMapAI';
+import { Search, GitFork, Loader } from 'lucide-react';
 
 /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
 const nodeTypes: any = {
@@ -29,6 +30,7 @@ const nodeTypes: any = {
 export const InvestigationMapCanvas: FC = () => {
     const { caseFile, updateMapNodes, updateMapEdges, initializeMap } = useCaseFileStore();
     const [searchQuery, setSearchQuery] = useState('');
+    const { generateMapFromDocument, isMapProcessing } = useMapAI();
 
     useEffect(() => {
         // Ensure map exists on mount
@@ -81,7 +83,7 @@ export const InvestigationMapCanvas: FC = () => {
     );
 
     return (
-        <div style={{ width: '100%', height: '100%', background: 'var(--bg-primary)', position: 'relative' }}>
+        <div style={{ width: '100%', height: '100%', flex: 1, minHeight: '400px', background: 'var(--bg-primary)', position: 'relative' }}>
             {/* Filtering Toolbar */}
             <div style={{
                 position: 'absolute', top: '16px', right: '16px', zIndex: 10,
@@ -102,18 +104,56 @@ export const InvestigationMapCanvas: FC = () => {
                 />
             </div>
 
-            <ReactFlow
-                nodes={rfNodes}
-                edges={rfEdges}
-                onNodesChange={onNodesChange}
-                onEdgesChange={onEdgesChange}
-                onConnect={onConnect}
-                nodeTypes={nodeTypes}
-                fitView
-            >
-                <Background variant={BackgroundVariant.Dots} gap={12} size={1} />
-                <Controls />
-            </ReactFlow>
+
+            {/* React Flow Graph */}
+            <div style={{ position: 'absolute', inset: 0 }}>
+                <ReactFlow
+                    nodes={rfNodes}
+                    edges={rfEdges}
+                    onNodesChange={onNodesChange}
+                    onEdgesChange={onEdgesChange}
+                    onConnect={onConnect}
+                    nodeTypes={nodeTypes}
+                    fitView
+                >
+                    <Background variant={BackgroundVariant.Dots} gap={12} size={1} />
+                    <Controls />
+                </ReactFlow>
+            </div>
+
+            {/* Empty-state overlay */}
+            {(!caseFile?.map?.nodes || caseFile.map.nodes.length === 0) && (
+                <div style={{
+                    position: 'absolute', inset: 0, zIndex: 50,
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                    background: 'rgba(10,12,20, 0.85)',
+                    backdropFilter: 'blur(6px)',
+                    gap: '16px',
+                }}>
+                    <GitFork size={48} style={{ color: 'var(--text-color-secondary)', opacity: 0.4 }} />
+                    <div style={{ textAlign: 'center' }}>
+                        <div style={{ fontSize: '18px', fontWeight: 700, color: 'var(--text-color)', marginBottom: '6px' }}>Map is empty</div>
+                        <div style={{ fontSize: '13px', color: 'var(--text-color-secondary)', maxWidth: '300px' }}>
+                            Let the AI read your case file and automatically build the initial map of entities and connections.
+                        </div>
+                    </div>
+                    <button
+                        className="button"
+                        style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 20px', fontSize: '14px', fontWeight: 600 }}
+                        onClick={generateMapFromDocument}
+                        disabled={isMapProcessing}
+                    >
+                        {isMapProcessing
+                            ? <><Loader size={16} className="animate-spin" /> Analysing document...</>
+                            : <><GitFork size={16} /> Generate Map from Document</>}
+                    </button>
+                    {isMapProcessing && (
+                        <div style={{ fontSize: '12px', color: 'var(--text-color-secondary)' }}>
+                            This may take a moment depending on document size…
+                        </div>
+                    )}
+                </div>
+            )}
         </div>
     );
 };

@@ -147,5 +147,76 @@ Return the tool call ONLY. Do not provide conversational text.`;
         }
     }, [caseFile, updateMapNodes, updateMapEdges, selectedModel, apiKeys, selectedProvider]);
 
-    return { handleMapInstruction, isMapProcessing };
+    const generateMapFromDocument = useCallback(async () => {
+        if (!caseFile) return;
+
+        setIsMapProcessing(true);
+        const apiKey = apiKeys[selectedProvider];
+
+        try {
+            const caseFileText = caseFile.sections.map(s => s.content).join('\n\n');
+
+            const systemPrompt = `You are a forensic analyst. Your task is to read a case file and build a comprehensive investigation map.
+
+Extract ALL key entities (people, organizations, locations, events, evidence) and ALL relationships between them.
+Be thorough — include every person named, every place mentioned, every organization involved, and every piece of evidence.
+
+Call the 'update_investigation_map' tool ONCE with ALL nodes and edges. Do not provide conversational text.`;
+
+            const userContent = `Build a complete investigation map from this case file:\n\n${caseFileText.substring(0, 20000)}`;
+
+            const messages: ChatMessage[] = [
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: userContent }
+            ];
+
+            const response = await generateContent(selectedModel, apiKey, messages, [MAP_TOOL]);
+
+            if (response.toolCalls && response.toolCalls.length > 0) {
+                for (const tc of response.toolCalls) {
+                    if (tc.function.name === 'update_investigation_map') {
+                        const args = JSON.parse(tc.function.arguments);
+                        const incomingNodes = args.newNodes || [];
+                        const incomingEdges = args.newEdges || [];
+
+                        // Grid layout for initial population – spread nodes cleanly
+                        const cols = Math.ceil(Math.sqrt(incomingNodes.length));
+                        const finalNodes: MapNode[] = incomingNodes.map((n: { id: string; label: string; entityType?: string; description?: string }, i: number) => ({
+                            id: n.id,
+                            type: 'customEntity',
+                            position: {
+                                x: (i % cols) * 260 + 80,
+                                y: Math.floor(i / cols) * 200 + 80,
+                            },
+                            data: {
+                                label: n.label,
+                                entityType: n.entityType || 'person',
+                                description: n.description
+                            }
+                        }));
+
+                        const finalEdges: MapEdge[] = incomingEdges.map((e: { source: string; target: string; label?: string; connectionType?: string }) => ({
+                            id: `edge-${Date.now()}-${e.source}-${e.target}`,
+                            source: e.source,
+                            target: e.target,
+                            label: e.label,
+                            data: {
+                                connectionType: e.connectionType || 'related_to',
+                                certainty: 'confirmed'
+                            }
+                        }));
+
+                        if (finalNodes.length > 0) updateMapNodes(() => finalNodes);
+                        if (finalEdges.length > 0) updateMapEdges(() => finalEdges);
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('Generate map from document error:', error);
+        } finally {
+            setIsMapProcessing(false);
+        }
+    }, [caseFile, updateMapNodes, updateMapEdges, selectedModel, apiKeys, selectedProvider]);
+
+    return { handleMapInstruction, generateMapFromDocument, isMapProcessing };
 };

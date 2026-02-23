@@ -70,7 +70,7 @@ export const CaseFilePanel: FC<CaseFilePanelProps> = ({ onResolveComment, render
 
     return (
         <div className='cf-overlay' onMouseDown={(e) => { if (e.target === e.currentTarget) handleClose(); }}>
-            <div className='cf-panel' role='dialog' aria-modal='true' aria-label={caseFile.title}>
+            <div className='cf-panel' role='dialog' aria-modal='true' aria-label={caseFile.title} style={{ height: activeView === 'map' ? '85vh' : undefined }}>
 
                 {/* ── Header ── */}
                 <div className='cf-header'>
@@ -134,7 +134,7 @@ export const CaseFilePanel: FC<CaseFilePanelProps> = ({ onResolveComment, render
                         ))}
                     </div>
                 ) : (
-                    <div className='cf-body' style={{ padding: 0, overflow: 'hidden' }}>
+                    <div className='cf-body' style={{ padding: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
                         <InvestigationMapCanvas />
                     </div>
                 )}
