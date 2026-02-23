@@ -729,7 +729,7 @@ export const App: FC = () => {
                                       <div className="message-main-content">
                                         <div className="message-section-wrapper">
                                           <div className={`message-section ${pendingEdit ? 'highlight-pending' : ''}`}>
-                                            <div dangerouslySetInnerHTML={renderModelMessage(section.content, msg.content, msg.selectionComments, hoveredSelectionId)} />
+                                            <div dangerouslySetInnerHTML={renderModelMessage(section.content, msg.content, msg.selectionComments?.filter(sc => sc.sectionId === section.id), hoveredSelectionId)} />
                                             {pendingEdit && (() => {
                                               // Build a human-readable preview for both edit types
                                               let previewContent: string | null = null;
@@ -757,6 +757,31 @@ export const App: FC = () => {
                                       </div>
 
                                       <div className="section-comment-area">
+                                        {msg.selectionComments && msg.selectionComments.length > 0 &&
+                                          msg.selectionComments.filter(sc => sc.sectionId === section.id).map(sc => (
+                                            <div
+                                              key={sc.id}
+                                              className="comment-box"
+                                              style={{ borderLeft: '3px solid #8e44ad', marginBottom: '0.5rem' }}
+                                              onMouseEnter={() => setHoveredSelectionId(sc.id)}
+                                              onMouseLeave={() => setHoveredSelectionId(null)}
+                                            >
+                                              <div className="selection-comment-sidebar-text">"{sc.text}"</div>
+                                              <div className="comment-content">{sc.comment}</div>
+                                              <div className="comment-actions">
+                                                <button onClick={() => handleDeleteSelectionComment(i, sc.id)} title="Delete"><Trash2 size={12} /></button>
+                                                <button
+                                                  className="button resend-with-comments-btn-mini"
+                                                  onClick={() => resendWithComments(i)}
+                                                  title="Resend entire message with all comments"
+                                                  disabled={isLoading}
+                                                >
+                                                  <RefreshCw size={12} /> Resend
+                                                </button>
+                                              </div>
+                                            </div>
+                                          ))}
+
                                         {(section.comment || isActiveInput) && (
                                           <div className="comment-box">
                                             {isActiveInput ? (
@@ -799,37 +824,6 @@ export const App: FC = () => {
                                   );
                                 })}
 
-                                {msg.selectionComments && msg.selectionComments.length > 0 && (
-                                  <div className="message-section-row">
-                                    <div className="message-main-content" />
-                                    <div className="section-comment-area">
-                                      <div style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#8e44ad', marginBottom: '0.5rem', textTransform: 'uppercase' }}>Selection Reviews:</div>
-                                      {msg.selectionComments.map(sc => (
-                                        <div
-                                          key={sc.id}
-                                          className="comment-box"
-                                          style={{ borderLeft: '3px solid #8e44ad', marginBottom: '0.5rem' }}
-                                          onMouseEnter={() => setHoveredSelectionId(sc.id)}
-                                          onMouseLeave={() => setHoveredSelectionId(null)}
-                                        >
-                                          <div className="selection-comment-sidebar-text">"{sc.text}"</div>
-                                          <div className="comment-content">{sc.comment}</div>
-                                          <div className="comment-actions">
-                                            <button onClick={() => handleDeleteSelectionComment(i, sc.id)} title="Delete"><Trash2 size={12} /></button>
-                                            <button
-                                              className="button resend-with-comments-btn-mini"
-                                              onClick={() => resendWithComments(i)}
-                                              title="Resend entire message with all comments"
-                                              disabled={isLoading}
-                                            >
-                                              <RefreshCw size={12} /> Resend
-                                            </button>
-                                          </div>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  </div>
-                                )}
 
                                 <div className="message-section-row">
                                   <div className="message-main-content">
