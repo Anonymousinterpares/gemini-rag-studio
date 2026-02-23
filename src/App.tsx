@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, FC, useCallback } from 'react';
 import { getStoredDirectoryHandle, storeDirectoryHandle, clearStoredDirectoryHandle } from './utils/db';
-import { Trash2, X, RefreshCw, LayoutGrid, List as ListIcon, FolderTree, ChevronLeft, ChevronRight, User, Bot, Send, Copy, Download, Info, Square, Edit2, Check, XCircle } from 'lucide-react';
+import { Trash2, X, RefreshCw, LayoutGrid, List as ListIcon, FolderTree, ChevronLeft, ChevronRight, User, Bot, Send, Copy, Download, Info, Square, Edit2, Check, XCircle, RotateCcw } from 'lucide-react';
 import { useFileState, useCompute, useChat } from './hooks';
 import { AppFile, ViewMode, SearchResult, Model } from './types';
 import { embeddingCache } from './cache/embeddingCache';
@@ -17,7 +17,7 @@ import SummaryModal from './components/SummaryModal';
 import { SpeechBubble, DigestParticles, FloatingArrows, RejectionBubble } from './components/Monster';
 import RecoveryDialogContainer from './components/RecoveryDialogContainer';
 import { useSettingsStore, useFileStore, useComputeStore } from './store';
-import { sectionizeMessage } from './utils/chatUtils';
+import { sectionizeMessage, createFuzzyRegex } from './utils/chatUtils';
 import './style.css';
 import './progress-bar.css';
 import './Modal.css';
@@ -80,6 +80,7 @@ export const App: FC = () => {
   const {
     userInput, setUserInput,
     chatHistory, setChatHistory,
+    undo, historyStack,
     tokenUsage, setTokenUsage,
     currentContextTokens,
     isLoading,
@@ -90,7 +91,8 @@ export const App: FC = () => {
     handleUpdateMessage, handleTruncateHistory,
     initialChatHistory,
     caseFileState, setCaseFileState,
-    resendWithComments
+    resendWithComments,
+    hoveredSelectionId, setHoveredSelectionId
   } = useChat({
     coordinator, vectorStore, queryEmbeddingResolver, rerankPromiseResolver, setRerankProgress: () => { }, setActiveSource, setIsModalOpen
   });
@@ -102,6 +104,7 @@ export const App: FC = () => {
     left: number;
     text: string;
     msgIndex: number;
+    sectionId: string;
   } | null>(null);
 
   const handleMouseUp = (msgIndex: number) => () => {
@@ -111,11 +114,31 @@ export const App: FC = () => {
     if (selection && selection.toString().trim().length > 0) {
       const range = selection.getRangeAt(0);
       const rect = range.getBoundingClientRect();
+      
+      // Find the parent message-section to get its ID
+      let node = range.commonAncestorContainer as Node | null;
+      while (node && !(node instanceof HTMLElement && node.classList.contains('message-section-wrapper'))) {
+        node = node.parentNode;
+      }
+      
+      let sectionId = 'sec-0'; // Fallback
+      
+      // Better way: find the closest row and its key
+      let row = range.commonAncestorContainer as Node | null;
+      while (row && !(row instanceof HTMLElement && row.getAttribute('data-section-id'))) {
+        row = row.parentNode;
+      }
+      
+      if (row instanceof HTMLElement) {
+        sectionId = row.getAttribute('data-section-id') || 'sec-0';
+      }
+
       setSelectionPopover({
         top: rect.top + window.scrollY - 40,
         left: rect.left + window.scrollX + rect.width / 2,
         text: selection.toString().trim(),
-        msgIndex
+        msgIndex,
+        sectionId
       });
     }
   };
@@ -131,7 +154,7 @@ export const App: FC = () => {
     return () => window.removeEventListener('mousedown', handleGlobalClick);
   }, [selectionPopover]);
 
-  const handleAddSelectionComment = (msgIndex: number, text: string) => {
+  const handleAddSelectionComment = (msgIndex: number, text: string, sectionId: string) => {
     const comment = window.prompt(`Add a review comment for: "${text}"`);
     if (!comment) {
       setSelectionPopover(null);
@@ -142,6 +165,7 @@ export const App: FC = () => {
     const selectionComments = msg.selectionComments || [];
     const newComment = {
       id: `sel-${Date.now()}`,
+      sectionId,
       text,
       comment
     };
@@ -195,9 +219,52 @@ export const App: FC = () => {
     if (!msg.pendingEdits) return;
     const edit = msg.pendingEdits.find(e => e.sectionId === sectionId);
     if (!edit) return;
-    const sections = (msg.sections || []).map(s => s.id === sectionId ? { ...s, content: edit.newContent, comment: undefined } : s);
-    const newContent = sections.map(s => s.content).join('\n\n');
-    handleUpdateMessage(msgIndex, { content: newContent, sections, pendingEdits: msg.pendingEdits.filter(e => e.sectionId !== sectionId) });
+
+    let updatedSections = msg.sections && msg.sections.length > 0 
+      ? [...msg.sections] 
+      : sectionizeMessage(msg.content || '');
+    let updatedSelectionComments = [...(msg.selectionComments || [])];
+
+    if (edit.fragmentId) {
+      // Surgical replacement of a fragment
+      const selection = updatedSelectionComments.find(sc => sc.id === edit.fragmentId);
+      if (selection) {
+        // We now use the selection's stored sectionId if available, otherwise fallback to model's suggested sectionId
+        const targetSectionId = selection.sectionId || sectionId;
+        
+        updatedSections = updatedSections.map(s => {
+          if (s.id === targetSectionId) {
+            // Flexible replacement: handle whitespace, special chars, and Markdown markers
+            const regex = createFuzzyRegex(selection.text, 'markdown');
+            const newContent = s.content.replace(regex, edit.newContent);
+            
+            if (s.content === newContent) {
+               console.warn("[handleConfirmEdit] Regex replacement failed to change content!", { 
+                 regex: regex.toString(), 
+                 content: s.content,
+                 selectionText: selection.text 
+               });
+            }
+            
+            return { ...s, content: newContent };
+          }
+          return s;
+        });
+        // Remove the selection comment as it's been addressed
+        updatedSelectionComments = updatedSelectionComments.filter(sc => sc.id !== edit.fragmentId);
+      }
+    } else {
+      // Full section replacement
+      updatedSections = updatedSections.map(s => s.id === sectionId ? { ...s, content: edit.newContent, comment: undefined } : s);
+    }
+
+    const newFullContent = updatedSections.map(s => s.content).join('\n\n');
+    handleUpdateMessage(msgIndex, { 
+      content: newFullContent, 
+      sections: updatedSections, 
+      selectionComments: updatedSelectionComments,
+      pendingEdits: msg.pendingEdits.filter(e => e !== edit) 
+    });
   };
 
   const handleRejectEdit = (msgIndex: number, sectionId: string) => {
@@ -209,12 +276,43 @@ export const App: FC = () => {
   const handleConfirmAllEdits = (msgIndex: number) => {
     const msg = chatHistory[msgIndex];
     if (!msg.pendingEdits) return;
-    let sections = msg.sections || [];
+    
+    let updatedSections = msg.sections && msg.sections.length > 0 
+      ? [...msg.sections] 
+      : sectionizeMessage(msg.content || '');
+    let updatedSelectionComments = [...(msg.selectionComments || [])];
+    
     msg.pendingEdits.forEach(edit => {
-      sections = sections.map(s => s.id === edit.sectionId ? { ...s, content: edit.newContent, comment: undefined } : s);
+      if (edit.fragmentId) {
+        const selection = updatedSelectionComments.find(sc => sc.id === edit.fragmentId);
+        if (selection) {
+          const targetSectionId = selection.sectionId || edit.sectionId;
+          updatedSections = updatedSections.map(s => {
+            if (s.id === targetSectionId) {
+              // Flexible replacement: handle whitespace, special chars, and Markdown markers
+              const regex = createFuzzyRegex(selection.text, 'markdown');
+              const newContent = s.content.replace(regex, edit.newContent);
+              
+              if (s.content === newContent) {
+                console.warn("[handleConfirmAllEdits] Regex replacement failed for fragment:", { 
+                  regex: regex.toString(), 
+                  content: s.content 
+                });
+              }
+              
+              return { ...s, content: newContent };
+            }
+            return s;
+          });
+          updatedSelectionComments = updatedSelectionComments.filter(sc => sc.id !== edit.fragmentId);
+        }
+      } else {
+        updatedSections = updatedSections.map(s => s.id === edit.sectionId ? { ...s, content: edit.newContent, comment: undefined } : s);
+      }
     });
-    const newContent = sections.map(s => s.content).join('\n\n');
-    handleUpdateMessage(msgIndex, { content: newContent, sections, pendingEdits: [] });
+    
+    const newFullContent = updatedSections.map(s => s.content).join('\n\n');
+    handleUpdateMessage(msgIndex, { content: newFullContent, sections: updatedSections, selectionComments: updatedSelectionComments, pendingEdits: [] });
   };
 
   const handleRejectAllEdits = (msgIndex: number) => {
@@ -430,9 +528,10 @@ export const App: FC = () => {
           {isLoading || activeJobCount > 0 ? <video src='/assets/thinking.mp4' autoPlay loop muted className="drop-media-element" /> : (showDropVideo ? <video ref={dropVideoRef} src={dropVideoSrc} onEnded={() => setShowDropVideo(false)} autoPlay muted className="drop-media-element" /> : <img src="/assets/drop.png" className="drop-media-element" />)}
         </div>
         <div className='flex gap-2'>
-          <button className='button secondary' onClick={() => handleClearFiles(initialChatHistory)} disabled={files.length === 0 || isEmbedding}><Trash2 size={16} /></button>
-          <button className='button secondary' onClick={handleClearConversation} disabled={chatHistory.length <= 1 || isLoading || isEmbedding}><X size={16} /></button>
-          <button className='button secondary' onClick={handleClear}><RefreshCw size={16} /></button>
+          <button className='button secondary' onClick={() => handleClearFiles(initialChatHistory)} disabled={files.length === 0 || isEmbedding} title="Clear Files"><Trash2 size={16} /></button>
+          <button className='button secondary' onClick={handleClearConversation} disabled={chatHistory.length <= 1 || isLoading || isEmbedding} title="Clear Chat"><X size={16} /></button>
+          <button className='button secondary' onClick={undo} disabled={historyStack.length === 0 || isLoading || isEmbedding} title="Undo last action"><RotateCcw size={16} /></button>
+          <button className='button secondary' onClick={handleClear} title="Reset App"><RefreshCw size={16} /></button>
         </div>
         <div className='compute-status-indicator'>Compute: {computeDevice.toUpperCase()} ({mlWorkerCount} ML)</div>
         <div className='view-switcher'>
@@ -500,15 +599,15 @@ export const App: FC = () => {
                                   const isActiveInput = activeCommentInput?.msgIndex === i && activeCommentInput?.sectionId === section.id;
                                   
                                   return (
-                                    <div key={section.id} className="message-section-row">
+                                    <div key={section.id} className="message-section-row" data-section-id={section.id}>
                                       <div className="message-main-content">
                                         <div className="message-section-wrapper">
                                           <div className={`message-section ${pendingEdit ? 'highlight-pending' : ''}`}>
-                                            <div dangerouslySetInnerHTML={renderModelMessage(section.content, msg.content, msg.selectionComments)} />
+                                            <div dangerouslySetInnerHTML={renderModelMessage(section.content, msg.content, msg.selectionComments, hoveredSelectionId)} />
                                             {pendingEdit && (
                                               <div className="pending-edit-preview">
                                                 <div style={{ fontWeight: 'bold', fontSize: '0.8rem', marginTop: '0.5rem', color: 'var(--warning-orange)' }}>PROPOSED CHANGE:</div>
-                                                <div dangerouslySetInnerHTML={renderModelMessage(pendingEdit.newContent, msg.content, msg.selectionComments)} />
+                                                <div dangerouslySetInnerHTML={renderModelMessage(pendingEdit.newContent, msg.content, msg.selectionComments, hoveredSelectionId)} />
                                                 <div className="edit-actions-floating">
                                                   <button className="button btn-confirm-edit" onClick={() => handleConfirmEdit(i, section.id)} title="Confirm Change"><Check size={12} /> Confirm</button>
                                                   <button className="button btn-reject-edit" onClick={() => handleRejectEdit(i, section.id)} title="Reject Change"><XCircle size={12} /> Reject</button>
@@ -571,7 +670,13 @@ export const App: FC = () => {
                                     <div className="section-comment-area">
                                       <div style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#8e44ad', marginBottom: '0.5rem', textTransform: 'uppercase' }}>Selection Reviews:</div>
                                       {msg.selectionComments.map(sc => (
-                                        <div key={sc.id} className="comment-box" style={{ borderLeft: '3px solid #8e44ad', marginBottom: '0.5rem' }}>
+                                        <div 
+                                          key={sc.id} 
+                                          className="comment-box" 
+                                          style={{ borderLeft: '3px solid #8e44ad', marginBottom: '0.5rem' }}
+                                          onMouseEnter={() => setHoveredSelectionId(sc.id)}
+                                          onMouseLeave={() => setHoveredSelectionId(null)}
+                                        >
                                           <div className="selection-comment-sidebar-text">"{sc.text}"</div>
                                           <div className="comment-content">{sc.comment}</div>
                                           <div className="comment-actions">
@@ -753,7 +858,7 @@ export const App: FC = () => {
         <div 
           className="selection-popover"
           style={{ top: selectionPopover.top, left: selectionPopover.left }}
-          onClick={() => handleAddSelectionComment(selectionPopover.msgIndex, selectionPopover.text)}
+          onClick={() => handleAddSelectionComment(selectionPopover.msgIndex, selectionPopover.text, selectionPopover.sectionId)}
         >
           <Edit2 size={14} /> Review Selection
         </div>

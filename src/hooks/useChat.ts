@@ -8,7 +8,7 @@ import { ComputeCoordinator } from '../compute/coordinator';
 import { VectorStore } from '../rag/pipeline';
 import { useChatStore, useFileStore, useSettingsStore } from '../store';
 import { searchWeb } from '../utils/search';
-import { sectionizeMessage } from '../utils/chatUtils';
+import { sectionizeMessage, createFuzzyRegex } from '../utils/chatUtils';
 
 const SEARCH_TOOL: Tool = {
     type: 'function',
@@ -83,6 +83,7 @@ export const useChat = ({
 }: UseChatProps) => {
     const {
         chatHistory, setChatHistory,
+        undo, historyStack,
         userInput, setUserInput,
         pendingQuery, setPendingQuery,
         tokenUsage, setTokenUsage,
@@ -97,6 +98,7 @@ export const useChat = ({
     const { appSettings, selectedModel, selectedProvider, apiKeys } = useSettingsStore();
 
     const [summaries, setSummaries] = useState<Record<string, string>>({});
+    const [hoveredSelectionId, setHoveredSelectionId] = useState<string | null>(null);
 
     const stopGeneration = useCallback(() => {
         if (abortController) {
@@ -177,17 +179,17 @@ export const useChat = ({
         const calculateContextTokens = async () => {
             const systemPrompt = getSystemPrompt();
             const apiKey = apiKeys[selectedProvider];
-            
+
             const messages: ChatMessage[] = [
                 { role: 'system', content: systemPrompt },
                 ...chatHistory,
                 { role: 'user', content: userInput || ' ' }
             ];
-            
+
             const tokens = await countTokens(selectedModel, apiKey, messages);
             setCurrentContextTokens(tokens);
         };
-        
+
         const timeoutId = setTimeout(calculateContextTokens, 1000); // 1s debounce
         return () => clearTimeout(timeoutId);
     }, [chatHistory, userInput, files, summaries, selectedModel, apiKeys, selectedProvider, getSystemPrompt, setCurrentContextTokens]);
@@ -224,7 +226,7 @@ export const useChat = ({
 
         const startTime = Date.now();
         const perRequestTokenUsage: TokenUsage = { promptTokens: 0, completionTokens: 0 };
-        
+
         let newHistory: ChatMessage[];
         if (updateIndex !== undefined) {
             newHistory = [...history];
@@ -256,7 +258,7 @@ export const useChat = ({
 
         try {
             const apiKey = apiKeys[selectedProvider];
-            
+
             // Prioritize explicit Case File requests
             let isCaseFileMode = forceCaseFile;
 
@@ -294,12 +296,12 @@ export const useChat = ({
                 });
 
                 setCaseFileState({ isAwaitingFeedback: false, metadata: undefined });
-                setChatHistory([...newHistory, { 
-                    role: 'model', 
-                    content: `${da.finalText}<!--searchResults:${JSON.stringify(da.usedResults)}-->`, 
+                setChatHistory([...newHistory, {
+                    role: 'model',
+                    content: `${da.finalText}<!--searchResults:${JSON.stringify(da.usedResults)}-->`,
                     type: 'case_file_report',
-                    tokenUsage: perRequestTokenUsage, 
-                    elapsedTime: Date.now() - startTime 
+                    tokenUsage: perRequestTokenUsage,
+                    elapsedTime: Date.now() - startTime
                 }]);
                 setIsLoading(false);
                 return;
@@ -473,66 +475,25 @@ export const useChat = ({
 
             if (!isCaseFileMode) {
                 const routerPrompt = `Router Agent: GENERAL_CONVERSATION or KNOWLEDGE_SEARCH. Query: "${query}"`;
-            const routerResponse = await callGenerateContent(selectedModel, apiKey, [{ role: 'user', content: routerPrompt }]);
-            decision = (routerResponse.text || '').trim().toUpperCase().includes('KNOWLEDGE_SEARCH') ? 'KNOWLEDGE_SEARCH' : 'GENERAL_CONVERSATION';
+                const routerResponse = await callGenerateContent(selectedModel, apiKey, [{ role: 'user', content: routerPrompt }]);
+                decision = (routerResponse.text || '').trim().toUpperCase().includes('KNOWLEDGE_SEARCH') ? 'KNOWLEDGE_SEARCH' : 'GENERAL_CONVERSATION';
 
-            if (appSettings.enableRouterV2) {
-                try {
-                    const { decideRouteV2 } = await import('../agents/router_v2');
-                    const embedQueryFn = async (q: string) => {
-                        const p = new Promise<number[]>((resolve) => { if (queryEmbeddingResolver) queryEmbeddingResolver.current = resolve; });
-                        if (coordinator.current) {
-                            coordinator.current.addJob('Embed Query', [{ id: `query-${Date.now()}`, priority: TaskPriority.P1_Primary, payload: { type: TaskType.EmbedQuery, query: q } }]);
-                        }
-                        return await p;
-                    };
+                if (appSettings.enableRouterV2) {
+                    try {
+                        const { decideRouteV2 } = await import('../agents/router_v2');
+                        const embedQueryFn = async (q: string) => {
+                            const p = new Promise<number[]>((resolve) => { if (queryEmbeddingResolver) queryEmbeddingResolver.current = resolve; });
+                            if (coordinator.current) {
+                                coordinator.current.addJob('Embed Query', [{ id: `query-${Date.now()}`, priority: TaskPriority.P1_Primary, payload: { type: TaskType.EmbedQuery, query: q } }]);
+                            }
+                            return await p;
+                        };
 
-                    if (!vectorStore?.current) throw new Error("Vector store not initialized.");
+                        if (!vectorStore?.current) throw new Error("Vector store not initialized.");
 
-                    const route = await decideRouteV2({
-                        query, history, filesLoaded: files.length > 0, vectorStore: vectorStore.current,
-                        model: selectedModel, apiKey, settings: appSettings, embedQuery: embedQueryFn,
-                        onTokenUsage: (usage) => {
-                            perRequestTokenUsage.promptTokens += usage.promptTokens;
-                            perRequestTokenUsage.completionTokens += usage.completionTokens;
-                            setTokenUsage(prev => ({
-                                promptTokens: prev.promptTokens + usage.promptTokens,
-                                completionTokens: prev.completionTokens + usage.completionTokens
-                            }));
-                        }
-                    });
-                    decision = route.mode === 'CHAT' ? 'GENERAL_CONVERSATION' : 'KNOWLEDGE_SEARCH';
-                    complexity = route.complexity || 'unknown';
-
-                    if (route.mode === 'CASE_FILE') {
-                        isCaseFileMode = true;
-                    }
-
-                    if (route.mode.startsWith('DEEP_ANALYSIS') && appSettings.enableDeepAnalysisV1) {
-                        const { runDeepAnalysis } = await import('../agents/deep_analysis');
-                        const level = appSettings.deepAnalysisLevel === 3 || route.mode === 'DEEP_ANALYSIS_L3' ? 3 : 2;
-                        const da = await runDeepAnalysis({
-                            query, history: newHistory, vectorStore: vectorStore.current,
+                        const route = await decideRouteV2({
+                            query, history, filesLoaded: files.length > 0, vectorStore: vectorStore.current,
                             model: selectedModel, apiKey, settings: appSettings, embedQuery: embedQueryFn,
-                            rerank: appSettings.isRerankingEnabled ? async (rerankQuery, docs) => {
-                                const tasks: Omit<ComputeTask, 'jobId'>[] = [];
-                                docs.forEach((d, i) => tasks.push({
-                                    id: `rerank-${i}`,
-                                    priority: TaskPriority.P1_Primary,
-                                    payload: {
-                                        type: TaskType.Rerank,
-                                        query: rerankQuery,
-                                        documents: [{ ...d, parentChunkIndex: (d as SearchResult).parentChunkIndex ?? -1 }]
-                                    }
-                                }));
-                                const rerankPromise = new Promise<SearchResult[]>((resolve) => { if (rerankPromiseResolver) rerankPromiseResolver.current = { resolve, jobId: '', taskResults: [] }; });
-                                if (coordinator.current) {
-                                    const jobId = coordinator.current.addJob('Rerank', tasks);
-                                    if (rerankPromiseResolver.current) rerankPromiseResolver.current.jobId = jobId;
-                                }
-                                return await rerankPromise;
-                            } : undefined,
-                            level,
                             onTokenUsage: (usage) => {
                                 perRequestTokenUsage.promptTokens += usage.promptTokens;
                                 perRequestTokenUsage.completionTokens += usage.completionTokens;
@@ -542,19 +503,60 @@ export const useChat = ({
                                 }));
                             }
                         });
-                        const finalMsg: ChatMessage = { role: 'model', content: `${da.finalText}<!--searchResults:${JSON.stringify(da.usedResults)}-->`, type: 'case_file_report', tokenUsage: perRequestTokenUsage, elapsedTime: Date.now() - startTime };
-                        if (updateIndex !== undefined) {
-                            updateMessage(updateIndex, finalMsg);
-                        } else {
-                            setChatHistory([...newHistory, finalMsg]);
+                        decision = route.mode === 'CHAT' ? 'GENERAL_CONVERSATION' : 'KNOWLEDGE_SEARCH';
+                        complexity = route.complexity || 'unknown';
+
+                        if (route.mode === 'CASE_FILE') {
+                            isCaseFileMode = true;
                         }
-                        setIsLoading(false);
-                        return;
+
+                        if (route.mode.startsWith('DEEP_ANALYSIS') && appSettings.enableDeepAnalysisV1) {
+                            const { runDeepAnalysis } = await import('../agents/deep_analysis');
+                            const level = appSettings.deepAnalysisLevel === 3 || route.mode === 'DEEP_ANALYSIS_L3' ? 3 : 2;
+                            const da = await runDeepAnalysis({
+                                query, history: newHistory, vectorStore: vectorStore.current,
+                                model: selectedModel, apiKey, settings: appSettings, embedQuery: embedQueryFn,
+                                rerank: appSettings.isRerankingEnabled ? async (rerankQuery, docs) => {
+                                    const tasks: Omit<ComputeTask, 'jobId'>[] = [];
+                                    docs.forEach((d, i) => tasks.push({
+                                        id: `rerank-${i}`,
+                                        priority: TaskPriority.P1_Primary,
+                                        payload: {
+                                            type: TaskType.Rerank,
+                                            query: rerankQuery,
+                                            documents: [{ ...d, parentChunkIndex: (d as SearchResult).parentChunkIndex ?? -1 }]
+                                        }
+                                    }));
+                                    const rerankPromise = new Promise<SearchResult[]>((resolve) => { if (rerankPromiseResolver) rerankPromiseResolver.current = { resolve, jobId: '', taskResults: [] }; });
+                                    if (coordinator.current) {
+                                        const jobId = coordinator.current.addJob('Rerank', tasks);
+                                        if (rerankPromiseResolver.current) rerankPromiseResolver.current.jobId = jobId;
+                                    }
+                                    return await rerankPromise;
+                                } : undefined,
+                                level,
+                                onTokenUsage: (usage) => {
+                                    perRequestTokenUsage.promptTokens += usage.promptTokens;
+                                    perRequestTokenUsage.completionTokens += usage.completionTokens;
+                                    setTokenUsage(prev => ({
+                                        promptTokens: prev.promptTokens + usage.promptTokens,
+                                        completionTokens: prev.completionTokens + usage.completionTokens
+                                    }));
+                                }
+                            });
+                            const finalMsg: ChatMessage = { role: 'model', content: `${da.finalText}<!--searchResults:${JSON.stringify(da.usedResults)}-->`, type: 'case_file_report', tokenUsage: perRequestTokenUsage, elapsedTime: Date.now() - startTime };
+                            if (updateIndex !== undefined) {
+                                updateMessage(updateIndex, finalMsg);
+                            } else {
+                                setChatHistory([...newHistory, finalMsg]);
+                            }
+                            setIsLoading(false);
+                            return;
+                        }
+                    } catch (_e) {
+                        if (appSettings.isLoggingEnabled) console.warn('[RouterV2] Failed', _e);
                     }
-                } catch (_e) {
-                    if (appSettings.isLoggingEnabled) console.warn('[RouterV2] Failed', _e);
                 }
-            }
 
             }
 
@@ -592,12 +594,12 @@ ${analysis.suggestedQuestions.map(q => `- ${q}`).join('\n')}
 
 Or just tell me what specific aspects you'd like me to focus on.`;
 
-                const finalMsg: ChatMessage = { 
-                    role: 'model', 
-                    content: responseText, 
+                const finalMsg: ChatMessage = {
+                    role: 'model',
+                    content: responseText,
                     type: 'case_file_analysis',
-                    tokenUsage: perRequestTokenUsage, 
-                    elapsedTime: Date.now() - startTime 
+                    tokenUsage: perRequestTokenUsage,
+                    elapsedTime: Date.now() - startTime
                 };
                 if (updateIndex !== undefined) {
                     updateMessage(updateIndex, finalMsg);
@@ -701,10 +703,10 @@ Or just tell me what specific aspects you'd like me to focus on.`;
         setUserInput('');
     }, [userInput, chatHistory, submitQuery, setUserInput]);
 
-    const renderModelMessage = useCallback((content: string | null, fullContent?: string | null, selectionComments?: SelectionComment[]) => {
+    const renderModelMessage = useCallback((content: string | null, fullContent?: string | null, selectionComments?: SelectionComment[], hoveredSelectionId?: string | null) => {
         if (!content) return { __html: '' };
         let searchResults: SearchResult[] = [];
-        
+
         // Use full content to extract search results if available
         const contextForResults = fullContent || content;
         contextForResults.replace(/<!--searchResults:(.*?)-->/, (_, resultsJson) => {
@@ -760,17 +762,29 @@ Or just tell me what specific aspects you'd like me to focus on.`;
         if (selectionComments && selectionComments.length > 0) {
             selectionComments.forEach(sc => {
                 if (!sc.text) return;
-                // Simple search-and-replace for the first version. 
-                // Using split/join to replace all occurrences.
-                // NOTE: This can be improved with a more robust HTML-safe replacer.
-                const escapedText = sc.text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                const regex = new RegExp(`(${escapedText})(?![^<]*>)`, 'gi'); // Don't replace inside HTML tags
-                finalHtml = finalHtml.replace(regex, `<mark class="inline-review-mark" data-comment-id="${sc.id}">$1<span class="inline-review-tooltip"><div class="inline-review-header">Selection Review:</div>${sc.comment}</span></mark>`);
+                const isHovered = hoveredSelectionId === sc.id;
+
+                try {
+                    const regex = createFuzzyRegex(sc.text, 'html');
+                    finalHtml = finalHtml.replace(regex, (match) => {
+                        let processedCount = 0;
+                        return match.replace(/(^|>)([^<]+)(<|$)/g, (m, p1, text, p3) => {
+                            if (!text.trim()) return m; // don't wrap whitespace outside tags
+                            const isFirst = processedCount === 0;
+                            processedCount++;
+                            const tooltipHtml = isFirst ? `<span class="inline-review-tooltip"><div class="inline-review-header">Selection Review:</div>${sc.comment}</span>` : '';
+                            return `${p1}<mark class="inline-review-mark ${isHovered ? 'active-hover' : ''}" data-selection-id="${sc.id}" data-comment-id="${sc.id}">${text}${tooltipHtml}</mark>${p3}`;
+                        });
+                    });
+                } catch (e) {
+                    console.error("Fuzzy highlight regex failed for text:", sc.text, e);
+                }
             });
         }
 
         return { __html: finalHtml };
-    }, []);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [hoveredSelectionId]);
 
     const handleSourceClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
         const target = e.target as HTMLElement;
@@ -822,7 +836,7 @@ Or just tell me what specific aspects you'd like me to focus on.`;
             : '';
 
         const selectionComments = msg.selectionComments
-            ? msg.selectionComments.map(sc => `Review for text "${sc.text}": ${sc.comment}`).join('\n')
+            ? msg.selectionComments.map(sc => `Selection Review for text "${sc.text}" (ID: ${sc.id}): ${sc.comment}`).join('\n')
             : '';
 
         const allComments = [sectionComments, selectionComments].filter(Boolean).join('\n\n');
@@ -837,14 +851,23 @@ Or just tell me what specific aspects you'd like me to focus on.`;
         try {
             const systemPrompt = `You are editing your previous response based on specific user comments.
 The previous message has been formatted with [Section ID: sec-N] tags for your reference.
+Selection Reviews (feedback on specific text fragments) are provided with unique IDs.
+
 CRITICAL EDITING PROTOCOL:
-1. FOCUS ONLY on the commented parts (sections or specific text selections). 
-2. DO NOT move information from other parts into the edited areas unless explicitly requested.
-3. PRESERVE the original structure and context of the message. 
-4. SURGICAL UPDATES: Only change what is necessary to address the comments.
-5. JSON FORMAT: You MUST provide your edits using a structured JSON DIFF format: [{"sectionId": "sec-N", "newContent": "..."}]
-6. SELECTION REVIEWS: If a comment refers to specific text (Selection Review), find the section containing that text and update it. Use the provided [Section ID: sec-N] to identify the correct section.
-7. DO NOT include the [Section ID: sec-N] tags in your "newContent". They are for reference only.
+1. FOCUS ONLY on the commented parts. 
+2. PRESERVE the original structure and context of the message. 
+3. SURGICAL UPDATES: 
+   - For a "Selection Review" (feedback on a fragment), you MUST return the replacement ONLY for that specific fragment.
+   - For a "Section Review" (feedback on ID sec-N), return the updated content for that ENTIRE section.
+4. JSON FORMAT: You MUST provide your edits using a structured JSON DIFF format:
+   [{"sectionId": "sec-N", "fragmentId": "sel-...", "newContent": "..."}]
+   - Use "fragmentId" ONLY for Selection Reviews.
+   - DO NOT use "fragmentId" for Section ID comments.
+5. SURGICAL ACCURACY:
+   - If a fragmentId is provided, the "newContent" will replace ONLY the original text associated with that ID.
+   - Keep the surrounding text EXACTLY the same.
+6. DO NOT include any tags or IDs in your "newContent".
+7. PRESERVE MARKDOWN STRUCTURE: If the text you are replacing spans across a Markdown table or list (e.g., separated by | characters), your "newContent" MUST maintain that exact formatting. Do not flatten tabular data into a simple string.
 8. DO NOT include sections that don't need changes.
 9. REWRITE REQUEST: If the comments require a fundamental restructuring that makes the section-based DIFF approach impossible, respond with: "FULL_REWRITE_REQUEST: <reason>"`;
 
@@ -854,10 +877,10 @@ CRITICAL EDITING PROTOCOL:
             // to include explicit section IDs so the model knows what to reference.
             const historyToMessage = chatHistory.slice(0, index);
             const messageToBeEdited = chatHistory[index];
-            
+
             const sections = messageToBeEdited.sections || sectionizeMessage(messageToBeEdited.content || '');
             const formattedContent = sections.map(s => `[Section ID: ${s.id}]\n${s.content}`).join('\n\n');
-            
+
             const messages: ChatMessage[] = [
                 { role: 'system', content: systemPrompt },
                 ...historyToMessage,
@@ -870,8 +893,8 @@ CRITICAL EDITING PROTOCOL:
 
             if (text.startsWith('FULL_REWRITE_REQUEST:')) {
                 // Handle rewrite request (ask user)
-                updateMessage(index, { 
-                    pendingEdits: [{ sectionId: 'REWRITE', newContent: text.replace('FULL_REWRITE_REQUEST:', '').trim() }] 
+                updateMessage(index, {
+                    pendingEdits: [{ sectionId: 'REWRITE', newContent: text.replace('FULL_REWRITE_REQUEST:', '').trim() }]
                 });
             } else {
                 try {
@@ -900,6 +923,7 @@ CRITICAL EDITING PROTOCOL:
     return {
         userInput, setUserInput,
         chatHistory, setChatHistory,
+        undo, historyStack,
         tokenUsage, setTokenUsage,
         currentContextTokens, setCurrentContextTokens,
         isLoading, setIsLoading,
@@ -912,6 +936,7 @@ CRITICAL EDITING PROTOCOL:
         handleTruncateHistory: truncateHistory,
         pendingQuery, setPendingQuery,
         initialChatHistory,
-        caseFileState, setCaseFileState
+        caseFileState, setCaseFileState,
+        hoveredSelectionId, setHoveredSelectionId
     };
 };

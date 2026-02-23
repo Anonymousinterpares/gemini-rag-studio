@@ -57,6 +57,7 @@ export interface MessageSection {
 
 export interface SelectionComment {
   id: string;
+  sectionId: string;
   text: string;
   comment: string;
 }
@@ -75,6 +76,7 @@ export interface ChatMessage {
   selectionComments?: SelectionComment[];
   pendingEdits?: {
     sectionId: string;
+    fragmentId?: string; // If present, only replace this selection
     newContent: string;
     isConfirmed?: boolean;
     isRejected?: boolean;
