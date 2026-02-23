@@ -1,5 +1,5 @@
 import { FC, useEffect, useCallback, useState } from 'react';
-import { Save, Edit2, X, FileText, Network } from 'lucide-react';
+import { Save, Edit2, X, FileText, Network, Maximize2, Minimize2 } from 'lucide-react';
 import { CaseFile, CaseFileComment } from '../../types';
 import { useCaseFileComments } from '../../hooks/useCaseFileComments';
 import { CaseFileSectionBlock } from './CaseFileSectionBlock';
@@ -25,6 +25,7 @@ export const CaseFilePanel: FC<CaseFilePanelProps> = ({ onResolveComment, render
     const { handleSaveCaseFile, handleSaveAsCaseFile } = useCaseFileIO();
 
     const [activeView, setActiveView] = useState<'document' | 'map'>('document');
+    const [isMaximized, setIsMaximized] = useState(false);
 
     const handleClose = useCallback(() => setOverlayOpen(false), [setOverlayOpen]);
 
@@ -68,9 +69,13 @@ export const CaseFilePanel: FC<CaseFilePanelProps> = ({ onResolveComment, render
 
     if (!isOverlayOpen || !caseFile) return null;
 
+    const panelStyle: React.CSSProperties = isMaximized
+        ? { width: '100vw', height: '100vh', maxHeight: '100vh', borderRadius: 0 }
+        : { height: activeView === 'map' ? '85vh' : undefined };
+
     return (
         <div className='cf-overlay' onMouseDown={(e) => { if (e.target === e.currentTarget) handleClose(); }}>
-            <div className='cf-panel' role='dialog' aria-modal='true' aria-label={caseFile.title} style={{ height: activeView === 'map' ? '85vh' : undefined }}>
+            <div className='cf-panel' role='dialog' aria-modal='true' aria-label={caseFile.title} style={panelStyle}>
 
                 {/* ── Header ── */}
                 <div className='cf-header'>
@@ -105,6 +110,13 @@ export const CaseFilePanel: FC<CaseFilePanelProps> = ({ onResolveComment, render
                             onClick={() => handleSaveAsCaseFile()}
                         >
                             <Save size={15} /> Save As…
+                        </button>
+                        <button
+                            className='cf-close-btn'
+                            title={isMaximized ? 'Restore Down' : 'Maximize'}
+                            onClick={() => setIsMaximized(!isMaximized)}
+                        >
+                            {isMaximized ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
                         </button>
                         <button className='cf-close-btn' title='Close (Escape)' onClick={handleClose}>
                             <X size={18} />
