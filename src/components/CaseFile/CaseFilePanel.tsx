@@ -13,9 +13,11 @@ interface CaseFilePanelProps {
         sectionId: string,
         comment: CaseFileComment
     ) => Promise<void>;
+    /** Same renderModelMessage from useChat – ensures identical markdown rendering to the chat bubble */
+    renderModelMessage: (content: string) => { __html: string };
 }
 
-export const CaseFilePanel: FC<CaseFilePanelProps> = ({ onResolveComment }) => {
+export const CaseFilePanel: FC<CaseFilePanelProps> = ({ onResolveComment, renderModelMessage }) => {
     const {
         caseFile, isOverlayOpen, setOverlayOpen, addComment
     } = useCaseFileStore();
@@ -100,6 +102,7 @@ export const CaseFilePanel: FC<CaseFilePanelProps> = ({ onResolveComment }) => {
                             onDeleteComment={handleDeleteComment}
                             onResolveComment={handleResolveComment}
                             onAddSectionComment={handleAddSectionComment}
+                            renderFn={renderModelMessage}
                         />
                     ))}
                 </div>

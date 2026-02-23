@@ -1,5 +1,4 @@
 import { FC, useState } from 'react';
-import { marked } from 'marked';
 import { MessageSquarePlus } from 'lucide-react';
 import { CaseFileSection as CaseFileSectionType } from '../../types';
 import { CaseFileCommentItem } from './CaseFileCommentItem';
@@ -10,25 +9,20 @@ interface Props {
     onEditComment: (sectionId: string, commentId: string, newInstruction: string) => void;
     onDeleteComment: (sectionId: string, commentId: string) => void;
     onResolveComment: (sectionId: string, commentId: string) => void;
-    /** Called when user clicks the "Add Comment" button on the section (no selection needed) */
     onAddSectionComment?: (sectionId: string, instruction: string) => void;
+    /**
+     * The same renderModelMessage function from useChat – ensures Source citations,
+     * selection highlights, and all markdown processing are identical to the chat.
+     */
+    renderFn: (content: string) => { __html: string };
 }
 
 export const CaseFileSectionBlock: FC<Props> = ({
     section, resolvingCommentId,
-    onEditComment, onDeleteComment, onResolveComment, onAddSectionComment
+    onEditComment, onDeleteComment, onResolveComment, onAddSectionComment, renderFn
 }) => {
     const [showCommentForm, setShowCommentForm] = useState(false);
     const [instruction, setInstruction] = useState('');
-
-    // --- Markdown renderer (same as chat) ---
-    const renderer = new marked.Renderer();
-    const originalLink = renderer.link.bind(renderer);
-    renderer.link = (href, title, text) => {
-        const html = originalLink(href, title, text);
-        return html.replace('<a ', '<a target="_blank" rel="noopener noreferrer" ');
-    };
-    const html = marked.parse(section.content, { renderer, gfm: true, breaks: true }) as string;
 
     const handleSubmitComment = () => {
         if (!instruction.trim() || !onAddSectionComment) return;
@@ -39,10 +33,11 @@ export const CaseFileSectionBlock: FC<Props> = ({
 
     return (
         <div className='cf-section' data-section-id={section.id}>
-            {/* Rendered markdown */}
+
+            {/* Rendered markdown – identical pipeline to chat bubble */}
             <div
                 className='cf-section-content'
-                dangerouslySetInnerHTML={{ __html: html }}
+                dangerouslySetInnerHTML={renderFn(section.content)}
             />
 
             {/* Comments attached to this section */}
@@ -62,7 +57,7 @@ export const CaseFileSectionBlock: FC<Props> = ({
                 </div>
             )}
 
-            {/* Comment toolbar – always visible at the bottom of each section */}
+            {/* Always-visible comment toolbar */}
             <div className='cf-section-toolbar'>
                 {showCommentForm ? (
                     <div className='cf-inline-comment-form'>
@@ -70,7 +65,7 @@ export const CaseFileSectionBlock: FC<Props> = ({
                             className='cf-comment-edit-textarea'
                             autoFocus
                             rows={3}
-                            placeholder='Instruct the LLM to rewrite this section… (Shift+Enter for newline)'
+                            placeholder='Instruct the LLM to rewrite this section… (Shift+Enter for newline, Enter to submit)'
                             value={instruction}
                             onChange={e => setInstruction(e.target.value)}
                             onKeyDown={e => {
@@ -90,7 +85,7 @@ export const CaseFileSectionBlock: FC<Props> = ({
                 ) : (
                     <button
                         className='cf-add-comment-btn'
-                        title='Add a comment to this section – the LLM will rewrite the whole section based on your instruction'
+                        title='Add a comment – the LLM will rewrite the whole section based on your instruction'
                         onClick={() => setShowCommentForm(true)}
                     >
                         <MessageSquarePlus size={14} />

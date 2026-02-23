@@ -237,13 +237,30 @@ export const App: FC = () => {
     handleRedo: handleRerunQuery,
     handleRemoveMessage, handleMouseUp,
     onOpenInCaseFile: (content: string, title?: string) => {
-      // Parse the LLM markdown/JSON into a CaseFile and load it into the overlay
+      // Strip the <!--searchResults:…--> annotation (may span multiple lines)
+      const clean = content.replace(/<!--searchResults:[\s\S]*?-->/g, '').trim();
       import('./utils/caseFileUtils').then(({ parseCaseFileFromMarkdown }) => {
-        // Strip trailing <!--searchResults:...--> comment if present
-        const clean = content.replace(/<!--searchResults:.*?-->/, '').trim();
+        // 1. Try to parse as a proper CaseFile JSON — the LLM often outputs this structure directly
+        try {
+          const parsed = JSON.parse(clean);
+          if (parsed.version === 1 && Array.isArray(parsed.sections)) {
+            // Ensure section content strings have real newlines (LLM may use \\n inside JSON)
+            const normalized = {
+              ...parsed,
+              sections: parsed.sections.map((s: any) => ({
+                ...s,
+                content: (s.content as string)
+                  .replace(/\\n/g, '\n')
+                  .replace(/\\t/g, '    ')
+              }))
+            };
+            useCaseFileStore.getState().loadCaseFile(normalized);
+            return; // loadCaseFile already opens the overlay
+          }
+        } catch { /* not JSON – fall through to markdown */ }
+        // 2. Parse as plain Markdown
         const cf = parseCaseFileFromMarkdown(clean, title ?? 'Case File');
         useCaseFileStore.getState().loadCaseFile(cf);
-        useCaseFileStore.getState().setOverlayOpen(true);
       });
     }
   };
@@ -305,10 +322,9 @@ export const App: FC = () => {
       }} />
       <RecoveryDialogContainer availableModels={modelsList} currentModel={selectedModel} apiKeys={apiKeys} onModelChange={(m: Model, k?: string) => { setSelectedModel(m); if (k) setApiKeys(prev => ({ ...prev, [m.provider]: k })); }} />
 
-      {/* ── Case File Panel overlay ── */}
       <CaseFilePanel
+        renderModelMessage={(content) => renderModelMessage(content)}
         onResolveComment={async (cf, sId, comment) => {
-          // submitCaseFileComment handles both success (store.resolveComment) and failure (append to chat)
           await submitCaseFileComment(cf, sId, comment, (resolvedSectionId, commentId, newContent) => {
             useCaseFileStore.getState().resolveComment(resolvedSectionId, commentId, newContent);
           });
