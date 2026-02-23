@@ -278,76 +278,103 @@ export const App: FC = () => {
         updatedSections = updatedSections.map(s => {
           if (s.id !== targetId) return s;
 
-          // ── Auto-detect: LLM returned a full table row as newContent ──────────
-          // This handles models that use FRAGMENT EDIT format even for table rows.
           const newContentTrimmed = edit.newContent!.trim();
           const isFullRowReply = /^\|.*\|$/.test(newContentTrimmed);
 
           if (isMarkdownTable(s.content) && isFullRowReply) {
+            // CRITICAL: if section is a table and newContent is a full row, we MUST use
+            // the codec path. We NEVER let this fall through to fuzzy regex — that path
+            // would greedily eat rows and silently corrupt the table.
             const table = parseMarkdownTable(s.content);
-            if (table) {
-              // Extract "significant" cells from selection text (min 4 chars, strip outer pipes)
-              const selCells = selection.text.trim()
-                .replace(/^\|\s*/, '')
-                .replace(/\s*\|$/, '')
-                .split('|')
-                .map(c => c.trim())
-                .filter(c => c.length >= 4);
+            if (!table) return s; // can't parse → bail out unchanged
 
-              const rowIndex = table.rows.findIndex(row => {
-                // Strategy 1: full row with outer pipes matches selection
-                const rowFull = '| ' + row.join(' | ') + ' |';
-                if (findExactMatchLenient(rowFull, selection.text.trim()) !== null) return true;
-                // Strategy 2: any significant cell from selection appears in a row cell
-                return selCells.some(selCell =>
-                  row.some(cell => findExactMatchLenient(cell, selCell) !== null)
-                );
+            // Extract significant cells from selection text (min 4 chars, strip outer pipes)
+            const selCells = selection.text.trim()
+              .replace(/^\|\s*/, '')
+              .replace(/\s*\|$/, '')
+              .split('|')
+              .map(c => c.trim())
+              .filter(c => c.length >= 4);
+
+            const rowIndex = table.rows.findIndex(row => {
+              // Strategy 1: full pipe-wrapped row contains the selection text
+              const rowFull = '| ' + row.join(' | ') + ' |';
+              if (findExactMatchLenient(rowFull, selection.text.trim()) !== null) return true;
+
+              // Strategy 2: any significant cell from selection appears in a row cell
+              // (handles single-column selections with pipes)
+              if (selCells.some(selCell => row.some(cell => findExactMatchLenient(cell, selCell) !== null))) return true;
+
+              // Strategy 3: selection text (no pipes) is a substring of the row's flattened text
+              // (handles multi-column HTML-rendered selections where browser strips pipes)
+              const rowFlat = row.join(' ');
+              if (findExactMatchLenient(rowFlat, selection.text.trim()) !== null) return true;
+
+              // Strategy 4: strip ALL markdown formatting from both sides before comparing
+              // (handles browser-rendered text where ** bold, <br>, HTML tags are invisible)
+              const stripMd = (t: string) => t
+                .replace(/<br\s*\/?>/gi, ' ')
+                .replace(/<[^>]+>/g, ' ')
+                .replace(/[*_~`]+/g, '')
+                .replace(/\s+/g, ' ')
+                .trim();
+              const rowStripped = stripMd(rowFlat);
+              const selStripped = stripMd(selection.text.trim());
+              return rowStripped.toLowerCase().includes(selStripped.toLowerCase().slice(0, 80));
+            });
+
+            if (rowIndex === -1) {
+              // Row not identified — abort safely rather than risk corrupting the table
+              console.warn('[applyEditToSections] Table row not found for selection, skipping replacement', {
+                selectionText: selection.text,
+                rowCount: table.rows.length
               });
-
-              if (rowIndex !== -1) {
-                // Parse new cells from newContent
-                const newCells = newContentTrimmed
-                  .slice(1, -1)
-                  .split('|')
-                  .map(c => c.trim());
-
-                // Handle column-count mismatch: if LLM returned fewer cells than the table has,
-                // only update the cells that changed (by matching each new cell to existing cells).
-                let mergedCells = [...table.rows[rowIndex]];
-                if (newCells.length === table.headers.length) {
-                  mergedCells = newCells;
-                } else {
-                  // Replace only the cells that have a corresponding match
-                  newCells.forEach(newCell => {
-                    if (!newCell) return;
-                    const matchIdx = mergedCells.findIndex(existing =>
-                      findExactMatchLenient(newCell, existing) !== null ||
-                      findExactMatchLenient(existing, newCell) !== null
-                    );
-                    if (matchIdx !== -1) mergedCells[matchIdx] = newCell;
-                    else {
-                      // Find the cell from the selection that this newCell replaces
-                      const selIdx = selCells.findIndex(sc =>
-                        findExactMatchLenient(mergedCells.find(() => true) ?? '', sc) !== null
-                      );
-                      if (selIdx !== -1) {
-                        const targetCellIdx = mergedCells.findIndex(c =>
-                          findExactMatchLenient(c, selCells[selIdx]) !== null
-                        );
-                        if (targetCellIdx !== -1) mergedCells[targetCellIdx] = newCell;
-                      }
-                    }
-                  });
-                }
-
-                const newRows = table.rows.map((row, i) => i === rowIndex ? mergedCells : row);
-                console.log(`[applyEditToSections] Auto-routed table row edit at rowIndex=${rowIndex}`, { newCells, mergedCells });
-                return { ...s, content: generateMarkdownTable({ ...table, rows: newRows }) };
-              }
+              return s; // Return section UNCHANGED
             }
+
+            // Parse new cells from newContent
+            const newCells = newContentTrimmed
+              .slice(1, -1)
+              .split('|')
+              .map((c: string) => c.trim());
+
+            console.log('[applyEditToSections] newCells parsed:', JSON.stringify(newCells), 'headers:', table.headers.length);
+
+            // Handle column-count mismatch: merge only the cells the LLM changed
+            let mergedCells = [...table.rows[rowIndex]];
+            if (newCells.length === table.headers.length) {
+              mergedCells = newCells;
+            } else {
+              // If LLM gave FEWER cells, do positional merge preserving unlisted cells
+              console.warn('[applyEditToSections] Column count mismatch. Expected:', table.headers.length, 'Got:', newCells.length);
+              newCells.forEach((newCell: string, newIdx: number) => {
+                if (!newCell) return;
+                const matchIdx = mergedCells.findIndex((existing: string) =>
+                  findExactMatchLenient(newCell, existing) !== null ||
+                  findExactMatchLenient(existing, newCell) !== null
+                );
+                if (matchIdx !== -1) {
+                  mergedCells[matchIdx] = newCell;
+                } else if (newIdx < mergedCells.length) {
+                  mergedCells[newIdx] = newCell;
+                }
+              });
+            }
+
+            // Defensive guard: ensure final cell count is correct
+            if (mergedCells.length !== table.headers.length) {
+              console.error('[applyEditToSections] Merged cells length mismatch — aborting to prevent table corruption', {
+                expected: table.headers.length, got: mergedCells.length, mergedCells
+              });
+              return s;
+            }
+
+            const newRows = table.rows.map((row, i) => i === rowIndex ? mergedCells : row);
+            console.log(`[applyEditToSections] Table row edit at rowIndex=${rowIndex}`, { mergedCells });
+            return { ...s, content: generateMarkdownTable({ ...table, rows: newRows }) };
           }
 
-          // ── Plain-text fragment replacement ────────────────────────────────────
+          // ── Plain-text fragment replacement (non-table sections only) ──────────
           const lenientMatch = findExactMatchLenient(s.content, selection.text.trim());
           let content = s.content;
           if (lenientMatch) {
