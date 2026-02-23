@@ -82,6 +82,44 @@ export const InvestigationMapCanvas: FC = () => {
         [updateMapEdges]
     );
 
+    const onNodeDoubleClick = useCallback((event: React.MouseEvent, clickedNode: Node) => {
+        event.preventDefault();
+
+        // 2) Ctrl + Double Click -> select all nodes of the same type
+        if (event.ctrlKey || event.metaKey) {
+            const matchType = clickedNode.data?.entityType;
+            if (matchType) {
+                updateMapNodes((nds) => nds.map(n => ({
+                    ...n,
+                    selected: n.data?.entityType === matchType
+                })));
+            }
+            return;
+        }
+
+        // 1) Double Click -> select node + all its descendants (subnodes)
+        const descendantIds = new Set<string>();
+        descendantIds.add(clickedNode.id);
+
+        const queue = [clickedNode.id];
+        while (queue.length > 0) {
+            const currentId = queue.shift()!;
+            const outgoingEdges = edges.filter(e => e.source === currentId);
+            for (const edge of outgoingEdges) {
+                if (!descendantIds.has(edge.target)) {
+                    descendantIds.add(edge.target);
+                    queue.push(edge.target);
+                }
+            }
+        }
+
+        updateMapNodes((nds) => nds.map(n => ({
+            ...n,
+            selected: descendantIds.has(n.id)
+        })));
+
+    }, [edges, updateMapNodes]);
+
     return (
         <div style={{ width: '100%', height: '100%', flex: 1, minHeight: '400px', background: 'var(--bg-primary)', position: 'relative' }}>
             {/* Filtering Toolbar */}
@@ -113,6 +151,7 @@ export const InvestigationMapCanvas: FC = () => {
                     onNodesChange={onNodesChange}
                     onEdgesChange={onEdgesChange}
                     onConnect={onConnect}
+                    onNodeDoubleClick={onNodeDoubleClick}
                     nodeTypes={nodeTypes}
                     fitView
                 >
