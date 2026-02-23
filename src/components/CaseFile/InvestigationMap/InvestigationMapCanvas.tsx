@@ -19,7 +19,7 @@ import { useCaseFileStore } from '../../../store/useCaseFileStore';
 import { EntityNode } from './nodes/EntityNode';
 import { GroupNode } from './nodes/GroupNode';
 import { useMapAI } from '../../../hooks/useMapAI';
-import { Search, GitFork, Loader } from 'lucide-react';
+import { Search, GitFork, Loader, Eye, EyeOff, Trash2 } from 'lucide-react';
 
 /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
 const nodeTypes: any = {
@@ -30,6 +30,9 @@ const nodeTypes: any = {
 export const InvestigationMapCanvas: FC = () => {
     const { caseFile, updateMapNodes, updateMapEdges, initializeMap } = useCaseFileStore();
     const [searchQuery, setSearchQuery] = useState('');
+    const [hideDescriptions, setHideDescriptions] = useState(false);
+    const [hideEdges, setHideEdges] = useState(false);
+    const [edgeToDelete, setEdgeToDelete] = useState<Edge | null>(null);
     const { generateMapFromDocument, isMapProcessing } = useMapAI();
 
     useEffect(() => {
@@ -52,12 +55,17 @@ export const InvestigationMapCanvas: FC = () => {
         return {
             ...n,
             style: { ...(((n as unknown) as Node).style || {}), opacity: isMatch ? 1 : 0.2 },
+            data: {
+                ...n.data,
+                hideDescription: hideDescriptions
+            }
         };
-    }), [nodes, searchQuery]);
+    }), [nodes, searchQuery, hideDescriptions]);
 
     const rfEdges: Edge[] = useMemo(() => edges.map(e => ({
         ...e,
-    })), [edges]); // re-run if we want to fade edges too later
+        hidden: hideEdges
+    })), [edges, hideEdges]); // re-run if we want to fade edges too later
 
     const onNodesChange = useCallback(
         (changes: NodeChange[]) => {
@@ -120,6 +128,18 @@ export const InvestigationMapCanvas: FC = () => {
 
     }, [edges, updateMapNodes]);
 
+    const onEdgeDoubleClick = useCallback((event: React.MouseEvent, clickedEdge: Edge) => {
+        event.preventDefault();
+        setEdgeToDelete(clickedEdge);
+    }, []);
+
+    const confirmDeleteEdge = () => {
+        if (edgeToDelete) {
+            updateMapEdges((eds) => eds.filter(e => e.id !== edgeToDelete.id));
+            setEdgeToDelete(null);
+        }
+    };
+
     return (
         <div style={{ width: '100%', height: '100%', flex: 1, minHeight: '400px', background: 'var(--bg-primary)', position: 'relative' }}>
             {/* Filtering Toolbar */}
@@ -127,19 +147,39 @@ export const InvestigationMapCanvas: FC = () => {
                 position: 'absolute', top: '16px', right: '16px', zIndex: 10,
                 background: 'var(--panel-bg-color)', border: '1px solid var(--border-color)',
                 borderRadius: '8px', padding: '6px 12px', display: 'flex', alignItems: 'center',
-                gap: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+                gap: '12px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
             }}>
-                <Search size={14} color="var(--text-color-secondary)" />
-                <input
-                    type="text"
-                    placeholder="Filter map nodes..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    style={{
-                        border: 'none', background: 'transparent', color: 'var(--text-color)',
-                        fontSize: '13px', outline: 'none', width: '200px'
-                    }}
-                />
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', borderRight: '1px solid var(--border-color)', paddingRight: '12px' }}>
+                    <Search size={14} color="var(--text-color-secondary)" />
+                    <input
+                        type="text"
+                        placeholder="Filter map nodes..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        style={{
+                            border: 'none', background: 'transparent', color: 'var(--text-color)',
+                            fontSize: '13px', outline: 'none', width: '160px'
+                        }}
+                    />
+                </div>
+
+                <button
+                    onClick={() => setHideDescriptions(!hideDescriptions)}
+                    style={{ background: 'none', border: 'none', color: hideDescriptions ? 'var(--text-color-secondary)' : 'var(--text-color)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', padding: 0 }}
+                    title="Toggle Node Descriptions"
+                >
+                    {hideDescriptions ? <EyeOff size={14} /> : <Eye size={14} />}
+                    Text
+                </button>
+
+                <button
+                    onClick={() => setHideEdges(!hideEdges)}
+                    style={{ background: 'none', border: 'none', color: hideEdges ? 'var(--text-color-secondary)' : 'var(--text-color)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', padding: 0 }}
+                    title="Toggle Connections"
+                >
+                    {hideEdges ? <EyeOff size={14} /> : <Eye size={14} />}
+                    Edges
+                </button>
             </div>
 
 
@@ -152,6 +192,7 @@ export const InvestigationMapCanvas: FC = () => {
                     onEdgesChange={onEdgesChange}
                     onConnect={onConnect}
                     onNodeDoubleClick={onNodeDoubleClick}
+                    onEdgeDoubleClick={onEdgeDoubleClick}
                     nodeTypes={nodeTypes}
                     fitView
                 >
@@ -159,6 +200,35 @@ export const InvestigationMapCanvas: FC = () => {
                     <Controls />
                 </ReactFlow>
             </div>
+
+            {/* Edge Deletion Confirmation Dialog */}
+            {edgeToDelete && (
+                <div style={{
+                    position: 'absolute', inset: 0, zIndex: 100,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(2px)'
+                }} onClick={() => setEdgeToDelete(null)}>
+                    <div style={{
+                        background: 'var(--panel-bg-color)', border: '1px solid var(--border-color)',
+                        padding: '20px', borderRadius: '12px', boxShadow: '0 10px 30px rgba(0,0,0,0.5)',
+                        display: 'flex', flexDirection: 'column', gap: '16px', minWidth: '300px'
+                    }} onClick={e => e.stopPropagation()}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--text-color)' }}>
+                            <Trash2 size={24} style={{ color: 'var(--accent-red)' }} />
+                            <div>
+                                <h3 style={{ margin: 0, fontSize: '15px' }}>Remove Connection?</h3>
+                                <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: 'var(--text-color-secondary)' }}>
+                                    Are you sure you want to delete this connection?
+                                </p>
+                            </div>
+                        </div>
+                        <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '8px' }}>
+                            <button className="button secondary" onClick={() => setEdgeToDelete(null)}>Cancel</button>
+                            <button className="button" style={{ background: 'var(--accent-red)', borderColor: 'var(--accent-red)' }} onClick={confirmDeleteEdge}>Remove</button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Empty-state overlay */}
             {(!caseFile?.map?.nodes || caseFile.map.nodes.length === 0) && (
