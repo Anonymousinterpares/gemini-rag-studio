@@ -1,0 +1,10 @@
+﻿src/App.tsx(96,5): error TS6133: 'hasLLMResponded' is declared but its value is never read.
+src/App.tsx(230,31): error TS2322: Type '(input: string) => void' is not assignable to type 'Dispatch<SetStateAction<string>>'.
+  Types of parameters 'input' and 'value' are incompatible.
+    Type 'SetStateAction<string>' is not assignable to type 'string'.
+      Type '(prevState: string) => string' is not assignable to type 'string'.
+src/App.tsx(232,9): error TS2322: Type '(state: Partial<{ isAwaitingFeedback: boolean; metadata?: CaseFileMetadata | undefined; }>) => void' is not assignable to type 'Dispatch<SetStateAction<{ isAwaitingFeedback: boolean; metadata?: any; }>>'.
+  Types of parameters 'state' and 'value' are incompatible.
+    Type 'SetStateAction<{ isAwaitingFeedback: boolean; metadata?: any; }>' is not assignable to type 'Partial<{ isAwaitingFeedback: boolean; metadata?: CaseFileMetadata | undefined; }>'.
+      Value of type '(prevState: { isAwaitingFeedback: boolean; metadata?: any; }) => { isAwaitingFeedback: boolean; metadata?: any; }' has no properties in common with type 'Partial<{ isAwaitingFeedback: boolean; metadata?: CaseFileMetadata | undefined; }>'. Did you mean to call it?
+src/components/FilePanel.tsx(1,22): error TS6133: 'useState' is declared but its value is never read.

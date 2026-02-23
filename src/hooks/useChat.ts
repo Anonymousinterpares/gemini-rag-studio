@@ -8,7 +8,8 @@ import { ComputeCoordinator } from '../compute/coordinator';
 import { VectorStore } from '../rag/pipeline';
 import { useChatStore, useFileStore, useSettingsStore } from '../store';
 import { searchWeb } from '../utils/search';
-import { sectionizeMessage, createFuzzyRegex, findExactMatchLenient, isMarkdownTable, parseMarkdownTable } from '../utils/chatUtils';
+import { sectionizeMessage, createFuzzyRegex } from '../utils/chatUtils';
+
 
 const SEARCH_TOOL: Tool = {
     type: 'function',
@@ -854,47 +855,17 @@ Or just tell me what specific aspects you'd like me to focus on.`;
 
         const selectionCommentBlocks = (msg.selectionComments || []).map(sc => {
             const section = sections.find(s => s.id === sc.sectionId);
-            if (!section) {
-                return `Selection Comment (ID: ${sc.id}): ${sc.comment}\nUser selected text: "${sc.text}"`;
-            }
-
-            // ── Table path ───────────────────────────────────────────────────
-            if (isMarkdownTable(section.content)) {
-                const table = parseMarkdownTable(section.content);
-                if (table) {
-                    // Find which row the selection belongs to
-                    const rowIndex = table.rows.findIndex(row => {
-                        const rowText = row.join(' | ');
-                        return findExactMatchLenient(rowText, sc.text.trim()) !== null
-                            || row.some(cell => findExactMatchLenient(cell, sc.text.trim()) !== null);
-                    });
-
-                    if (rowIndex !== -1) {
-                        const rowJson = JSON.stringify(table.rows[rowIndex]);
-                        return [
-                            `TABLE ROW EDIT (sectionId: ${section.id}, fragmentId: ${sc.id}):`,
-                            `Row index: ${rowIndex} (0-based, excluding header and separator)`,
-                            `Column headers: ${JSON.stringify(table.headers)}`,
-                            `Current row cells (JSON): ${rowJson}`,
-                            `Comment: ${sc.comment}`
-                        ].join('\n');
-                    }
-                }
-            }
-
-            // ── Plain-text path ───────────────────────────────────────────────
-            // Find the exact snippet in the raw Markdown for the LLM to reference
-            const exactSnippet = findExactMatchLenient(section.content, sc.text.trim())
-                ?? createFuzzyRegex(sc.text, 'markdown').exec(section.content)?.[0]
-                ?? sc.text;
+            const sectionContent = section?.content ?? '';
 
             return [
-                `FRAGMENT EDIT (sectionId: ${section.id}, fragmentId: ${sc.id}):`,
-                `Original Markdown Snippet:`,
-                `\`\`\``,
-                exactSnippet,
-                `\`\`\``,
-                `Comment: ${sc.comment}`
+                `SELECTION COMMENT (sectionId: ${sc.sectionId}):`,
+                `The user highlighted this text in the section:`,
+                `"${sc.text.trim()}"`,
+                `Comment: ${sc.comment}`,
+                `Full current section content (for reference):`,
+                '```',
+                sectionContent,
+                '```'
             ].join('\n');
         }).join('\n\n');
 
@@ -910,26 +881,19 @@ Or just tell me what specific aspects you'd like me to focus on.`;
             const systemPrompt = `You are editing your previous response based on specific user comments.
 The previous message has been split into [Section ID: sec-N] blocks for reference.
 
-CRITICAL EDITING PROTOCOL:
+EDITING PROTOCOL:
 Return ONLY a JSON array of edit objects. No prose, no markdown fences around the outer array.
 
-1. SECTION COMMENT → whole-section replacement:
-   {"sectionId":"sec-N","newContent":"...full updated section text..."}
+For EVERY comment (whether it is a section-level comment or a selection comment about a highlighted fragment):
+  {"sectionId":"sec-N","newContent":"...COMPLETE rewritten section text..."}
 
-2. FRAGMENT EDIT → plain-text snippet replacement (non-table):
-   {"sectionId":"sec-N","fragmentId":"sel-...","newContent":"...replacement snippet only..."}
-   - "newContent" replaces EXACTLY the "Original Markdown Snippet" shown. Match its boundaries precisely.
-   - Do NOT add surrounding table pipes if they are not in the snippet.
-
-3. TABLE ROW EDIT → structured row replacement:
-   {"sectionId":"sec-N","fragmentId":"sel-...","tableEdit":{"rowIndex":N,"cells":["col1","col2","col3"]}}
-   - Return ALL cells for the row, not just the changed one.
-   - Do NOT use "newContent" for TABLE ROW EDITs.
-
-FORMATTING RULES:
-- Output ONLY pure Markdown in newContent / cells values.
+CRITICAL RULES:
+- "newContent" MUST contain the ENTIRE rewritten section — not just the changed fragment.
+- When a comment references a highlighted selection, use that as context to know WHAT to change,
+  but output the FULL rewritten section in "newContent".
+- Output ONLY pure Markdown in newContent values.
 - No HTML tags. Tables must use | pipe syntax.
-- FULL_REWRITE_REQUEST: <reason>  — use this string (not JSON) if a full rewrite is needed.`;
+- If a table cell needs multiple lines of content, use <br> to separate them within the cell.`;
 
             const formattedContent = sections.map(s => `[Section ID: ${s.id}]\n${s.content}`).join('\n\n');
             const userPrompt = `Here are my remarks:\n\n${allComments}\n\nReturn the JSON edit array.`;

@@ -1,0 +1,78 @@
+﻿
+============================================================
+ROW: Plain row vs FULL selection
+SEL: "| SegmentÔÇĹlevel revenue | ÔÇó FY 2024 (preÔÇĹsplit) ÔÇô ┬ą 206 billion (Ôëł 12 % of total..."
+============================================================
+selTokens: [
+  '"SegmentÔÇĹlevel revenue"',
+  '"ÔÇó FY 2024 (preÔÇĹsplit) ÔÇô ┬ą 206 billion (Ôëł 12 % of total group"',
+  '"Integrated Report 2025 ÔÇô Table ÔÇťRevenue by segmentÔÇŁ (Server "'
+]
+selPlain: "Segment-level revenue ÔÇó FY 2024 (pre-split) - ┬ą 206 billion (Ôëł 12 % of total gro"
+
+Strategy 1 (lenient match of rowFull vs selTrimmed): miss
+Strategy 2 (lenient token in cell): tok="SegmentÔÇĹlevel revenue" in cell="SegmentÔÇĹlevel revenue"
+  2b: "segment-level revenue" in "segment-level revenue"? true
+Strategy 2b (plain includes): tok="segment-level revenue" in cell
+Strategy 3 (lenient match of rowFlat vs selTrimmed): miss
+Strategy 4 (plain rowStripped includes selPlain slice): MATCH
+  rowStripped: "Segment-level revenue ÔÇó FY 2024 (pre-split) - ┬ą 206 billion (Ôëł 12 % of total gro..."
+  selPlain[0:80]: "Segment-level revenue ÔÇó FY 2024 (pre-split) - ┬ą 206 billion (Ôëł 12 % of total gro"
+
+============================================================
+ROW: Plain row vs TRUNCATED selection
+SEL: "| SegmentÔÇĹlevel revenue | ÔÇó FY 2024 (preÔÇĹsplit) ÔÇô ┬ą 206 billion (Ôëł 12 % of total..."
+============================================================
+selTokens: [
+  '"SegmentÔÇĹlevel revenue"',
+  '"ÔÇó FY 2024 (preÔÇĹsplit) ÔÇô ┬ą 206 billion (Ôëł 12 % of total group"'
+]
+selPlain: "Segment-level revenue ÔÇó FY 2024 (pre-split) - ┬ą 206 billion (Ôëł 12 % of total gro"
+
+Strategy 1 (lenient match of rowFull vs selTrimmed): miss
+Strategy 2 (lenient token in cell): tok="SegmentÔÇĹlevel revenue" in cell="SegmentÔÇĹlevel revenue"
+  2b: "segment-level revenue" in "segment-level revenue"? true
+Strategy 2b (plain includes): tok="segment-level revenue" in cell
+Strategy 3 (lenient match of rowFlat vs selTrimmed): miss
+Strategy 4 (plain rowStripped includes selPlain slice): MATCH
+  rowStripped: "Segment-level revenue ÔÇó FY 2024 (pre-split) - ┬ą 206 billion (Ôëł 12 % of total gro..."
+  selPlain[0:80]: "Segment-level revenue ÔÇó FY 2024 (pre-split) - ┬ą 206 billion (Ôëł 12 % of total gro"
+
+============================================================
+ROW: Bold row vs FULL selection
+SEL: "| SegmentÔÇĹlevel revenue | ÔÇó FY 2024 (preÔÇĹsplit) ÔÇô ┬ą 206 billion (Ôëł 12 % of total..."
+============================================================
+selTokens: [
+  '"SegmentÔÇĹlevel revenue"',
+  '"ÔÇó FY 2024 (preÔÇĹsplit) ÔÇô ┬ą 206 billion (Ôëł 12 % of total group"',
+  '"Integrated Report 2025 ÔÇô Table ÔÇťRevenue by segmentÔÇŁ (Server "'
+]
+selPlain: "Segment-level revenue ÔÇó FY 2024 (pre-split) - ┬ą 206 billion (Ôëł 12 % of total gro"
+
+Strategy 1 (lenient match of rowFull vs selTrimmed): miss
+Strategy 2 (lenient token in cell): tok="SegmentÔÇĹlevel revenue" in cell="**SegmentÔÇĹlevel revenue**"
+  2b: "segment-level revenue" in "segment-level revenue"? true
+Strategy 2b (plain includes): tok="segment-level revenue" in cell
+Strategy 3 (lenient match of rowFlat vs selTrimmed): miss
+Strategy 4 (plain rowStripped includes selPlain slice): MATCH
+  rowStripped: "Segment-level revenue ÔÇó FY 2024 (pre-split) - ┬ą 206 billion (Ôëł 12 % of total gro..."
+  selPlain[0:80]: "Segment-level revenue ÔÇó FY 2024 (pre-split) - ┬ą 206 billion (Ôëł 12 % of total gro"
+
+============================================================
+ROW: Bold row vs TRUNCATED selection
+SEL: "| SegmentÔÇĹlevel revenue | ÔÇó FY 2024 (preÔÇĹsplit) ÔÇô ┬ą 206 billion (Ôëł 12 % of total..."
+============================================================
+selTokens: [
+  '"SegmentÔÇĹlevel revenue"',
+  '"ÔÇó FY 2024 (preÔÇĹsplit) ÔÇô ┬ą 206 billion (Ôëł 12 % of total group"'
+]
+selPlain: "Segment-level revenue ÔÇó FY 2024 (pre-split) - ┬ą 206 billion (Ôëł 12 % of total gro"
+
+Strategy 1 (lenient match of rowFull vs selTrimmed): miss
+Strategy 2 (lenient token in cell): tok="SegmentÔÇĹlevel revenue" in cell="**SegmentÔÇĹlevel revenue**"
+  2b: "segment-level revenue" in "segment-level revenue"? true
+Strategy 2b (plain includes): tok="segment-level revenue" in cell
+Strategy 3 (lenient match of rowFlat vs selTrimmed): miss
+Strategy 4 (plain rowStripped includes selPlain slice): MATCH
+  rowStripped: "Segment-level revenue ÔÇó FY 2024 (pre-split) - ┬ą 206 billion (Ôëł 12 % of total gro..."
+  selPlain[0:80]: "Segment-level revenue ÔÇó FY 2024 (pre-split) - ┬ą 206 billion (Ôëł 12 % of total gro"

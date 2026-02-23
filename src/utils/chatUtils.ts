@@ -47,7 +47,8 @@ export function isMarkdownTable(block: string): boolean {
  * Returns null if the block is not a recognizable Markdown table.
  */
 export function parseMarkdownTable(block: string): MarkdownTable | null {
-  const lines = block.trim().split('\n').map(l => l.trim());
+  // Split by \n, trim each line, drop blank lines so stray CRLF/trailing newlines don't add phantom rows
+  const lines = block.trim().split('\n').map(l => l.trim()).filter(l => l.length > 0);
   if (lines.length < 2) return null;
 
   const splitRow = (line: string): string[] => {
@@ -71,7 +72,10 @@ export function parseMarkdownTable(block: string): MarkdownTable | null {
     return '---';
   });
 
-  const rows = lines.slice(2).map(splitRow);
+  // Filter blank lines from rows too, and only keep rows that have at least some cell content
+  const rows = lines.slice(2)
+    .map(splitRow)
+    .filter(cells => cells.some(c => c.length > 0));
 
   return { headers, alignments, rows, raw: block };
 }
