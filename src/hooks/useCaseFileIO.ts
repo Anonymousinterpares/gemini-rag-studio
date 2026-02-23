@@ -85,13 +85,43 @@ export const useCaseFileIO = () => {
         }
     };
 
+    /** Save As – always prompts for a new file location, then updates the stored handle */
+    const handleSaveAsCaseFile = async (fileOverride?: CaseFile) => {
+        const cf = fileOverride ?? caseFile;
+        if (!cf) return;
+        const data = JSON.stringify(cf, null, 2);
+        try {
+            if ('showSaveFilePicker' in window) {
+                const handle = await (window as any).showSaveFilePicker({
+                    suggestedName: `${cf.title.replace(/\s+/g, '-')}.json`,
+                    types: [{ description: 'Case File JSON', accept: { 'application/json': ['.json'] } }],
+                });
+                setFileHandle(handle);
+                const writable = await handle.createWritable();
+                await writable.write(data);
+                await writable.close();
+            } else {
+                // Fallback download (can't change name via API in this path)
+                const blob = new Blob([data], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `${cf.title.replace(/\s+/g, '-')}.json`;
+                a.click();
+                URL.revokeObjectURL(url);
+            }
+        } catch (e: any) {
+            if (e?.name !== 'AbortError') console.error('[CaseFileIO] Save As error:', e);
+        }
+    };
+
     /** Debounced auto-save: call this after every mutation */
     const scheduleAutoSave = (cf: CaseFile) => {
         if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
         autoSaveTimer.current = setTimeout(() => handleSaveCaseFile(cf), 2000);
     };
 
-    return { handleLoadCaseFile, handleSaveCaseFile, scheduleAutoSave };
+    return { handleLoadCaseFile, handleSaveCaseFile, handleSaveAsCaseFile, scheduleAutoSave };
 };
 
 // ── Helpers ──────────────────────────────────────────────────────────────────

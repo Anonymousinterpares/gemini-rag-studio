@@ -19,9 +19,9 @@ interface CaseFilePanelProps {
 
 export const CaseFilePanel: FC<CaseFilePanelProps> = ({ onResolveComment, renderModelMessage }) => {
     const {
-        caseFile, isOverlayOpen, setOverlayOpen, addComment
+        caseFile, isOverlayOpen, setOverlayOpen, addComment, _fileHandle
     } = useCaseFileStore();
-    const { handleSaveCaseFile } = useCaseFileIO();
+    const { handleSaveCaseFile, handleSaveAsCaseFile } = useCaseFileIO();
 
     const handleClose = useCallback(() => setOverlayOpen(false), [setOverlayOpen]);
 
@@ -75,10 +75,17 @@ export const CaseFilePanel: FC<CaseFilePanelProps> = ({ onResolveComment, render
                     <div className='cf-header-actions'>
                         <button
                             className='button secondary'
-                            title='Save case file'
+                            title={_fileHandle ? `Save – overwrite ${_fileHandle.name}` : 'Save case file'}
                             onClick={() => handleSaveCaseFile()}
                         >
                             <Save size={15} /> Save
+                        </button>
+                        <button
+                            className='button secondary'
+                            title='Save a copy under a different file name'
+                            onClick={() => handleSaveAsCaseFile()}
+                        >
+                            <Save size={15} /> Save As…
                         </button>
                         <button className='cf-close-btn' title='Close (Escape)' onClick={handleClose}>
                             <X size={18} />
