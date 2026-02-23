@@ -249,7 +249,7 @@ export const App: FC = () => {
             // Ensure section content strings have real newlines (LLM may use \\n inside JSON)
             const normalized = {
               ...parsed,
-              sections: parsed.sections.map((s: any) => ({
+              sections: parsed.sections.map((s: import('./types').CaseFileSection) => ({
                 ...s,
                 content: (s.content as string)
                   .replace(/\\n/g, '\n')

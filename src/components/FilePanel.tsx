@@ -20,20 +20,20 @@ interface FilePanelProps {
     showDropVideo: boolean;
     dropVideoSrc: string;
     setShowDropVideo: React.Dispatch<React.SetStateAction<boolean>>;
-    handleClearFiles: (initialHistory: any) => void;
-    initialChatHistory: any;
+    handleClearFiles: (initialHistory: import('../types').ChatMessage[]) => void;
+    initialChatHistory: import('../types').ChatMessage[];
     handleClearConversation: () => void;
-    chatHistory: any[];
+    chatHistory: import('../types').ChatMessage[];
     undo: () => void;
     redo: () => void;
-    historyStack: any[];
-    redoStack: any[];
+    historyStack: unknown[];
+    redoStack: unknown[];
     handleClear: () => void;
     computeDevice: string;
     mlWorkerCount: number;
     viewMode: ViewMode;
     setViewMode: React.Dispatch<React.SetStateAction<ViewMode>>;
-    fileTree: any;
+    fileTree: import('../types').FileTree;
     handleShowSum: (f: AppFile) => void;
     onOpenExplorer: () => void;
     // Case file

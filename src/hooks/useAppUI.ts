@@ -7,8 +7,8 @@ interface UseAppUIProps {
     activeJobCount: number;
     files: AppFile[];
     chatHistory: ChatMessage[];
-    jobTimers: Record<string, any>;
-    setJobTimers: (updater: (prev: Record<string, any>) => Record<string, any>) => void;
+    jobTimers: Record<string, { isActive: boolean; elapsed: number; startTime: number }>;
+    setJobTimers: (updater: (prev: Record<string, { isActive: boolean; elapsed: number; startTime: number }>) => Record<string, { isActive: boolean; elapsed: number; startTime: number }>) => void;
 }
 
 export const useAppUI = ({ isLoading, isEmbedding, activeJobCount, files, chatHistory, jobTimers, setJobTimers }: UseAppUIProps) => {

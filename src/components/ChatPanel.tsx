@@ -6,10 +6,10 @@ import { ChatInputForm } from './Chat/ChatInputForm';
 import { MessageItemHandlers } from './Chat/MessageItem';
 
 interface ChatPanelProps {
-    appSettings: any;
-    setAppSettings: any;
+    appSettings: import('../config').AppSettings;
+    setAppSettings: (updater: (prev: import('../config').AppSettings) => import('../config').AppSettings) => void;
     backgroundImages: string[];
-    handleSourceClick: (e: any) => void;
+    handleSourceClick: (e: React.MouseEvent<HTMLDivElement>) => void;
     chatHistory: ChatMessage[];
     isLoading: boolean;
     isEmbedding: boolean;
@@ -20,7 +20,7 @@ interface ChatPanelProps {
     commentText: string;
     hoveredSelectionId: string | null;
     rootDirectoryHandle: FileSystemDirectoryHandle | null;
-    caseFileState: { isAwaitingFeedback: boolean; metadata?: any };
+    caseFileState: { isAwaitingFeedback: boolean; metadata?: import('../store/useChatStore').CaseFileMetadata };
     handlers: MessageItemHandlers;
 
     // For chat input
@@ -30,7 +30,7 @@ interface ChatPanelProps {
     files: AppFile[];
     handleSubmit: (e: React.FormEvent) => void;
     stopGeneration: () => void;
-    setCaseFileState: (state: Partial<{ isAwaitingFeedback: boolean; metadata?: any; }>) => void;
+    setCaseFileState: (state: Partial<{ isAwaitingFeedback: boolean; metadata?: import('../store/useChatStore').CaseFileMetadata; }>) => void;
     submitQuery: (query: string, history: ChatMessage[], isInternal?: boolean) => void;
     tokenUsage: TokenUsage;
     currentContextTokens: number;
@@ -54,8 +54,8 @@ export const ChatPanel: FC<ChatPanelProps> = ({
         <div className='panel chat-panel'>
             <div className='chat-panel-header'>
                 <div className='background-changer'>
-                    <button className='background-btn' onClick={() => setAppSettings((p: any) => ({ ...p, backgroundIndex: p.backgroundIndex === 0 ? backgroundImages.length : p.backgroundIndex - 1 }))}><ChevronLeft size={16} /></button>
-                    <button className='background-btn' onClick={() => setAppSettings((p: any) => ({ ...p, backgroundIndex: (p.backgroundIndex + 1) % (backgroundImages.length + 1) }))}><ChevronRight size={16} /></button>
+                    <button className='background-btn' onClick={() => setAppSettings((p: import('../config').AppSettings) => ({ ...p, backgroundIndex: p.backgroundIndex === 0 ? backgroundImages.length : p.backgroundIndex - 1 }))}><ChevronLeft size={16} /></button>
+                    <button className='background-btn' onClick={() => setAppSettings((p: import('../config').AppSettings) => ({ ...p, backgroundIndex: (p.backgroundIndex + 1) % (backgroundImages.length + 1) }))}><ChevronRight size={16} /></button>
                 </div>
             </div>
             <div className='panel-content' onClick={handleSourceClick} style={{ backgroundImage: backgroundImages[appSettings.backgroundIndex - 1] ? `url('${backgroundImages[appSettings.backgroundIndex - 1]}')` : 'none', backgroundSize: 'cover' }}>

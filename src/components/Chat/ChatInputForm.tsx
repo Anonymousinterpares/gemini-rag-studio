@@ -3,8 +3,8 @@ import { Info, Send, Square, RefreshCw, Download, Edit2, RotateCcw, RotateCw } f
 import { AppFile, ChatMessage, TokenUsage } from '../../types';
 
 interface ChatInputFormProps {
-    appSettings: any;
-    setAppSettings: any;
+    appSettings: import('../../config').AppSettings;
+    setAppSettings: (updater: (prev: import('../../config').AppSettings) => import('../../config').AppSettings) => void;
     userInput: string;
     setUserInput: (input: string) => void;
     isLoading: boolean;
@@ -13,8 +13,8 @@ interface ChatInputFormProps {
     chatHistory: ChatMessage[];
     handleSubmit: (e: React.FormEvent) => void;
     stopGeneration: () => void;
-    caseFileState: { isAwaitingFeedback: boolean; metadata?: any };
-    setCaseFileState: (state: Partial<{ isAwaitingFeedback: boolean; metadata?: any; }>) => void;
+    caseFileState: { isAwaitingFeedback: boolean; metadata?: import('../../store/useChatStore').CaseFileMetadata };
+    setCaseFileState: (state: Partial<{ isAwaitingFeedback: boolean; metadata?: import('../../store/useChatStore').CaseFileMetadata; }>) => void;
     submitQuery: (query: string, history: ChatMessage[], isInternal?: boolean) => void;
     tokenUsage: TokenUsage;
     currentContextTokens: number;
@@ -99,7 +99,7 @@ export const ChatInputForm: FC<ChatInputFormProps> = ({
                 Current Context: {currentContextTokens}
             </div>
             <div className='setting-row'>
-                <button onClick={() => setAppSettings((p: any) => ({ ...p, isDeepAnalysisEnabled: !p.isDeepAnalysisEnabled }))} className={`toggle-button ${appSettings.isDeepAnalysisEnabled ? 'active' : ''}`}>Deep Analysis: {appSettings.isDeepAnalysisEnabled ? 'ON' : 'OFF'}</button>
+                <button onClick={() => setAppSettings((p: import('../../config').AppSettings) => ({ ...p, isDeepAnalysisEnabled: !p.isDeepAnalysisEnabled }))} className={`toggle-button ${appSettings.isDeepAnalysisEnabled ? 'active' : ''}`}>Deep Analysis: {appSettings.isDeepAnalysisEnabled ? 'ON' : 'OFF'}</button>
                 {caseFileState.isAwaitingFeedback ? (
                     <button
                         onClick={() => setCaseFileState({ isAwaitingFeedback: false, metadata: undefined })}

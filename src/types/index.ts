@@ -79,11 +79,50 @@ export interface CaseFileSection {
   comments: CaseFileComment[];
 }
 
+export type EntityType = 'person' | 'location' | 'event' | 'organization' | 'evidence' | 'group';
+export type ConnectionType = 'knows' | 'involved_in' | 'owns' | 'located_at' | 'conflicts_with' | 'related_to';
+
+export interface MapNode {
+  id: string;
+  type: 'customEntity' | 'customGroup';
+  position: { x: number; y: number };
+  data: {
+    label: string;
+    entityType: EntityType;
+    description?: string;
+    tags?: string[];
+    isCollapsed?: boolean;
+  };
+  parentId?: string;
+  extent?: 'parent';
+}
+
+export interface MapEdge {
+  id: string;
+  source: string;
+  target: string;
+  label?: string;
+  data?: {
+    connectionType: ConnectionType;
+    certainty: 'confirmed' | 'suspected' | 'disproven';
+  };
+  type?: 'customEdge';
+  animated?: boolean;
+}
+
+export interface InvestigationMap {
+  id: string;
+  caseFileId: string;
+  nodes: MapNode[];
+  edges: MapEdge[];
+}
+
 export interface CaseFile {
   version: 1;
   title: string;
   createdAt: number;
   sections: CaseFileSection[];
+  map?: InvestigationMap;
 }
 
 export interface ChatMessage {

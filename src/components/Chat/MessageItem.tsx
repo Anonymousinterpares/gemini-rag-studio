@@ -13,7 +13,7 @@ export interface MessageItemHandlers {
     handleConfirmAllEdits: (idx: number) => void;
     handleConfirmEdit: (idx: number, sectionId: string) => void;
     handleRejectEdit: (idx: number, sectionId: string) => void;
-    renderModelMessage: any;
+    renderModelMessage: (content: string, fullContent?: string | null, selectionComments?: import('../../types').SelectionComment[], hoveredSelectionId?: string | null) => { __html: string };
     setHoveredSelectionId: (id: string | null) => void;
     resendWithComments: (idx: number) => void;
     handleStartComment: (idx: number, sectionId: string) => void;
@@ -37,7 +37,7 @@ interface MessageItemProps {
     msg: ChatMessage;
     i: number;
     isLast: boolean;
-    appSettings: any;
+    appSettings: import('../../config').AppSettings;
     isLoading: boolean;
     isEmbedding: boolean;
     editingIndex: number | null;

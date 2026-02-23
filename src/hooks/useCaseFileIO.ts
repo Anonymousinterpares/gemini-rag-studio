@@ -17,7 +17,7 @@ export const useCaseFileIO = () => {
     const handleLoadCaseFile = async () => {
         try {
             if ('showOpenFilePicker' in window) {
-                const [handle] = await (window as any).showOpenFilePicker({
+                const [handle] = await (window as unknown as { showOpenFilePicker: (opts: unknown) => Promise<FileSystemFileHandle[]> }).showOpenFilePicker({
                     types: [
                         {
                             description: 'Case File (JSON or Markdown)',
@@ -47,8 +47,8 @@ export const useCaseFileIO = () => {
                 };
                 input.click();
             }
-        } catch (e: any) {
-            if (e?.name !== 'AbortError') console.error('[CaseFileIO] Load error:', e);
+        } catch (e: unknown) {
+            if ((e as Error)?.name !== 'AbortError') console.error('[CaseFileIO] Load error:', e);
         }
     };
 
@@ -62,7 +62,7 @@ export const useCaseFileIO = () => {
             if ('showSaveFilePicker' in window) {
                 let handle = _fileHandle;
                 if (!handle) {
-                    handle = await (window as any).showSaveFilePicker({
+                    handle = await (window as unknown as { showSaveFilePicker: (opts: unknown) => Promise<FileSystemFileHandle> }).showSaveFilePicker({
                         suggestedName: `${cf.title.replace(/\s+/g, '-')}.json`,
                         types: [{ description: 'Case File JSON', accept: { 'application/json': ['.json'] } }],
                     });
@@ -80,8 +80,8 @@ export const useCaseFileIO = () => {
                 a.click();
                 URL.revokeObjectURL(url);
             }
-        } catch (e: any) {
-            if (e?.name !== 'AbortError') console.error('[CaseFileIO] Save error:', e);
+        } catch (e: unknown) {
+            if ((e as Error)?.name !== 'AbortError') console.error('[CaseFileIO] Save error:', e);
         }
     };
 
@@ -92,7 +92,7 @@ export const useCaseFileIO = () => {
         const data = JSON.stringify(cf, null, 2);
         try {
             if ('showSaveFilePicker' in window) {
-                const handle = await (window as any).showSaveFilePicker({
+                const handle = await (window as unknown as { showSaveFilePicker: (opts: unknown) => Promise<FileSystemFileHandle> }).showSaveFilePicker({
                     suggestedName: `${cf.title.replace(/\s+/g, '-')}.json`,
                     types: [{ description: 'Case File JSON', accept: { 'application/json': ['.json'] } }],
                 });
@@ -110,8 +110,8 @@ export const useCaseFileIO = () => {
                 a.click();
                 URL.revokeObjectURL(url);
             }
-        } catch (e: any) {
-            if (e?.name !== 'AbortError') console.error('[CaseFileIO] Save As error:', e);
+        } catch (e: unknown) {
+            if ((e as Error)?.name !== 'AbortError') console.error('[CaseFileIO] Save As error:', e);
         }
     };
 

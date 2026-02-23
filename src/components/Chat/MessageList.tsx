@@ -4,7 +4,7 @@ import { MessageItem, MessageItemHandlers } from './MessageItem';
 
 interface MessageListProps {
     chatHistory: ChatMessage[];
-    appSettings: any;
+    appSettings: import('../../config').AppSettings;
     isLoading: boolean;
     isEmbedding: boolean;
     editingIndex: number | null;
@@ -14,7 +14,7 @@ interface MessageListProps {
     commentText: string;
     hoveredSelectionId: string | null;
     rootDirectoryHandle: FileSystemDirectoryHandle | null;
-    caseFileState: { isAwaitingFeedback: boolean; metadata?: any };
+    caseFileState: { isAwaitingFeedback: boolean; metadata?: import('../../store/useChatStore').CaseFileMetadata };
     handlers: MessageItemHandlers;
 }
 

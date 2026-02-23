@@ -995,7 +995,7 @@ CRITICAL RULES:
         try {
             const useSearch = appSettings.caseFileInternetSearch && appSettings.isChatModeEnabled;
             const tools = useSearch ? [SEARCH_TOOL] : [];
-            let currentMessages = [...messages];
+            const currentMessages = [...messages];
             let loopCount = 0;
             const MAX_LOOPS = useSearch ? appSettings.maxSearchLoops : 1;
             let finalText = '';
@@ -1004,7 +1004,7 @@ CRITICAL RULES:
                 if (controller.signal.aborted) return;
 
                 const response = await callGen(currentMessages, useSearch ? tools : []);
-                let toolCalls = response.toolCalls || [];
+                const toolCalls = response.toolCalls || [];
                 const responseText = response.text || '';
 
                 // If no tool calls → this is the final answer
@@ -1024,7 +1024,7 @@ CRITICAL RULES:
                             const args = JSON.parse(tc.function.arguments);
                             const results = await searchWeb(args.query || args.search || tc.function.arguments);
                             currentMessages.push({ role: 'tool', tool_call_id: tc.id, name: tc.function.name, content: JSON.stringify(results) });
-                        } catch (e) {
+                        } catch {
                             currentMessages.push({ role: 'tool', tool_call_id: tc.id, name: tc.function.name, content: JSON.stringify({ error: 'Search failed' }) });
                         }
                     }

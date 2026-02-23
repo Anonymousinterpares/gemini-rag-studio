@@ -1,8 +1,9 @@
-import { FC, useEffect, useCallback } from 'react';
-import { Save, Edit2, X } from 'lucide-react';
+import { FC, useEffect, useCallback, useState } from 'react';
+import { Save, Edit2, X, FileText, Network } from 'lucide-react';
 import { CaseFile, CaseFileComment } from '../../types';
 import { useCaseFileComments } from '../../hooks/useCaseFileComments';
 import { CaseFileSectionBlock } from './CaseFileSectionBlock';
+import { InvestigationMapCanvas } from './InvestigationMap/InvestigationMapCanvas';
 import { useCaseFileStore } from '../../store/useCaseFileStore';
 import { useCaseFileIO } from '../../hooks/useCaseFileIO';
 import './CaseFilePanel.css';
@@ -22,6 +23,8 @@ export const CaseFilePanel: FC<CaseFilePanelProps> = ({ onResolveComment, render
         caseFile, isOverlayOpen, setOverlayOpen, addComment, _fileHandle
     } = useCaseFileStore();
     const { handleSaveCaseFile, handleSaveAsCaseFile } = useCaseFileIO();
+
+    const [activeView, setActiveView] = useState<'document' | 'map'>('document');
 
     const handleClose = useCallback(() => setOverlayOpen(false), [setOverlayOpen]);
 
@@ -72,6 +75,22 @@ export const CaseFilePanel: FC<CaseFilePanelProps> = ({ onResolveComment, render
                 {/* ── Header ── */}
                 <div className='cf-header'>
                     <h2>{caseFile.title}</h2>
+                    <div className='cf-view-toggle' style={{ display: 'flex', gap: '8px', background: 'var(--input-bg-color)', padding: '4px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                        <button
+                            className={`button ${activeView === 'document' ? '' : 'secondary'}`}
+                            onClick={() => setActiveView('document')}
+                            style={{ padding: '6px 12px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px' }}
+                        >
+                            <FileText size={14} /> Document
+                        </button>
+                        <button
+                            className={`button ${activeView === 'map' ? '' : 'secondary'}`}
+                            onClick={() => setActiveView('map')}
+                            style={{ padding: '6px 12px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px' }}
+                        >
+                            <Network size={14} /> Map
+                        </button>
+                    </div>
                     <div className='cf-header-actions'>
                         <button
                             className='button secondary'
@@ -99,20 +118,26 @@ export const CaseFilePanel: FC<CaseFilePanelProps> = ({ onResolveComment, render
                 </div>
 
                 {/* ── Body ── */}
-                <div className='cf-body' onMouseUp={handleMouseUp}>
-                    {caseFile.sections.map((section) => (
-                        <CaseFileSectionBlock
-                            key={section.id}
-                            section={section}
-                            resolvingCommentId={resolvingCommentId}
-                            onEditComment={handleEditComment}
-                            onDeleteComment={handleDeleteComment}
-                            onResolveComment={handleResolveComment}
-                            onAddSectionComment={handleAddSectionComment}
-                            renderFn={renderModelMessage}
-                        />
-                    ))}
-                </div>
+                {activeView === 'document' ? (
+                    <div className='cf-body' onMouseUp={handleMouseUp}>
+                        {caseFile.sections.map((section) => (
+                            <CaseFileSectionBlock
+                                key={section.id}
+                                section={section}
+                                resolvingCommentId={resolvingCommentId}
+                                onEditComment={handleEditComment}
+                                onDeleteComment={handleDeleteComment}
+                                onResolveComment={handleResolveComment}
+                                onAddSectionComment={handleAddSectionComment}
+                                renderFn={renderModelMessage}
+                            />
+                        ))}
+                    </div>
+                ) : (
+                    <div className='cf-body' style={{ padding: 0, overflow: 'hidden' }}>
+                        <InvestigationMapCanvas />
+                    </div>
+                )}
 
                 {/* ── Selection popover (text-highlight shortcut) ── */}
                 {selectionPopover && (
