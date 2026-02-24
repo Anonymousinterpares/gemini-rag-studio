@@ -366,7 +366,7 @@ export const App: FC = () => {
         }}
       />
 
-      <DossierPanel isOpen={isDossierOpen} onClose={() => setIsDossierOpen(false)} submitQuery={(q) => submitQuery(q, chatHistory)} />
+      <DossierPanel isOpen={isDossierOpen} onClose={() => setIsDossierOpen(false)} />
 
       {selectionPopover && (
         <div className="selection-popover" style={{ top: selectionPopover.top, left: selectionPopover.left }}>

@@ -35,7 +35,8 @@ export const getDossierTools = (): Tool[] => {
                                 properties: {
                                     type: { type: SchemaType.STRING, description: '"document", "web", or "chat_exchange"' },
                                     label: { type: SchemaType.STRING, description: 'Display name for the source' },
-                                    fileId: { type: SchemaType.STRING, description: 'If a document, the ID of the file' }
+                                    fileId: { type: SchemaType.STRING, description: 'If a document, the ID of the file' },
+                                    url: { type: SchemaType.STRING, description: 'Absolute URL to the source if type is "web"' }
                                 },
                                 required: ['type', 'label']
                             }
@@ -54,6 +55,7 @@ export const getDossierTools = (): Tool[] => {
 export const handleDossierToolCall = async (
     name: string,
     args: any,
+    options?: { proposeOnly?: boolean }
 ): Promise<{ result: string }> => {
     if (name === 'update_dossier') {
         const { dossierId, sectionTitle, content, sources } = args;
@@ -72,8 +74,13 @@ export const handleDossierToolCall = async (
 
         if (existingSection) {
             // Update existing section
-            store.updateDossierSection(dossierId, existingSection.id, content, sources);
-            return { result: `Successfully updated section "${sectionTitle}" in dossier "${dossier.title}".` };
+            if (options?.proposeOnly) {
+                store.proposeDossierSectionUpdate(dossierId, existingSection.id, content);
+                return { result: `Proposed updates to section "${sectionTitle}" in dossier "${dossier.title}". User needs to accept.` };
+            } else {
+                store.updateDossierSection(dossierId, existingSection.id, content, sources);
+                return { result: `Successfully updated section "${sectionTitle}" in dossier "${dossier.title}".` };
+            }
         } else {
             // Add new section and update it
             store.addDossierSection(dossierId, sectionTitle);

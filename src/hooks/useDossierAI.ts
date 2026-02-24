@@ -10,7 +10,7 @@ export const useDossierAI = () => {
     const { selectedModel, selectedProvider, apiKeys } = useSettingsStore();
     const { addToast } = useToastStore();
 
-    const generateContextualDossier = useCallback(async (subject: string) => {
+    const generateContextualDossier = useCallback(async (subject: string, existingDossierId?: string) => {
         if (!subject.trim()) {
             addToast("Dossier creation request unsuccessful - no text selected", "error", 1500);
             return;
@@ -48,7 +48,12 @@ export const useDossierAI = () => {
 
         // Mint a new dossier
         const store = useDossierStore.getState();
-        const newDossierId = store.createDossier(dossierTitle, 'custom');
+        let newDossierId = existingDossierId;
+        if (!newDossierId) {
+            newDossierId = store.createDossier(dossierTitle, 'custom');
+        } else {
+            store.clearDossierSections(newDossierId);
+        }
         addToast(`Dossier for "${dossierTitle}" under creation`, "info", 1500);
 
         try {
@@ -85,5 +90,47 @@ export const useDossierAI = () => {
         }
     }, [selectedModel, selectedProvider, apiKeys, addToast]);
 
-    return { generateContextualDossier };
+    const chatWithDossier = useCallback(async (dossierId: string, instruction: string) => {
+        const apiKey = apiKeys[selectedProvider];
+        if (!apiKey) {
+            addToast("Dossier edit failed: No API key set.", "error", 2000);
+            return { didEdit: false, text: "No API key set." };
+        }
+
+        const store = useDossierStore.getState();
+        const dossier = store.dossiers.find(d => d.id === dossierId);
+        if (!dossier) return { didEdit: false, text: "Dossier not found." };
+
+        const dossierText = dossier.sections.map(s => `## ${s.title}\n${s.content}`).join('\n\n');
+
+        const systemPrompt = `${DOSSIER_COMPILER_PROMPT}\n\nCURRENT ACTIVE DOSSIER ID: ${dossier.id}\nDOSSIER SUBJECT: ${dossier.title}\n\nCurrent Dossier Content:\n${dossierText}\n\nINSTRUCTION: The user is requesting modifications or clarifications. Use the 'update_dossier' tool to make edits to the dossier sections. If you need clarification before making edits, respond with conversational text. DO NOT just say "I have updated" unless you actually executed the tool.`;
+
+        const messages = [
+            { role: 'system' as const, content: systemPrompt },
+            { role: 'user' as const, content: instruction }
+        ];
+
+        try {
+            const tools = getDossierTools();
+            const response = await generateContent(selectedModel, apiKey, messages, tools);
+
+            let didEdit = false;
+            if (response.toolCalls && response.toolCalls.length > 0) {
+                for (const tc of response.toolCalls) {
+                    if (tc.function.name === 'update_dossier') {
+                        const args = JSON.parse(tc.function.arguments);
+                        await handleDossierToolCall(tc.function.name, args, { proposeOnly: true });
+                        didEdit = true;
+                    }
+                }
+            }
+
+            return { text: response.text, didEdit };
+        } catch (err: any) {
+            console.error('Local Dossier Chat Error:', err);
+            return { didEdit: false, text: `Error: ${err.message}` };
+        }
+    }, [selectedModel, selectedProvider, apiKeys, addToast]);
+
+    return { generateContextualDossier, chatWithDossier };
 };

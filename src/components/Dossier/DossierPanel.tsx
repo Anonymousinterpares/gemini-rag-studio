@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useDossierStore } from '../../store/useDossierStore';
-import { Plus, Trash2, FileText, User, Users, MapPin, Calendar, Hash, ExternalLink, X, Search, SortDesc, SortAsc, CaseSensitive } from 'lucide-react';
+import { Plus, Trash2, RefreshCw, FileText, User, Users, MapPin, Calendar, Hash, ExternalLink, X, Search, SortDesc, SortAsc, CaseSensitive, Loader2 } from 'lucide-react';
 import { marked } from 'marked';
 import { DossierType, DossierSection } from '../../types';
 import { useDiffRenderer } from '../../hooks/useDiffRenderer';
@@ -83,7 +83,17 @@ const DossierSectionView: React.FC<{
                         </div>
                     </div>
                 ) : (
-                    <div dangerouslySetInnerHTML={{ __html: marked.parse(section.content || '*No content generated yet.*') as string }} />
+                    <div
+                        onClick={(e) => {
+                            const target = e.target as HTMLElement;
+                            const a = target.closest('a');
+                            if (a && a.href && !a.href.startsWith(window.location.origin)) {
+                                e.preventDefault();
+                                window.open(a.href, '_blank', 'noopener,noreferrer');
+                            }
+                        }}
+                        dangerouslySetInnerHTML={{ __html: marked.parse(section.content || '*No content generated yet.*') as string }}
+                    />
                 )}
 
                 {isDrafting && (
@@ -114,7 +124,7 @@ const DossierSectionView: React.FC<{
                     <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid var(--border-color)' }}>
                         <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-color-secondary)' }}>Sources:</span>
                         {section.sources.map((source, idx) => (
-                            <a key={idx} href={source.url || '#'} className="dossier-source-tag" title={source.snippet}>
+                            <a key={idx} href={source.url || '#'} target="_blank" rel="noopener noreferrer" className="dossier-source-tag" title={source.snippet}>
                                 {source.type === 'web' ? <ExternalLink size={12} /> : <FileText size={12} />}
                                 {source.label}
                             </a>
@@ -129,15 +139,37 @@ const DossierSectionView: React.FC<{
 interface DossierPanelProps {
     isOpen: boolean;
     onClose: () => void;
-    submitQuery: (query: string) => void;
 }
 
-export const DossierPanel: React.FC<DossierPanelProps> = ({ isOpen, onClose, submitQuery }) => {
+export const DossierPanel: React.FC<DossierPanelProps> = ({ isOpen, onClose }) => {
     const { dossiers, activeDossierId, createDossier, setActiveDossier, deleteDossier } = useDossierStore();
     const [isCreating, setIsCreating] = useState(false);
     const [newTitle, setNewTitle] = useState('');
     const [newType, setNewType] = useState<DossierType>('person');
     const [dossierChatInput, setDossierChatInput] = useState('');
+
+    const [localChatState, setLocalChatState] = useState<'idle' | 'processing' | 'clarification'>('idle');
+    const [localChatResponse, setLocalChatResponse] = useState('');
+    const { generateContextualDossier, chatWithDossier } = useDossierAI();
+
+    const handleLocalQuerySubmit = async (query: string) => {
+        if (!query.trim() || !activeDossierId) return;
+        setLocalChatState('processing');
+        try {
+            const result = await chatWithDossier(activeDossierId, query);
+            if (result.didEdit) {
+                setLocalChatState('idle');
+            } else if (result.text && result.text.trim()) {
+                setLocalChatResponse(result.text);
+                setLocalChatState('clarification');
+            } else {
+                setLocalChatState('idle');
+            }
+        } catch (e) {
+            setLocalChatState('idle');
+            console.error(e);
+        }
+    };
 
     // Filtering & Sorting State
     const [searchQuery, setSearchQuery] = useState('');
@@ -317,18 +349,30 @@ export const DossierPanel: React.FC<DossierPanelProps> = ({ isOpen, onClose, sub
                                         {dossier.dossierType}
                                     </div>
                                 </div>
-                                <button
-                                    className="delete-dossier-btn"
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        if (confirm(`Delete dossier "${dossier.title}"?`)) {
-                                            deleteDossier(dossier.id);
-                                        }
-                                    }}
-                                    title="Delete Dossier"
-                                >
-                                    <Trash2 size={16} />
-                                </button>
+                                <div style={{ display: 'flex', gap: '4px' }}>
+                                    <button
+                                        className="delete-dossier-btn"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            generateContextualDossier(dossier.title, dossier.id);
+                                        }}
+                                        title="Regenerate Dossier"
+                                    >
+                                        <RefreshCw size={14} />
+                                    </button>
+                                    <button
+                                        className="delete-dossier-btn"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            if (confirm(`Delete dossier "${dossier.title}"?`)) {
+                                                deleteDossier(dossier.id);
+                                            }
+                                        }}
+                                        title="Delete Dossier"
+                                    >
+                                        <Trash2 size={16} />
+                                    </button>
+                                </div>
                             </div>
                         ))}
                     </div>
@@ -394,7 +438,7 @@ export const DossierPanel: React.FC<DossierPanelProps> = ({ isOpen, onClose, sub
                                     section={section}
                                     dossierId={activeDossier.id}
                                     onSectionUpdate={(inst) => {
-                                        submitQuery(`[Dossier: ${activeDossier.title} | ${section.title}] ${inst}`);
+                                        handleLocalQuerySubmit(`[Section: ${section.title}] ${inst}`);
                                     }}
                                 />
                             ))}
@@ -409,12 +453,43 @@ export const DossierPanel: React.FC<DossierPanelProps> = ({ isOpen, onClose, sub
                             )}
                         </div>
 
-                        {/* Sticky Chat Input */}
+                        {/* Sticky Chat Input Wrapper */}
                         <div style={{
-                            position: 'absolute', bottom: 0, left: 0, right: 0, padding: '16px',
-                            background: 'var(--bg-color)', borderTop: '1px solid var(--border-color)', boxShadow: '0 -4px 12px rgba(0,0,0,0.1)'
+                            position: 'absolute', bottom: 0, left: 0, right: 0,
+                            background: 'var(--bg-color)', borderTop: '1px solid var(--border-color)', boxShadow: '0 -4px 12px rgba(0,0,0,0.1)',
+                            zIndex: 10
                         }}>
-                            <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-end' }}>
+                            {/* Sliding Clarification Overlay */}
+                            <div style={{
+                                position: 'absolute', bottom: '100%', left: 0, right: 0,
+                                background: 'var(--panel-bg-color)', borderTop: '1px solid var(--border-color)',
+                                maxHeight: localChatState !== 'idle' ? '300px' : '0px',
+                                opacity: localChatState !== 'idle' ? 1 : 0,
+                                overflowY: 'auto',
+                                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                                borderTopLeftRadius: '12px',
+                                borderTopRightRadius: '12px',
+                                visibility: localChatState !== 'idle' ? 'visible' : 'hidden'
+                            }}>
+                                <div style={{ padding: '16px', position: 'relative' }}>
+                                    {localChatState === 'processing' ? (
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-color-secondary)' }}>
+                                            <Loader2 size={16} style={{ animation: 'spin 1s linear infinite', color: '#8e44ad' }} />
+                                            AI is processing your request...
+                                        </div>
+                                    ) : (
+                                        <div style={{ color: 'var(--text-color)', fontSize: '0.95rem' }}>
+                                            <div style={{ fontWeight: 600, marginBottom: '8px', color: '#8e44ad', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                Assistant Clarification
+                                                <button className="icon-btn" onClick={() => setLocalChatState('idle')}><X size={14} /></button>
+                                            </div>
+                                            <div style={{ lineHeight: 1.5 }} dangerouslySetInnerHTML={{ __html: marked.parse(localChatResponse || '') as string }} />
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-end', padding: '16px' }}>
                                 <textarea
                                     value={dossierChatInput}
                                     onChange={e => {
@@ -426,7 +501,7 @@ export const DossierPanel: React.FC<DossierPanelProps> = ({ isOpen, onClose, sub
                                         if (e.key === 'Enter' && !e.shiftKey) {
                                             e.preventDefault();
                                             if (dossierChatInput.trim()) {
-                                                submitQuery(`[Dossier: ${activeDossier.title}] ${dossierChatInput}`);
+                                                handleLocalQuerySubmit(dossierChatInput);
                                                 setDossierChatInput('');
                                                 e.currentTarget.style.height = 'auto';
                                             }
@@ -436,9 +511,9 @@ export const DossierPanel: React.FC<DossierPanelProps> = ({ isOpen, onClose, sub
                                     placeholder={`Ask AI to update ${activeDossier.title} or compile new info...`}
                                     style={{ flex: 1, padding: '10px 16px', borderRadius: '12px', border: '1px solid var(--border-color)', background: 'var(--panel-bg-color)', color: 'var(--text-color)', resize: 'none', overflowY: 'auto', maxHeight: '120px', display: 'block' }}
                                 />
-                                <button className="button" style={{ borderRadius: '12px', padding: '10px 20px', height: 'fit-content' }} disabled={!dossierChatInput.trim()} onClick={() => {
+                                <button className="button" style={{ borderRadius: '12px', padding: '10px 20px', height: 'fit-content' }} disabled={!dossierChatInput.trim() || localChatState === 'processing'} onClick={() => {
                                     if (dossierChatInput.trim()) {
-                                        submitQuery(`[Dossier: ${activeDossier.title}] ${dossierChatInput}`);
+                                        handleLocalQuerySubmit(dossierChatInput);
                                         setDossierChatInput('');
                                     }
                                 }}>
@@ -469,7 +544,7 @@ export const DossierPanel: React.FC<DossierPanelProps> = ({ isOpen, onClose, sub
                                                     e.preventDefault();
                                                     if (commentDraft.trim()) {
                                                         const section = activeDossier.sections.find(s => s.id === selectionPopover.sectionId);
-                                                        submitQuery(`[Dossier: ${activeDossier.title} | ${section?.title}] Regarding the text "${selectionPopover.text}": ${commentDraft}`);
+                                                        handleLocalQuerySubmit(`Regarding the text "${selectionPopover.text}" in section "${section?.title}": ${commentDraft}`);
                                                         setSelectionPopover(null);
                                                         setCommentDraft('');
                                                     }
@@ -483,7 +558,7 @@ export const DossierPanel: React.FC<DossierPanelProps> = ({ isOpen, onClose, sub
                                                 onClick={() => {
                                                     if (commentDraft.trim()) {
                                                         const section = activeDossier.sections.find(s => s.id === selectionPopover.sectionId);
-                                                        submitQuery(`[Dossier: ${activeDossier.title} | ${section?.title}] Regarding the text "${selectionPopover.text}": ${commentDraft}`);
+                                                        handleLocalQuerySubmit(`Regarding the text "${selectionPopover.text}" in section "${section?.title}": ${commentDraft}`);
                                                         setSelectionPopover(null);
                                                         setCommentDraft('');
                                                     }
@@ -499,7 +574,7 @@ export const DossierPanel: React.FC<DossierPanelProps> = ({ isOpen, onClose, sub
                                             <Plus size={14} /> Review & Edit
                                         </button>
                                         <button className="selection-popover-btn button secondary" style={{ padding: '6px 12px', textAlign: 'left', display: 'flex', gap: '6px', alignItems: 'center', border: 'none' }} onClick={() => {
-                                            useDossierAI().generateContextualDossier(selectionPopover.text);
+                                            generateContextualDossier(selectionPopover.text);
                                             setSelectionPopover(null);
                                         }}>
                                             <FileText size={14} /> Compile New Dossier

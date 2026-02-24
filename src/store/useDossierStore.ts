@@ -17,11 +17,12 @@ interface DossierState {
     acceptDossierSectionUpdate: (dossierId: string, sectionId: string) => void;
     rejectDossierSectionUpdate: (dossierId: string, sectionId: string) => void;
     setDossierSectionProcessing: (dossierId: string, sectionId: string, isProcessing: boolean) => void;
+    clearDossierSections: (dossierId: string) => void;
 }
 
 export const useDossierStore = create<DossierState>()(
     persist(
-        (set, get) => ({
+        (set) => ({
             dossiers: [],
             activeDossierId: null,
 
@@ -99,6 +100,16 @@ export const useDossierStore = create<DossierState>()(
                 set((state) => ({
                     dossiers: state.dossiers.filter(d => d.id !== dossierId),
                     activeDossierId: state.activeDossierId === dossierId ? null : state.activeDossierId
+                }));
+            },
+
+            clearDossierSections: (dossierId: string) => {
+                set((state) => ({
+                    dossiers: state.dossiers.map(dossier =>
+                        dossier.id === dossierId
+                            ? { ...dossier, sections: [], updatedAt: Date.now() }
+                            : dossier
+                    )
                 }));
             },
 
