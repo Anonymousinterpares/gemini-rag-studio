@@ -176,6 +176,15 @@ export interface TokenUsage {
   completionTokens: number;
 }
 
+export interface ChatSession {
+  id: string;              // UUID
+  title: string;           // Auto-generated or user-editable
+  createdAt: number;       // Unix timestamp ms
+  updatedAt: number;       // Unix timestamp ms
+  chatHistory: ChatMessage[];
+  tokenUsage: TokenUsage;
+}
+
 import { DocumentChunk, DocumentStructureMap } from "../rag/pipeline";
 
 export interface CachedEmbedding {

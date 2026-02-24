@@ -53,7 +53,7 @@ export const App: FC = () => {
     userInput, setUserInput,
     chatHistory, setChatHistory,
     undo, historyStack,
-    tokenUsage, setTokenUsage,
+    tokenUsage,
     currentContextTokens,
     isLoading,
     submitQuery,
@@ -106,9 +106,27 @@ export const App: FC = () => {
   } = useChatEdits(chatHistory, handleUpdateMessage);
 
   const {
-    handleSaveChatHistory,
-    handleLoadChatHistory
-  } = useChatHistoryIO(chatHistory, tokenUsage, setChatHistory, setTokenUsage);
+    initSessions,
+    autoSaveCurrentSession
+  } = useChatHistoryIO();
+
+  const { activeSessionId } = useChatStore();
+
+  // Initialize sessions on mount
+  useEffect(() => {
+    initSessions();
+  }, [initSessions]);
+
+  // Debounced auto-save
+  useEffect(() => {
+    if (!activeSessionId) return;
+
+    const token = setTimeout(() => {
+      autoSaveCurrentSession(activeSessionId, chatHistory, tokenUsage);
+    }, 2000);
+
+    return () => clearTimeout(token);
+  }, [activeSessionId, chatHistory, tokenUsage, autoSaveCurrentSession]);
 
   const {
     glowType, setGlowType,
@@ -303,8 +321,7 @@ export const App: FC = () => {
         userInput={userInput} setUserInput={setUserInput} activeJobCount={activeJobCount}
         files={files} handleSubmit={handleSubmit} stopGeneration={stopGeneration}
         setCaseFileState={setCaseFileState} submitQuery={submitQuery} tokenUsage={tokenUsage}
-        currentContextTokens={currentContextTokens} handleSaveChatHistory={handleSaveChatHistory}
-        handleLoadChatHistory={handleLoadChatHistory}
+        currentContextTokens={currentContextTokens}
         undo={handleUndo} redo={handleRedo}
         canUndo={historyStack.length > 0 || cfUndoStack.length > 0}
         canRedo={chatRedoStack.length > 0 || cfRedoStack.length > 0}

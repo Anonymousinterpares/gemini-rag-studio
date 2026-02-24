@@ -1,5 +1,5 @@
 import { FC, useRef, useEffect } from 'react';
-import { Info, Send, Square, RefreshCw, Download, Edit2, RotateCcw, RotateCw } from 'lucide-react';
+import { Info, Send, Square, RefreshCw, RotateCcw, RotateCw } from 'lucide-react';
 import { AppFile, ChatMessage, TokenUsage } from '../../types';
 
 interface ChatInputFormProps {
@@ -18,8 +18,6 @@ interface ChatInputFormProps {
     submitQuery: (query: string, history: ChatMessage[], isInternal?: boolean) => void;
     tokenUsage: TokenUsage;
     currentContextTokens: number;
-    handleSaveChatHistory: () => Promise<void>;
-    handleLoadChatHistory: (e: React.ChangeEvent<HTMLInputElement>) => void;
     undo: () => void;
     redo: () => void;
     canUndo: boolean;
@@ -29,10 +27,9 @@ interface ChatInputFormProps {
 export const ChatInputForm: FC<ChatInputFormProps> = ({
     appSettings, setAppSettings, userInput, setUserInput, isLoading, activeJobCount, files, chatHistory,
     handleSubmit, stopGeneration, caseFileState, setCaseFileState, submitQuery, tokenUsage, currentContextTokens,
-    handleSaveChatHistory, handleLoadChatHistory, undo, redo, canUndo, canRedo
+    undo, redo, canUndo, canRedo
 }) => {
     const chatInputRef = useRef<HTMLTextAreaElement>(null);
-    const loadChatInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
         if (chatInputRef.current) {
@@ -122,21 +119,6 @@ export const ChatInputForm: FC<ChatInputFormProps> = ({
                         Build Case File
                     </button>
                 )}
-            </div>
-            <div className='setting-row' style={{ marginTop: '0.5rem' }}>
-                <button className="button secondary" onClick={handleSaveChatHistory} style={{ flex: 1 }}>
-                    <Download size={14} style={{ marginRight: '6px' }} /> Download Session
-                </button>
-                <button className="button secondary" onClick={() => loadChatInputRef.current?.click()} style={{ flex: 1, marginLeft: '10px' }}>
-                    <Edit2 size={14} style={{ marginRight: '6px' }} /> Load Session
-                </button>
-                <input
-                    type="file"
-                    ref={loadChatInputRef}
-                    style={{ display: 'none' }}
-                    accept=".json"
-                    onChange={handleLoadChatHistory}
-                />
             </div>
         </div>
     );

@@ -4,6 +4,7 @@ import { ChatMessage, AppFile, TokenUsage } from '../types';
 import { MessageList } from './Chat/MessageList';
 import { ChatInputForm } from './Chat/ChatInputForm';
 import { MessageItemHandlers } from './Chat/MessageItem';
+import { ChatHistoryDropdown } from './Chat/ChatHistoryDropdown';
 
 interface ChatPanelProps {
     appSettings: import('../config').AppSettings;
@@ -34,8 +35,6 @@ interface ChatPanelProps {
     submitQuery: (query: string, history: ChatMessage[], isInternal?: boolean) => void;
     tokenUsage: TokenUsage;
     currentContextTokens: number;
-    handleSaveChatHistory: () => Promise<void>;
-    handleLoadChatHistory: (e: React.ChangeEvent<HTMLInputElement>) => void;
     undo: () => void;
     redo: () => void;
     canUndo: boolean;
@@ -47,12 +46,13 @@ export const ChatPanel: FC<ChatPanelProps> = ({
     isEmbedding, editingIndex, editingContent, setEditingContent, activeCommentInput, commentText,
     hoveredSelectionId, rootDirectoryHandle, caseFileState, handlers, userInput, setUserInput,
     activeJobCount, files, handleSubmit, stopGeneration, setCaseFileState, submitQuery,
-    tokenUsage, currentContextTokens, handleSaveChatHistory, handleLoadChatHistory,
+    tokenUsage, currentContextTokens,
     undo, redo, canUndo, canRedo
 }) => {
     return (
         <div className='panel chat-panel'>
             <div className='chat-panel-header'>
+                <ChatHistoryDropdown />
                 <div className='background-changer'>
                     <button className='background-btn' onClick={() => setAppSettings((p: import('../config').AppSettings) => ({ ...p, backgroundIndex: p.backgroundIndex === 0 ? backgroundImages.length : p.backgroundIndex - 1 }))}><ChevronLeft size={16} /></button>
                     <button className='background-btn' onClick={() => setAppSettings((p: import('../config').AppSettings) => ({ ...p, backgroundIndex: (p.backgroundIndex + 1) % (backgroundImages.length + 1) }))}><ChevronRight size={16} /></button>
@@ -91,8 +91,6 @@ export const ChatPanel: FC<ChatPanelProps> = ({
                 submitQuery={submitQuery}
                 tokenUsage={tokenUsage}
                 currentContextTokens={currentContextTokens}
-                handleSaveChatHistory={handleSaveChatHistory}
-                handleLoadChatHistory={handleLoadChatHistory}
                 undo={undo} redo={redo} canUndo={canUndo} canRedo={canRedo}
             />
         </div>

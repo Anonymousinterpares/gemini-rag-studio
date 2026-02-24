@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { ChatMessage, TokenUsage } from '../types';
+import { ChatMessage, TokenUsage, ChatSession } from '../types';
 
 export interface CaseFileMetadata {
   initialAnalysis: string;
@@ -7,6 +7,8 @@ export interface CaseFileMetadata {
 }
 
 interface ChatState {
+  activeSessionId: string | null;
+  sessionList: Pick<ChatSession, 'id' | 'title' | 'createdAt' | 'updatedAt'>[];
   chatHistory: ChatMessage[];
   historyStack: ChatMessage[][];
   redoStack: ChatMessage[][];
@@ -24,6 +26,8 @@ interface ChatState {
   };
 
   // Actions
+  setActiveSessionId: (id: string | null) => void;
+  setSessionList: (sessions: Pick<ChatSession, 'id' | 'title' | 'createdAt' | 'updatedAt'>[]) => void;
   setChatHistory: (updater: ChatMessage[] | ((prev: ChatMessage[]) => ChatMessage[])) => void;
   undo: () => void;
   redo: () => void;
@@ -41,6 +45,8 @@ interface ChatState {
 }
 
 export const useChatStore = create<ChatState>((set) => ({
+  activeSessionId: null,
+  sessionList: [],
   chatHistory: [
     {
       role: 'model',
@@ -58,6 +64,9 @@ export const useChatStore = create<ChatState>((set) => ({
   caseFileState: {
     isAwaitingFeedback: false,
   },
+
+  setActiveSessionId: (id) => set({ activeSessionId: id }),
+  setSessionList: (sessions) => set({ sessionList: sessions }),
 
   setChatHistory: (updater) => set((state) => {
     const nextHistory = typeof updater === 'function' ? updater(state.chatHistory) : updater;

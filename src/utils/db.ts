@@ -1,9 +1,20 @@
 // src/utils/db.ts
-// Utility functions for IndexedDB operations, specifically for storing FileSystemDirectoryHandle.
+// Utility functions for IndexedDB operations
 
-const DB_NAME = 'fileExplorerDB';
-const STORE_NAME = 'directoryHandles';
-const KEY = 'rootDirectoryHandle';
+import { ChatSession } from '../types';
+
+declare global {
+  interface Window {
+    api?: any;
+  }
+}
+
+const DB_NAME = 'fileExplorerDB'; // Keeping original name for backwards compatibility
+const DB_VERSION = 2; // Upgraded to v2 for chat sessions
+const DIRECTORY_STORE_NAME = 'directoryHandles';
+const DIRECTORY_KEY = 'rootDirectoryHandle';
+
+const CHAT_SESSIONS_STORE_NAME = 'chatSessions';
 
 /**
  * Opens the IndexedDB database.
@@ -11,12 +22,20 @@ const KEY = 'rootDirectoryHandle';
  */
 function openDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, 1);
+    const request = indexedDB.open(DB_NAME, DB_VERSION);
 
     request.onupgradeneeded = (event) => {
       const db = (event.target as IDBOpenDBRequest).result;
-      if (!db.objectStoreNames.contains(STORE_NAME)) {
-        db.createObjectStore(STORE_NAME);
+
+      // v1: Directory Handles
+      if (!db.objectStoreNames.contains(DIRECTORY_STORE_NAME)) {
+        db.createObjectStore(DIRECTORY_STORE_NAME);
+      }
+
+      // v2: Chat Sessions
+      if (!db.objectStoreNames.contains(CHAT_SESSIONS_STORE_NAME)) {
+        const store = db.createObjectStore(CHAT_SESSIONS_STORE_NAME, { keyPath: 'id' });
+        store.createIndex('updatedAt', 'updatedAt', { unique: false });
       }
     };
 
@@ -39,9 +58,9 @@ function openDB(): Promise<IDBDatabase> {
 export async function storeDirectoryHandle(handle: FileSystemDirectoryHandle): Promise<void> {
   const db = await openDB();
   return new Promise((resolve, reject) => {
-    const transaction = db.transaction(STORE_NAME, 'readwrite');
-    const store = transaction.objectStore(STORE_NAME);
-    const request = store.put(handle, KEY);
+    const transaction = db.transaction(DIRECTORY_STORE_NAME, 'readwrite');
+    const store = transaction.objectStore(DIRECTORY_STORE_NAME);
+    const request = store.put(handle, DIRECTORY_KEY);
 
     request.onsuccess = () => {
       console.log('Directory handle stored in IndexedDB.');
@@ -62,9 +81,9 @@ export async function storeDirectoryHandle(handle: FileSystemDirectoryHandle): P
 export async function getStoredDirectoryHandle(): Promise<FileSystemDirectoryHandle | null> {
   const db = await openDB();
   return new Promise((resolve, reject) => {
-    const transaction = db.transaction(STORE_NAME, 'readonly');
-    const store = transaction.objectStore(STORE_NAME);
-    const request = store.get(KEY);
+    const transaction = db.transaction(DIRECTORY_STORE_NAME, 'readonly');
+    const store = transaction.objectStore(DIRECTORY_STORE_NAME);
+    const request = store.get(DIRECTORY_KEY);
 
     request.onsuccess = (event) => {
       const handle = (event.target as IDBRequest).result as FileSystemDirectoryHandle | undefined;
@@ -91,9 +110,9 @@ export async function getStoredDirectoryHandle(): Promise<FileSystemDirectoryHan
 export async function clearStoredDirectoryHandle(): Promise<void> {
   const db = await openDB();
   return new Promise((resolve, reject) => {
-    const transaction = db.transaction(STORE_NAME, 'readwrite');
-    const store = transaction.objectStore(STORE_NAME);
-    const request = store.delete(KEY);
+    const transaction = db.transaction(DIRECTORY_STORE_NAME, 'readwrite');
+    const store = transaction.objectStore(DIRECTORY_STORE_NAME);
+    const request = store.delete(DIRECTORY_KEY);
 
     request.onsuccess = () => {
       console.log('Directory handle cleared from IndexedDB.');
@@ -105,4 +124,38 @@ export async function clearStoredDirectoryHandle(): Promise<void> {
       reject((event.target as IDBRequest).error);
     };
   });
+}
+
+// ─── Chat Sessions IO ──────────────────────────────────────────────────────────
+
+export async function saveChatSession(session: ChatSession): Promise<void> {
+  if (window.api) {
+    const result = await window.api.saveChatSession(session);
+    if (result.error) throw new Error(result.error);
+  } else {
+    console.warn("Electron API not available, chat saving disabled in browser fallback.");
+  }
+}
+
+export async function loadAllChatSessions(): Promise<ChatSession[]> {
+  if (window.api) {
+    const sessions = await window.api.loadAllChatSessions();
+    // Sort descending by updatedAt
+    return sessions.sort((a: ChatSession, b: ChatSession) => b.updatedAt - a.updatedAt);
+  }
+  return [];
+}
+
+export async function loadChatSession(id: string): Promise<ChatSession | null> {
+  if (window.api) {
+    return await window.api.loadChatSession(id);
+  }
+  return null;
+}
+
+export async function deleteChatSession(id: string): Promise<void> {
+  if (window.api) {
+    const result = await window.api.deleteChatSession(id);
+    if (result.error) throw new Error(result.error);
+  }
 }

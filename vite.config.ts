@@ -1,11 +1,23 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { load } from 'cheerio'
+import electron from 'vite-plugin-electron'
 
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [
     react(),
+    electron([
+      {
+        entry: 'electron/main.ts',
+      },
+      {
+        entry: 'electron/preload.ts',
+        onstart(options) {
+          options.reload()
+        },
+      }
+    ]),
     {
       name: 'search-middleware',
       configureServer(server) {
@@ -18,7 +30,7 @@ export default defineConfig({
           try {
             const url = new URL(req.url || '', `http://${req.headers.host}`);
             const query = url.searchParams.get('q');
-            
+
             if (!query) {
               res.statusCode = 400;
               res.setHeader('Content-Type', 'application/json');
@@ -27,7 +39,7 @@ export default defineConfig({
             }
 
             console.log(`[Search Proxy] Searching for: ${query}`);
-            
+
             // Randomized User Agents to avoid simple blocking
             const userAgents = [
               'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -54,14 +66,14 @@ export default defineConfig({
               if (response.ok) {
                 const html = await response.text();
                 const $ = load(html);
-                
+
                 $('a.result-link').each((i, el) => {
                   if (i >= 8) return false;
                   const $el = $(el);
                   const title = $el.text().trim();
                   const link = $el.attr('href');
                   const snippet = $el.closest('tr').next().find('.result-snippet').text().trim();
-                  
+
                   if (title && link) {
                     const fullLink = link.startsWith('http') ? link : (link.startsWith('//') ? `https:${link}` : `https://duckduckgo.com${link}`);
                     results.push({ title, link: fullLink, snippet: snippet || 'No description available.' });
@@ -98,15 +110,15 @@ export default defineConfig({
             }
 
             console.log(`[Search Proxy] Found ${results.length} results`);
-            
+
             res.setHeader('Content-Type', 'application/json');
             res.end(JSON.stringify({ results }));
           } catch (error) {
             console.error('[Search Proxy] Error:', error);
             res.statusCode = 500;
             res.setHeader('Content-Type', 'application/json');
-            res.end(JSON.stringify({ 
-              error: 'Search failed', 
+            res.end(JSON.stringify({
+              error: 'Search failed',
               details: error instanceof Error ? error.message : String(error)
             }));
           }
