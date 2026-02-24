@@ -16,6 +16,16 @@ export default defineConfig({
         onstart(options) {
           options.reload()
         },
+        vite: {
+          build: {
+            rollupOptions: {
+              output: {
+                format: 'cjs',
+                entryFileNames: '[name].js',
+              }
+            }
+          }
+        }
       }
     ]),
     {
@@ -130,6 +140,13 @@ export default defineConfig({
     headers: {
       'Cross-Origin-Opener-Policy': 'same-origin',
       'Cross-Origin-Embedder-Policy': 'require-corp',
+    },
+  },
+  resolve: {
+    alias: {
+      // Prevent `Dynamic require of "fs"` crash in Electron renderer / Web Workers
+      // by stubbing out Node's `fs` module — Xenova loads models via HTTP, not fs.
+      'fs': 'src/utils/empty-module.ts',
     },
   },
 })

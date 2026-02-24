@@ -1,5 +1,6 @@
 /// <reference types="@webgpu/types" />
 import { pipeline, FeatureExtractionPipeline, AutoTokenizer, AutoModelForSequenceClassification } from '@xenova/transformers';
+
 import {
   CoordinatorToWorkerMessage,
   TaskType,
@@ -45,7 +46,7 @@ class EmbeddingPipeline {
             throw new Error("No suitable GPU adapter found.");
           }
         } else {
-            throw new Error("WebGPU not supported.");
+          throw new Error("WebGPU not supported.");
         }
       } catch (e) {
         this.platform = 'cpu';
@@ -72,56 +73,56 @@ class EmbeddingPipeline {
 
 // --- Reranker Pipeline ---
 class CustomRerankerPipeline {
-    private tokenizer: AutoTokenizer;
-    private model: AutoModelForSequenceClassification;
-    static platform: 'gpu' | 'cpu' | null = null;
+  private tokenizer: AutoTokenizer;
+  private model: AutoModelForSequenceClassification;
+  static platform: 'gpu' | 'cpu' | null = null;
 
-    private constructor(tokenizer: AutoTokenizer, model: AutoModelForSequenceClassification) {
-        this.tokenizer = tokenizer;
-        this.model = model;
+  private constructor(tokenizer: AutoTokenizer, model: AutoModelForSequenceClassification) {
+    this.tokenizer = tokenizer;
+    this.model = model;
+  }
+
+  static instance: CustomRerankerPipeline | null = null;
+
+  static async getInstance(): Promise<CustomRerankerPipeline> {
+    if (this.instance === null) {
+      const modelName = 'Xenova/bge-reranker-base';
+      const options: { local_files_only: boolean, device?: GPUDevice, quantized?: boolean } = { local_files_only: true };
+
+      try {
+        if (navigator.gpu) {
+          const adapter = await navigator.gpu.requestAdapter();
+          if (adapter) {
+            const device = await adapter.requestDevice();
+            options.device = device;
+            options.quantized = true;
+            this.platform = 'gpu';
+            if (isLoggingEnabled) console.log(`[ML Worker] Initializing reranker pipeline on GPU.`);
+          } else { throw new Error("No GPU adapter"); }
+        } else { throw new Error("WebGPU not supported"); }
+      } catch (e) {
+        this.platform = 'cpu';
+        console.error(`[ML Worker] Critical GPU initialization failed. Falling back to CPU for reranker.`, e);
+      }
+
+      const tokenizer = await AutoTokenizer.from_pretrained(modelName, { local_files_only: true });
+      const model = await AutoModelForSequenceClassification.from_pretrained(modelName, options);
+      this.instance = new CustomRerankerPipeline(tokenizer, model);
+      if (isLoggingEnabled) console.log(`[ML Worker] Reranker pipeline successfully initialized. Final platform: ${this.platform}`);
     }
+    return this.instance;
+  }
 
-    static instance: CustomRerankerPipeline | null = null;
+  async run(texts: string[]): Promise<number[]> {
+    // @ts-expect-error - Transformers.js typing issue
+    const inputs = this.tokenizer(texts, { padding: true, truncation: true, return_tensors: 'pt' });
+    // @ts-expect-error - Transformers.js typing issue
+    const { logits } = await this.model(inputs);
 
-    static async getInstance(): Promise<CustomRerankerPipeline> {
-        if (this.instance === null) {
-            const modelName = 'Xenova/bge-reranker-base';
-            const options: { local_files_only: boolean, device?: GPUDevice, quantized?: boolean } = { local_files_only: true };
-            
-            try {
-                if (navigator.gpu) {
-                    const adapter = await navigator.gpu.requestAdapter();
-                    if (adapter) {
-                        const device = await adapter.requestDevice();
-                        options.device = device;
-                        options.quantized = true;
-                        this.platform = 'gpu';
-                        if (isLoggingEnabled) console.log(`[ML Worker] Initializing reranker pipeline on GPU.`);
-                    } else { throw new Error("No GPU adapter"); }
-                } else { throw new Error("WebGPU not supported"); }
-            } catch (e) {
-                this.platform = 'cpu';
-                console.error(`[ML Worker] Critical GPU initialization failed. Falling back to CPU for reranker.`, e);
-            }
-
-            const tokenizer = await AutoTokenizer.from_pretrained(modelName, { local_files_only: true });
-            const model = await AutoModelForSequenceClassification.from_pretrained(modelName, options);
-            this.instance = new CustomRerankerPipeline(tokenizer, model);
-            if (isLoggingEnabled) console.log(`[ML Worker] Reranker pipeline successfully initialized. Final platform: ${this.platform}`);
-        }
-        return this.instance;
-    }
-
-    async run(texts: string[]): Promise<number[]> {
-        // @ts-expect-error - Transformers.js typing issue
-        const inputs = this.tokenizer(texts, { padding: true, truncation: true, return_tensors: 'pt' });
-        // @ts-expect-error - Transformers.js typing issue
-        const { logits } = await this.model(inputs);
-        
-        // Apply sigmoid to convert logits to probabilities
-        const scores = Array.from(logits.data).map(logit => 1 / (1 + Math.exp(-(logit as number))));
-        return scores;
-    }
+    // Apply sigmoid to convert logits to probabilities
+    const scores = Array.from(logits.data).map(logit => 1 / (1 + Math.exp(-(logit as number))));
+    return scores;
+  }
 }
 
 if (isLoggingEnabled) console.log('[ML Worker] Script loaded.');
@@ -172,7 +173,7 @@ async function executeTask(task: ComputeTask) {
         // if (isLoggingEnabled) console.log(`[ML Worker ${workerId}] Starting embedding for: ${taskId}`);
         const embedder = await EmbeddingPipeline.getInstance();
         const embeddingResult = await embedder(payload.chunkText, { pooling: 'mean', normalize: true });
-        
+
         result = {
           docId: payload.docId,
           chunkIndex: payload.chunkIndex,
@@ -200,7 +201,7 @@ async function executeTask(task: ComputeTask) {
         const reranker = await CustomRerankerPipeline.getInstance();
         const rerankInputs = documents.map(d => query + "</s>" + d.chunk);
         const rerankedScores = await reranker.run(rerankInputs);
-        
+
         const rankedDocuments = documents.map((doc, i) => ({
           ...doc,
           similarity: rerankedScores[i],
@@ -213,7 +214,7 @@ async function executeTask(task: ComputeTask) {
       case TaskType.HierarchicalChunk: {
         if (isLoggingEnabled) console.log(`[ML Worker ${workerId}] Starting hierarchical chunking for: ${taskId}`);
         const payload = taskPayload as HierarchicalChunkPayload;
-        
+
         const { parentChunks, childChunks } = await hierarchicalChunker(
           payload.docContent,
           payload.chunkSize,
@@ -221,12 +222,12 @@ async function executeTask(task: ComputeTask) {
         );
 
         result = {
-            docId: payload.docId,
-            parentChunks,
-            childChunks,
-            name: payload.name,
-            lastModified: payload.lastModified,
-            size: payload.size,
+          docId: payload.docId,
+          parentChunks,
+          childChunks,
+          name: payload.name,
+          lastModified: payload.lastModified,
+          size: payload.size,
         } as HierarchicalChunkResult;
         if (isLoggingEnabled) console.log(`[ML Worker ${workerId}] Finished hierarchical chunking for: ${taskId}`);
         break;
@@ -236,7 +237,7 @@ async function executeTask(task: ComputeTask) {
         // if (isLoggingEnabled) console.log(`[ML Worker ${workerId}] Starting child chunk embedding for: ${taskId}`);
         const embedder = await EmbeddingPipeline.getInstance();
         const embeddingResult = await embedder(payload.childChunkText, { pooling: 'mean', normalize: true });
-        
+
         result = {
           docId: payload.docId,
           childChunkIndex: payload.childChunkIndex,
@@ -253,26 +254,26 @@ async function executeTask(task: ComputeTask) {
       case TaskType.StreamChunk: {
         const payload = taskPayload as StreamChunkPayload;
         if (payload.isFirst || !streamChunkers.has(payload.docId)) {
-            // Defaulting to 1000/200 for now. The coordinator can pass these if needed.
-            streamChunkers.set(payload.docId, new StreamingHierarchicalChunker(1000, 200));
+          // Defaulting to 1000/200 for now. The coordinator can pass these if needed.
+          streamChunkers.set(payload.docId, new StreamingHierarchicalChunker(1000, 200));
         }
         const chunker = streamChunkers.get(payload.docId)!;
         const { parentChunks, childChunks } = await chunker.processChunk(payload.chunkText, false);
-        
+
         const embeddings: number[][] = [];
         if (childChunks.length > 0) {
-            const embedder = await EmbeddingPipeline.getInstance();
-            for (const child of childChunks) {
-                const embeddingResult = await embedder(child.text, { pooling: 'mean', normalize: true });
-                embeddings.push(Array.from(embeddingResult.data));
-            }
+          const embedder = await EmbeddingPipeline.getInstance();
+          for (const child of childChunks) {
+            const embeddingResult = await embedder(child.text, { pooling: 'mean', normalize: true });
+            embeddings.push(Array.from(embeddingResult.data));
+          }
         }
 
         result = {
-            docId: payload.docId,
-            parentChunks,
-            childChunks,
-            embeddings,
+          docId: payload.docId,
+          parentChunks,
+          childChunks,
+          embeddings,
         } as StreamChunkResult;
         break;
       }
@@ -280,19 +281,19 @@ async function executeTask(task: ComputeTask) {
         const payload = taskPayload as CompleteStreamPayload;
         const chunker = streamChunkers.get(payload.docId);
         if (!chunker) {
-            throw new Error(`[ML Worker] Received CompleteStream for ${payload.docId} but no chunker found.`);
+          throw new Error(`[ML Worker] Received CompleteStream for ${payload.docId} but no chunker found.`);
         }
         const { parentChunks, childChunks } = await chunker.processChunk("", true);
         streamChunkers.delete(payload.docId);
 
         // We return these as a HierarchicalChunkResult so the coordinator can reuse existing logic
         result = {
-            docId: payload.docId,
-            parentChunks,
-            childChunks,
-            name: payload.name,
-            lastModified: payload.lastModified,
-            size: payload.size,
+          docId: payload.docId,
+          parentChunks,
+          childChunks,
+          name: payload.name,
+          lastModified: payload.lastModified,
+          size: payload.size,
         } as HierarchicalChunkResult;
         break;
       }
