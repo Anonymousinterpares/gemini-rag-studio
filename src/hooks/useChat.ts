@@ -7,8 +7,11 @@ import { generateContent, Tool, SchemaType, countTokens } from '../api/llm-provi
 import { ComputeCoordinator } from '../compute/coordinator';
 import { VectorStore } from '../rag/pipeline';
 import { useChatStore, useFileStore, useSettingsStore } from '../store';
+import { useCaseFileStore } from '../store/useCaseFileStore';
 import { searchWeb } from '../utils/search';
 import { sectionizeMessage, createFuzzyRegex } from '../utils/chatUtils';
+import { getDossierTools, handleDossierToolCall, DOSSIER_COMPILER_PROMPT } from '../agents/dossier';
+import { useDossierStore } from '../store/useDossierStore';
 
 
 const SEARCH_TOOL: Tool = {
@@ -65,6 +68,8 @@ CRITICAL INSTRUCTIONS:
 7. If you use information from the provided document contexts, you MUST cite your sources using the exact format [Source: uniqueId]. **DO NOT use any other brackets like 【】 or unbracketed "Source: ID".**
 8. If you use information from web search results, you MUST provide a direct link to the source using standard Markdown format: [Title](URL). Use ONLY the URLs provided in the search results; NEVER hallucinate or guess a URL.
 9. NOTE: Today is indeed in the year 2026. Do not be confused if your training data only goes up to a previous year; you are currently operating in 2026 and should accept this as the current date.
+
+{dossier_section}
 
 FORMATTING RULES:
 - You MUST output ONLY pure Markdown.
@@ -182,6 +187,30 @@ export const useChat = ({
             finalPrompt = finalPrompt.replace('{date_section}', dateSection);
         } else {
             finalPrompt = finalPrompt.replace('{date_section}', '');
+        }
+
+        // Inject active dossier info
+        const activeDossierId = useDossierStore.getState().activeDossierId;
+        const activeDossier = useDossierStore.getState().dossiers.find(d => d.id === activeDossierId);
+
+        if (activeDossier && appSettings.isChatModeEnabled) {
+            const caseFileStore = useCaseFileStore.getState();
+            let cfContext = '';
+            if (caseFileStore.caseFile) {
+                cfContext = `\n\n--- CASE FILE CONTEXT ---\n${caseFileStore.caseFile.sections.map((s: any) => `## ${s.title}\n${s.content}`).join('\n\n')}\n--- END CASE FILE ---`;
+            }
+
+            let mapContext = '';
+            if (caseFileStore.caseFile?.map) {
+                const nodesCount = caseFileStore.caseFile.map.nodes?.length || 0;
+                const edgesCount = caseFileStore.caseFile.map.edges?.length || 0;
+                mapContext = `\n\n--- INVESTIGATION MAP CONTEXT ---\nThe global map currently tracks ${nodesCount} entity nodes and ${edgesCount} relationship edges.\n--- END MAP ---`;
+            }
+
+            const dossierContext = `\n${DOSSIER_COMPILER_PROMPT}\n\nCURRENT ACTIVE DOSSIER ID: ${activeDossier.id}\nDOSSIER SUBJECT: ${activeDossier.title} (${activeDossier.dossierType})${cfContext}${mapContext}`;
+            finalPrompt = finalPrompt.replace('{dossier_section}', dossierContext);
+        } else {
+            finalPrompt = finalPrompt.replace('{dossier_section}', '');
         }
 
         return finalPrompt;
@@ -323,7 +352,7 @@ export const useChat = ({
             // If Chat Mode is ON, enable search capabilities (UNLESS we are in Case File mode)
             if (appSettings.isChatModeEnabled && !isCaseFileMode) {
                 const currentHistory = [...newHistory];
-                const tools = [SEARCH_TOOL];
+                const tools = [SEARCH_TOOL, ...getDossierTools()];
                 let loopCount = 0;
                 const MAX_LOOPS = appSettings.maxSearchLoops;
 
@@ -455,6 +484,27 @@ export const useChat = ({
                                     tool_call_id: toolCall.id,
                                     name: toolCall.function.name,
                                     content: JSON.stringify({ error: _e instanceof Error ? _e.message : "Search failed" })
+                                });
+                            }
+                        } else if (toolCall.function.name === 'update_dossier') {
+                            try {
+                                const args = JSON.parse(toolCall.function.arguments);
+                                console.log(`[Chat] Executing update_dossier for section: "${args.sectionTitle}"`);
+                                const result = await handleDossierToolCall(toolCall.function.name, args);
+                                const toolOutput = {
+                                    role: 'tool' as const,
+                                    tool_call_id: toolCall.id,
+                                    name: toolCall.function.name,
+                                    content: JSON.stringify(result)
+                                };
+                                currentHistory.push(toolOutput);
+                            } catch (_e) {
+                                console.error('[Chat] Dossier tool error:', _e);
+                                currentHistory.push({
+                                    role: 'tool' as const,
+                                    tool_call_id: toolCall.id,
+                                    name: toolCall.function.name,
+                                    content: JSON.stringify({ error: _e instanceof Error ? _e.message : "Dossier update failed" })
                                 });
                             }
                         }

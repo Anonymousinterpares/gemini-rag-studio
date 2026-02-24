@@ -40,6 +40,9 @@ interface FilePanelProps {
     onLoadCaseFile: () => void;
     onOpenCaseFile: () => void;
     hasCaseFile: boolean;
+    // Dossier
+    isDossierOpen: boolean;
+    setIsDossierOpen: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
 export const FilePanel: FC<FilePanelProps> = ({
@@ -48,7 +51,8 @@ export const FilePanel: FC<FilePanelProps> = ({
     dropVideoSrc, setShowDropVideo, handleClearFiles, initialChatHistory,
     handleClearConversation, chatHistory, undo, redo, historyStack, redoStack, handleClear,
     computeDevice, mlWorkerCount, viewMode, setViewMode, fileTree, handleShowSum,
-    onOpenExplorer, onLoadCaseFile, onOpenCaseFile, hasCaseFile
+    onOpenExplorer, onLoadCaseFile, onOpenCaseFile, hasCaseFile,
+    isDossierOpen, setIsDossierOpen
 }) => {
     const dropVideoRef = useRef<HTMLVideoElement>(null);
 
@@ -58,8 +62,8 @@ export const FilePanel: FC<FilePanelProps> = ({
                 <button className='button secondary' onClick={onOpenExplorer}>Open Explorer</button>
                 <button className='button secondary' onClick={() => setShowSettings(p => !p)}>Settings</button>
             </div>
-            {/* Case File buttons */}
-            <div className='flex gap-2' style={{ padding: '4px 8px' }}>
+            {/* Case File & Dossier buttons */}
+            <div className='flex gap-2' style={{ padding: '4px 8px', flexWrap: 'wrap' }}>
                 <button
                     className='button secondary'
                     title='Load a case file (.json or .md) from your computer'
@@ -73,9 +77,17 @@ export const FilePanel: FC<FilePanelProps> = ({
                     title='Open the loaded case file in the overlay panel'
                     onClick={onOpenCaseFile}
                     disabled={!hasCaseFile}
-                    style={{ flex: 1 }}
+                    style={{ flex: 1, minWidth: '45%' }}
                 >
                     <FolderOpen size={14} /> Open Case File
+                </button>
+                <button
+                    className={`button secondary ${isDossierOpen ? 'active' : ''}`}
+                    title='Open the Knowledge Base to manage Dossiers and Topics'
+                    onClick={() => setIsDossierOpen(p => !p)}
+                    style={{ flex: '1 1 100%', backgroundColor: isDossierOpen ? 'rgba(52, 152, 219, 0.2)' : undefined, borderColor: isDossierOpen ? '#3498db' : undefined }}
+                >
+                    <FolderTree size={14} /> {isDossierOpen ? 'Close Knowledge Base' : 'Open Knowledge Base'}
                 </button>
             </div>
             <Settings className={showSettings ? '' : 'hidden'} />

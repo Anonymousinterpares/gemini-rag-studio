@@ -200,3 +200,35 @@ export interface CachedEmbedding {
   entities?: Record<string, { count: number; positions: number[] }>;
   structure?: DocumentStructureMap;
 }
+
+// ─── Dossier / Topic Types ─────────────────────────────────────────────────────────
+
+export type DossierType = 'person' | 'organization' | 'event' | 'location' | 'topic' | 'custom';
+
+export interface DossierSource {
+  type: 'web' | 'document' | 'chat_exchange';
+  label: string;          // Display name
+  url?: string;           // For web sources
+  fileId?: string;        // For document sources
+  chatSessionId?: string; // For chat_exchange
+  snippet?: string;       // Short excerpt
+}
+
+export interface DossierSection {
+  id: string;             // e.g. "dsec-0"
+  title: string;          // e.g. "Background", "Key Relations", "Timeline"
+  content: string;        // Raw markdown
+  updatedAt: number;
+  sources: DossierSource[];
+}
+
+export interface Dossier {
+  id: string;
+  title: string;          // Subject name, e.g. "John Smith"
+  dossierType: DossierType;
+  tags: string[];
+  createdAt: number;
+  updatedAt: number;
+  sections: DossierSection[];
+  linkedMapNodeId?: string; // If linked to a node on the investigation map
+}

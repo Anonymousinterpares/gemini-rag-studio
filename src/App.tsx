@@ -25,6 +25,7 @@ import { useAppUI } from './hooks/useAppUI';
 import { FilePanel } from './components/FilePanel';
 import { ChatPanel } from './components/ChatPanel';
 import { CaseFilePanel } from './components/CaseFile/CaseFilePanel';
+import { DossierPanel } from './components/Dossier/DossierPanel';
 
 import './style.css';
 import './progress-bar.css';
@@ -45,6 +46,7 @@ export const App: FC = () => {
   const [docFontSize, setDocFontSize] = useState(0.9);
   const [showSettings, setShowSettings] = useState(true);
   const [isExplorerOpen, setIsExplorerOpen] = useState(false);
+  const [isDossierOpen, setIsDossierOpen] = useState(false);
   const [rootDirectoryHandle, setRootDirectoryHandle] = useState<FileSystemDirectoryHandle | null>(null);
 
   const { coordinator, vectorStore, queryEmbeddingResolver, rerankPromiseResolver } = useCompute(docFontSize);
@@ -309,6 +311,8 @@ export const App: FC = () => {
         onLoadCaseFile={handleLoadCaseFile}
         onOpenCaseFile={() => setOverlayOpen(true)}
         hasCaseFile={!!caseFile}
+        isDossierOpen={isDossierOpen}
+        setIsDossierOpen={setIsDossierOpen}
       />
       <ChatPanel
         appSettings={appSettings} setAppSettings={setAppSettings}
@@ -352,6 +356,8 @@ export const App: FC = () => {
           });
         }}
       />
+
+      <DossierPanel isOpen={isDossierOpen} onClose={() => setIsDossierOpen(false)} />
 
       {selectionPopover && (
         <div className="selection-popover" style={{ top: selectionPopover.top, left: selectionPopover.left }}>
