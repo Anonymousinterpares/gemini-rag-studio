@@ -22,10 +22,30 @@
   height: 100vh;
   display: flex;
   flex-direction: column;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 100;
+}
+
+.file-panel.auto-hide {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  box-shadow: 4px 0 15px rgba(0, 0, 0, 0.2);
+}
+
+.file-panel.auto-hide:not(:hover) {
+  transform: translateX(calc(-100% + 15px));
+}
+
+.file-panel.auto-hide:hover {
+  transform: translateX(0);
 }
 
 .chat-panel {
   flex-grow: 1;
+  position: relative;
+  z-index: 1;
 }
 
 .doc-viewer-panel {

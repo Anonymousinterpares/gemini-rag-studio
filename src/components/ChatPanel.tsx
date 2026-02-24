@@ -1,5 +1,5 @@
 import { FC } from 'react';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, FileText, FolderOpen, FolderTree } from 'lucide-react';
 import { ChatMessage, AppFile, TokenUsage } from '../types';
 import { MessageList } from './Chat/MessageList';
 import { ChatInputForm } from './Chat/ChatInputForm';
@@ -39,6 +39,11 @@ interface ChatPanelProps {
     redo: () => void;
     canUndo: boolean;
     canRedo: boolean;
+    onLoadCaseFile: () => void;
+    onOpenCaseFile: () => void;
+    hasCaseFile: boolean;
+    isDossierOpen: boolean;
+    setIsDossierOpen: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
 export const ChatPanel: FC<ChatPanelProps> = ({
@@ -47,12 +52,42 @@ export const ChatPanel: FC<ChatPanelProps> = ({
     hoveredSelectionId, rootDirectoryHandle, caseFileState, handlers, userInput, setUserInput,
     activeJobCount, files, handleSubmit, stopGeneration, setCaseFileState, submitQuery,
     tokenUsage, currentContextTokens,
-    undo, redo, canUndo, canRedo
+    undo, redo, canUndo, canRedo,
+    onLoadCaseFile, onOpenCaseFile, hasCaseFile, isDossierOpen, setIsDossierOpen
 }) => {
     return (
         <div className='panel chat-panel'>
-            <div className='chat-panel-header'>
-                <ChatHistoryDropdown />
+            <div className='chat-panel-header' style={{ justifyContent: 'space-between', display: 'flex' }}>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                    <button
+                        className='button secondary'
+                        title='Load a case file (.json or .md) from your computer'
+                        onClick={onLoadCaseFile}
+                        style={{ padding: '0.4rem', display: 'flex', alignItems: 'center' }}
+                    >
+                        <FileText size={16} />
+                    </button>
+                    <button
+                        className='button secondary'
+                        title='Open the loaded case file in the overlay panel'
+                        onClick={onOpenCaseFile}
+                        disabled={!hasCaseFile}
+                        style={{ padding: '0.4rem', display: 'flex', alignItems: 'center' }}
+                    >
+                        <FolderOpen size={16} />
+                    </button>
+                    <button
+                        className={`button secondary ${isDossierOpen ? 'active' : ''}`}
+                        title='Open the Knowledge Base to manage Dossiers and Topics'
+                        onClick={() => setIsDossierOpen(!isDossierOpen)}
+                        style={{ padding: '0.4rem', display: 'flex', alignItems: 'center', backgroundColor: isDossierOpen ? 'rgba(52, 152, 219, 0.2)' : undefined, borderColor: isDossierOpen ? '#3498db' : undefined }}
+                    >
+                        <FolderTree size={16} />
+                    </button>
+                </div>
+                <div style={{ display: 'flex', gap: '8px', flex: 1, justifyContent: 'center' }}>
+                    <ChatHistoryDropdown />
+                </div>
                 <div className='background-changer'>
                     <button className='background-btn' onClick={() => setAppSettings((p: import('../config').AppSettings) => ({ ...p, backgroundIndex: p.backgroundIndex === 0 ? backgroundImages.length : p.backgroundIndex - 1 }))}><ChevronLeft size={16} /></button>
                     <button className='background-btn' onClick={() => setAppSettings((p: import('../config').AppSettings) => ({ ...p, backgroundIndex: (p.backgroundIndex + 1) % (backgroundImages.length + 1) }))}><ChevronRight size={16} /></button>

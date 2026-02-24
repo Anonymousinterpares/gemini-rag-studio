@@ -1,5 +1,5 @@
 import { FC, useRef } from 'react';
-import { Trash2, X, RefreshCw, LayoutGrid, List as ListIcon, FolderTree, RotateCcw, RotateCw, FolderOpen, FileText } from 'lucide-react';
+import { Trash2, X, RefreshCw, LayoutGrid, List as ListIcon, FolderTree, Pin, PinOff } from 'lucide-react';
 import { SpeechBubble, DigestParticles, FloatingArrows, RejectionBubble } from './Monster';
 import Settings from './Settings';
 import MemoizedFileTreeView from './FileTreeView';
@@ -24,10 +24,6 @@ interface FilePanelProps {
     initialChatHistory: import('../types').ChatMessage[];
     handleClearConversation: () => void;
     chatHistory: import('../types').ChatMessage[];
-    undo: () => void;
-    redo: () => void;
-    historyStack: unknown[];
-    redoStack: unknown[];
     handleClear: () => void;
     computeDevice: string;
     mlWorkerCount: number;
@@ -36,59 +32,34 @@ interface FilePanelProps {
     fileTree: import('../types').FileTree;
     handleShowSum: (f: AppFile) => void;
     onOpenExplorer: () => void;
-    // Case file
-    onLoadCaseFile: () => void;
-    onOpenCaseFile: () => void;
-    hasCaseFile: boolean;
-    // Dossier
-    isDossierOpen: boolean;
-    setIsDossierOpen: React.Dispatch<React.SetStateAction<boolean>>;
+    isPinned: boolean;
+    setIsPinned: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
 export const FilePanel: FC<FilePanelProps> = ({
     showSettings, setShowSettings, glowType, isDragging, handleDropValidate, files,
     activeJobCount, isLoading, isEmbedding, showRejectionBubble, showDropVideo,
     dropVideoSrc, setShowDropVideo, handleClearFiles, initialChatHistory,
-    handleClearConversation, chatHistory, undo, redo, historyStack, redoStack, handleClear,
+    handleClearConversation, chatHistory, handleClear,
     computeDevice, mlWorkerCount, viewMode, setViewMode, fileTree, handleShowSum,
-    onOpenExplorer, onLoadCaseFile, onOpenCaseFile, hasCaseFile,
-    isDossierOpen, setIsDossierOpen
+    onOpenExplorer, isPinned, setIsPinned
 }) => {
     const dropVideoRef = useRef<HTMLVideoElement>(null);
 
     return (
-        <div className={`panel file-panel ${!showSettings ? 'settings-hidden' : ''}`}>
+        <div className={`panel file-panel ${!showSettings ? 'settings-hidden' : ''} ${!isPinned ? 'auto-hide' : ''}`}>
             <div className='file-panel-header'>
+                <button
+                    className='button secondary'
+                    onClick={() => setIsPinned(!isPinned)}
+                    title={isPinned ? "Unpin side panel (auto-hide)" : "Pin side panel (keep visible)"}
+                    style={{ padding: '0.4rem' }}
+                >
+                    {isPinned ? <PinOff size={16} /> : <Pin size={16} />}
+                </button>
+                <div style={{ flex: 1 }}></div>
                 <button className='button secondary' onClick={onOpenExplorer}>Open Explorer</button>
                 <button className='button secondary' onClick={() => setShowSettings(p => !p)}>Settings</button>
-            </div>
-            {/* Case File & Dossier buttons */}
-            <div className='flex gap-2' style={{ padding: '4px 8px', flexWrap: 'wrap' }}>
-                <button
-                    className='button secondary'
-                    title='Load a case file (.json or .md) from your computer'
-                    onClick={onLoadCaseFile}
-                    style={{ flex: 1 }}
-                >
-                    <FileText size={14} /> Load Case File
-                </button>
-                <button
-                    className='button secondary'
-                    title='Open the loaded case file in the overlay panel'
-                    onClick={onOpenCaseFile}
-                    disabled={!hasCaseFile}
-                    style={{ flex: 1, minWidth: '45%' }}
-                >
-                    <FolderOpen size={14} /> Open Case File
-                </button>
-                <button
-                    className={`button secondary ${isDossierOpen ? 'active' : ''}`}
-                    title='Open the Knowledge Base to manage Dossiers and Topics'
-                    onClick={() => setIsDossierOpen(p => !p)}
-                    style={{ flex: '1 1 100%', backgroundColor: isDossierOpen ? 'rgba(52, 152, 219, 0.2)' : undefined, borderColor: isDossierOpen ? '#3498db' : undefined }}
-                >
-                    <FolderTree size={14} /> {isDossierOpen ? 'Close Knowledge Base' : 'Open Knowledge Base'}
-                </button>
             </div>
             <Settings className={showSettings ? '' : 'hidden'} />
             <div className={`drag-drop-area glow-${glowType} ${isDragging ? 'dragging' : ''}`} onDrop={handleDropValidate} onDragOver={(e) => e.preventDefault()} onDragLeave={() => { }}>
@@ -107,22 +78,6 @@ export const FilePanel: FC<FilePanelProps> = ({
             <div className='flex gap-2'>
                 <button className='button secondary' onClick={() => handleClearFiles(initialChatHistory)} disabled={files.length === 0 || isEmbedding} title="Clear Files"><Trash2 size={16} /></button>
                 <button className='button secondary' onClick={handleClearConversation} disabled={chatHistory.length <= 1 || isLoading || isEmbedding} title="Clear Chat"><X size={16} /></button>
-                <button
-                    className='button secondary'
-                    onClick={undo}
-                    disabled={historyStack.length === 0 || isLoading || isEmbedding}
-                    title="Undo last action – reverses comment additions, LLM replacements, and content appended to chat since your last message"
-                >
-                    <RotateCcw size={16} />
-                </button>
-                <button
-                    className='button secondary'
-                    onClick={redo}
-                    disabled={redoStack.length === 0 || isLoading || isEmbedding}
-                    title="Redo – re-applies the last undone action"
-                >
-                    <RotateCw size={16} />
-                </button>
                 <button className='button secondary' onClick={handleClear} title="Reset App"><RefreshCw size={16} /></button>
             </div>
             <div className='compute-status-indicator'>Compute: {computeDevice.toUpperCase()} ({mlWorkerCount} ML)</div>

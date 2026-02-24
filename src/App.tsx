@@ -49,6 +49,7 @@ export const App: FC = () => {
   const [showSettings, setShowSettings] = useState(true);
   const [isExplorerOpen, setIsExplorerOpen] = useState(false);
   const [isDossierOpen, setIsDossierOpen] = useState(false);
+  const [isPinned, setIsPinned] = useState(true);
   const [rootDirectoryHandle, setRootDirectoryHandle] = useState<FileSystemDirectoryHandle | null>(null);
 
   const { coordinator, vectorStore, queryEmbeddingResolver, rerankPromiseResolver } = useCompute(docFontSize);
@@ -312,16 +313,12 @@ export const App: FC = () => {
         showRejectionBubble={showRejectionBubble} showDropVideo={showDropVideo} dropVideoSrc={dropVideoSrc}
         setShowDropVideo={setShowDropVideo} handleClearFiles={handleClearFiles}
         initialChatHistory={initialChatHistory} handleClearConversation={handleClearConversation}
-        chatHistory={chatHistory} undo={handleUndo} redo={handleRedo}
-        historyStack={historyStack} redoStack={chatRedoStack} handleClear={handleClear}
+        chatHistory={chatHistory} handleClear={handleClear}
         computeDevice={computeDevice} mlWorkerCount={mlWorkerCount} viewMode={viewMode}
         setViewMode={setViewMode} fileTree={fileTree} handleShowSum={handleShowSum}
         onOpenExplorer={onOpenExplorer}
-        onLoadCaseFile={handleLoadCaseFile}
-        onOpenCaseFile={() => setOverlayOpen(true)}
-        hasCaseFile={!!caseFile}
-        isDossierOpen={isDossierOpen}
-        setIsDossierOpen={setIsDossierOpen}
+        isPinned={isPinned}
+        setIsPinned={setIsPinned}
       />
       <ChatPanel
         appSettings={appSettings} setAppSettings={setAppSettings}
@@ -338,6 +335,11 @@ export const App: FC = () => {
         undo={handleUndo} redo={handleRedo}
         canUndo={historyStack.length > 0 || cfUndoStack.length > 0}
         canRedo={chatRedoStack.length > 0 || cfRedoStack.length > 0}
+        onLoadCaseFile={handleLoadCaseFile}
+        onOpenCaseFile={() => setOverlayOpen(true)}
+        hasCaseFile={!!caseFile}
+        isDossierOpen={isDossierOpen}
+        setIsDossierOpen={setIsDossierOpen}
       />
 
       <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)}>
