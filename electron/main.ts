@@ -31,10 +31,11 @@ function createWindow() {
         width: 1400,
         height: 900,
         webPreferences: {
-            preload: path.join(__dirname, 'preload.cjs'),
+            preload: path.join(__dirname, "preload.mjs"),
             // Security: Disable nodeIntegration, enable contextIsolation
             nodeIntegration: false,
             contextIsolation: true,
+            sandbox: false
         },
     });
 

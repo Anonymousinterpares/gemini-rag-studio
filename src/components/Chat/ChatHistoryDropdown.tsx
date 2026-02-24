@@ -1,5 +1,5 @@
 import { FC, useState, useRef, useEffect } from 'react';
-import { History, Plus, Trash2, Check, X, Edit2 } from 'lucide-react';
+import { History, Plus, Trash2, Check, X } from 'lucide-react';
 import { useChatStore } from '../../store/useChatStore';
 import { useChatHistoryIO } from '../../hooks/useChatHistoryIO';
 
@@ -27,13 +27,10 @@ export const ChatHistoryDropdown: FC = () => {
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
-    const activeSessionTitle = sessionList.find(s => s.id === activeSessionId)?.title || 'New Conversation';
-
     const handleStartRename = (id: string, currentTitle: string, e: React.MouseEvent) => {
         e.stopPropagation();
         setEditingId(id);
         setEditTitle(currentTitle);
-        setConfirmDeleteId(null);
     };
 
     const handleCommitRename = async (id: string) => {
@@ -57,95 +54,134 @@ export const ChatHistoryDropdown: FC = () => {
         setIsOpen(false);
     };
 
+    const timeAgo = (dateInput: number) => {
+        const diffInSeconds = Math.floor((Date.now() - dateInput) / 1000);
+        if (diffInSeconds < 60) return `just now`;
+        if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)} mins ago`;
+        if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)} hrs ago`;
+        return `${Math.floor(diffInSeconds / 86400)} days ago`;
+    };
+
+    const activeSession = sessionList.find(s => s.id === activeSessionId);
+    const recentSessions = sessionList.filter(s => s.id !== activeSessionId).slice(0, 5);
+    const olderSessions = sessionList.filter(s => s.id !== activeSessionId).slice(5);
+
     return (
-        <div className="chat-history-dropdown-container" ref={dropdownRef}>
+        <div className="chat-history-container" style={{ display: 'flex', gap: '4px', alignItems: 'center' }} ref={dropdownRef}>
             <button
-                className={`button secondary chat-history-trigger ${isOpen ? 'active' : ''}`}
-                onClick={() => setIsOpen(!isOpen)}
-                title="Chat History"
+                className="icon-btn"
+                onClick={() => { createNewSession(); setIsOpen(false); }}
+                title="Start a New Conversation (Ctrl+Shift+L)"
             >
-                <History size={16} style={{ marginRight: '6px' }} />
-                <span className="truncate" style={{ maxWidth: '150px' }}>
-                    {activeSessionTitle.length > 28 ? activeSessionTitle.substring(0, 25) + '...' : activeSessionTitle}
-                </span>
+                <Plus size={16} />
             </button>
+            <div className="chat-history-dropdown-container">
+                <button
+                    className={`icon-btn chat-history-trigger ${isOpen ? 'active' : ''}`}
+                    onClick={() => setIsOpen(!isOpen)}
+                    title="Chat History"
+                >
+                    <History size={16} />
+                </button>
 
-            {isOpen && (
-                <div className="chat-history-dropdown-menu">
-                    <div className="chat-history-dropdown-header">
-                        <button className="button chat-history-new-btn" onClick={() => { createNewSession(); setIsOpen(false); }}>
-                            <Plus size={14} style={{ marginRight: '4px' }} /> New Conversation
-                        </button>
-                    </div>
+                {isOpen && (
+                    <div className="chat-history-quick-pick">
+                        <div className="chat-history-qp-header">
+                            <input type="text" placeholder="Select a conversation" readOnly className="chat-history-qp-input" />
+                        </div>
 
-                    <div className="chat-history-list">
-                        {sessionList.length === 0 ? (
-                            <div className="chat-history-empty">No past conversations</div>
-                        ) : (
-                            sessionList.map(session => (
-                                <div
-                                    key={session.id}
-                                    className={`chat-history-item ${session.id === activeSessionId ? 'active' : ''}`}
-                                    onClick={() => {
-                                        if (editingId !== session.id && confirmDeleteId !== session.id) {
-                                            handleSwitch(session.id);
-                                        }
-                                    }}
-                                >
-                                    <div className="chat-history-item-main">
-                                        {editingId === session.id ? (
-                                            <input
-                                                autoFocus
-                                                value={editTitle}
-                                                onChange={e => setEditTitle(e.target.value)}
-                                                onBlur={() => handleCommitRename(session.id)}
-                                                onKeyDown={(e) => handleKeyDownRename(e, session.id)}
-                                                onClick={e => e.stopPropagation()}
-                                                className="chat-history-rename-input"
-                                            />
-                                        ) : (
-                                            <div
-                                                className="chat-history-item-title truncate"
-                                                onDoubleClick={(e) => handleStartRename(session.id, session.title, e)}
-                                                title="Double-click to rename"
-                                            >
-                                                {session.title}
-                                            </div>
-                                        )}
-                                        <div className="chat-history-item-date">
-                                            {new Date(session.updatedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                        <div className="chat-history-qp-body">
+                            {/* Current */}
+                            {activeSession && (
+                                <div className="chat-history-qp-section">
+                                    <div className="chat-history-qp-section-title">Current</div>
+                                    <div className="chat-history-qp-item active">
+                                        <div className="chat-history-qp-item-title" title="Double-click to rename" onDoubleClick={(e) => handleStartRename(activeSession.id, activeSession.title, e)}>
+                                            {editingId === activeSession.id ? (
+                                                <input autoFocus value={editTitle} onChange={e => setEditTitle(e.target.value)} onBlur={() => handleCommitRename(activeSession.id)} onKeyDown={(e) => handleKeyDownRename(e, activeSession.id)} onClick={e => e.stopPropagation()} className="chat-history-rename-input" />
+                                            ) : activeSession.title}
+                                        </div>
+                                        <div className="chat-history-qp-meta">
+                                            <span>{timeAgo(activeSession.updatedAt)}</span>
+                                            {confirmDeleteId === activeSession.id ? (
+                                                <>
+                                                    <button className="icon-btn action-check" onClick={(e) => { e.stopPropagation(); deleteSession(activeSession.id); setConfirmDeleteId(null); }} title="Confirm Delete"><Check size={14} /></button>
+                                                    <button className="icon-btn action-x" onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(null); }} title="Cancel"><X size={14} /></button>
+                                                </>
+                                            ) : (
+                                                <button className="icon-btn delete" onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(activeSession.id); }} title="Delete"><Trash2 size={14} /></button>
+                                            )}
                                         </div>
                                     </div>
+                                </div>
+                            )}
 
-                                    {confirmDeleteId === session.id ? (
-                                        <div className="chat-history-delete-confirm">
-                                            <button className="icon-btn action-check" onClick={(e) => { e.stopPropagation(); deleteSession(session.id); setConfirmDeleteId(null); }} title="Confirm Delete"><Check size={14} /></button>
-                                            <button className="icon-btn action-x" onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(null); }} title="Cancel"><X size={14} /></button>
+                            {/* Recent */}
+                            {recentSessions.length > 0 && (
+                                <div className="chat-history-qp-section">
+                                    <div className="chat-history-qp-section-title">Recent in RAG Studio</div>
+                                    {recentSessions.map(session => (
+                                        <div key={session.id} className="chat-history-qp-item" onClick={() => handleSwitch(session.id)}>
+                                            <div className="chat-history-qp-item-title" title="Double-click to rename" onDoubleClick={(e) => handleStartRename(session.id, session.title, e)}>
+                                                {editingId === session.id ? (
+                                                    <input autoFocus value={editTitle} onChange={e => setEditTitle(e.target.value)} onBlur={() => handleCommitRename(session.id)} onKeyDown={(e) => handleKeyDownRename(e, session.id)} onClick={e => e.stopPropagation()} className="chat-history-rename-input" />
+                                                ) : session.title}
+                                            </div>
+                                            <div className="chat-history-qp-meta">
+                                                <span>{timeAgo(session.updatedAt)}</span>
+                                                {confirmDeleteId === session.id ? (
+                                                    <>
+                                                        <button className="icon-btn action-check" onClick={(e) => { e.stopPropagation(); deleteSession(session.id); setConfirmDeleteId(null); }} title="Confirm Delete"><Check size={14} /></button>
+                                                        <button className="icon-btn action-x" onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(null); }} title="Cancel"><X size={14} /></button>
+                                                    </>
+                                                ) : (
+                                                    <button className="icon-btn delete" onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(session.id); }} title="Delete"><Trash2 size={14} /></button>
+                                                )}
+                                            </div>
                                         </div>
-                                    ) : (
-                                        <div className="chat-history-actions">
-                                            <button
-                                                className="icon-btn chat-history-action-btn"
-                                                onClick={(e) => handleStartRename(session.id, session.title, e)}
-                                                title="Rename Conversation"
-                                            >
-                                                <Edit2 size={14} />
-                                            </button>
-                                            <button
-                                                className="icon-btn chat-history-action-btn delete"
-                                                onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(session.id); }}
-                                                title="Delete Conversation"
-                                            >
-                                                <Trash2 size={14} />
-                                            </button>
+                                    ))}
+                                    {olderSessions.length > 0 && (
+                                        <div className="chat-history-qp-item show-more">
+                                            Show {olderSessions.length} more...
                                         </div>
                                     )}
                                 </div>
-                            ))
-                        )}
+                            )}
+
+                            {/* Older */}
+                            {olderSessions.length > 0 && (
+                                <div className="chat-history-qp-section">
+                                    <div className="chat-history-qp-section-title">Other Conversations</div>
+                                    {olderSessions.map(session => (
+                                        <div key={session.id} className="chat-history-qp-item" onClick={() => handleSwitch(session.id)}>
+                                            <div className="chat-history-qp-item-title" title="Double-click to rename" onDoubleClick={(e) => handleStartRename(session.id, session.title, e)}>
+                                                {editingId === session.id ? (
+                                                    <input autoFocus value={editTitle} onChange={e => setEditTitle(e.target.value)} onBlur={() => handleCommitRename(session.id)} onKeyDown={(e) => handleKeyDownRename(e, session.id)} onClick={e => e.stopPropagation()} className="chat-history-rename-input" />
+                                                ) : session.title}
+                                            </div>
+                                            <div className="chat-history-qp-meta">
+                                                <span>{timeAgo(session.updatedAt)}</span>
+                                                {confirmDeleteId === session.id ? (
+                                                    <>
+                                                        <button className="icon-btn action-check" onClick={(e) => { e.stopPropagation(); deleteSession(session.id); setConfirmDeleteId(null); }} title="Confirm Delete"><Check size={14} /></button>
+                                                        <button className="icon-btn action-x" onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(null); }} title="Cancel"><X size={14} /></button>
+                                                    </>
+                                                ) : (
+                                                    <button className="icon-btn delete" onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(session.id); }} title="Delete"><Trash2 size={14} /></button>
+                                                )}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+
+                            {sessionList.length === 0 && (
+                                <div className="chat-history-empty" style={{ padding: '2rem', textAlign: 'center', opacity: 0.5 }}>No past conversations</div>
+                            )}
+                        </div>
                     </div>
-                </div>
-            )}
+                )}
+            </div>
         </div>
     );
 };
