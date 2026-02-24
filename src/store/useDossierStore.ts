@@ -13,6 +13,10 @@ interface DossierState {
     deleteDossier: (dossierId: string) => void;
     setActiveDossier: (id: string | null) => void;
     linkDossierToMapNode: (dossierId: string, mapNodeId: string) => void;
+    proposeDossierSectionUpdate: (dossierId: string, sectionId: string, proposedContent: string) => void;
+    acceptDossierSectionUpdate: (dossierId: string, sectionId: string) => void;
+    rejectDossierSectionUpdate: (dossierId: string, sectionId: string) => void;
+    setDossierSectionProcessing: (dossierId: string, sectionId: string, isProcessing: boolean) => void;
 }
 
 export const useDossierStore = create<DossierState>()(
@@ -29,15 +33,7 @@ export const useDossierStore = create<DossierState>()(
                     tags: [],
                     createdAt: Date.now(),
                     updatedAt: Date.now(),
-                    sections: [
-                        {
-                            id: uuidv4(),
-                            title: 'Overview',
-                            content: 'Initial generated overview...',
-                            updatedAt: Date.now(),
-                            sources: []
-                        }
-                    ]
+                    sections: []
                 };
 
                 set((state) => ({
@@ -117,6 +113,76 @@ export const useDossierStore = create<DossierState>()(
                             ? { ...dossier, linkedMapNodeId: mapNodeId, updatedAt: Date.now() }
                             : dossier
                     )
+                }));
+            },
+
+            proposeDossierSectionUpdate: (dossierId, sectionId, proposedContent) => {
+                set((state) => ({
+                    dossiers: state.dossiers.map(dossier => {
+                        if (dossier.id !== dossierId) return dossier;
+                        return {
+                            ...dossier,
+                            sections: dossier.sections.map(section =>
+                                section.id === sectionId
+                                    ? { ...section, proposedContent, isProcessing: false }
+                                    : section
+                            )
+                        };
+                    })
+                }));
+            },
+
+            acceptDossierSectionUpdate: (dossierId, sectionId) => {
+                set((state) => ({
+                    dossiers: state.dossiers.map(dossier => {
+                        if (dossier.id !== dossierId) return dossier;
+                        return {
+                            ...dossier,
+                            updatedAt: Date.now(),
+                            sections: dossier.sections.map(section =>
+                                section.id === sectionId && section.proposedContent
+                                    ? {
+                                        ...section,
+                                        content: section.proposedContent,
+                                        proposedContent: undefined,
+                                        updatedAt: Date.now()
+                                    }
+                                    : section
+                            )
+                        };
+                    })
+                }));
+            },
+
+            rejectDossierSectionUpdate: (dossierId, sectionId) => {
+                set((state) => ({
+                    dossiers: state.dossiers.map(dossier => {
+                        if (dossier.id !== dossierId) return dossier;
+                        return {
+                            ...dossier,
+                            sections: dossier.sections.map(section =>
+                                section.id === sectionId
+                                    ? { ...section, proposedContent: undefined, isProcessing: false }
+                                    : section
+                            )
+                        };
+                    })
+                }));
+            },
+
+            setDossierSectionProcessing: (dossierId, sectionId, isProcessing) => {
+                set((state) => ({
+                    dossiers: state.dossiers.map(dossier => {
+                        if (dossier.id !== dossierId) return dossier;
+                        return {
+                            ...dossier,
+                            sections: dossier.sections.map(section =>
+                                section.id === sectionId
+                                    ? { ...section, isProcessing }
+                                    : section
+                            )
+                        };
+                    })
                 }));
             }
         }),

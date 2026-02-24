@@ -18,6 +18,8 @@ interface CaseFileState {
     editComment: (sectionId: string, commentId: string, newInstruction: string) => void;
     deleteComment: (sectionId: string, commentId: string) => void;
     resolveComment: (sectionId: string, commentId: string, newContent: string) => void;
+    acceptProposedContent: (sectionId: string) => void;
+    rejectProposedContent: (sectionId: string) => void;
 
     // Map Actions
     initializeMap: () => void;
@@ -111,19 +113,59 @@ export const useCaseFileStore = create<CaseFileState>((set) => ({
     resolveComment: (sectionId, commentId, newContent) =>
         set((state) => {
             if (!state.caseFile) return state;
+            return {
+                caseFile: {
+                    ...state.caseFile,
+                    sections: state.caseFile.sections.map((s) =>
+                        s.id === sectionId
+                            ? {
+                                ...s,
+                                proposedContent: newContent,
+                                resolvingCommentId: commentId,
+                            }
+                            : s
+                    ),
+                }
+            };
+        }),
+
+    acceptProposedContent: (sectionId) =>
+        set((state) => {
+            if (!state.caseFile) return state;
             const next: CaseFile = {
                 ...state.caseFile,
                 sections: state.caseFile.sections.map((s) =>
-                    s.id === sectionId
+                    s.id === sectionId && s.proposedContent
                         ? {
                             ...s,
-                            content: newContent,
-                            comments: s.comments.filter((c) => c.id !== commentId),
+                            content: s.proposedContent,
+                            proposedContent: undefined,
+                            comments: s.resolvingCommentId ? s.comments.filter(c => c.id !== s.resolvingCommentId) : s.comments,
+                            resolvingCommentId: undefined
                         }
                         : s
                 ),
             };
             return push(state, next);
+        }),
+
+    rejectProposedContent: (sectionId) =>
+        set((state) => {
+            if (!state.caseFile) return state;
+            return {
+                caseFile: {
+                    ...state.caseFile,
+                    sections: state.caseFile.sections.map((s) =>
+                        s.id === sectionId
+                            ? {
+                                ...s,
+                                proposedContent: undefined,
+                                resolvingCommentId: undefined
+                            }
+                            : s
+                    ),
+                }
+            };
         }),
 
     initializeMap: () =>

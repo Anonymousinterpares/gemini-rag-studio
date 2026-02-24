@@ -1,7 +1,9 @@
 import { FC, useState } from 'react';
-import { MessageSquarePlus } from 'lucide-react';
+import { Plus, Check, X } from 'lucide-react';
 import { CaseFileSection as CaseFileSectionType } from '../../types';
 import { CaseFileCommentItem } from './CaseFileCommentItem';
+import { useDiffRenderer } from '../../hooks/useDiffRenderer';
+import { useCaseFileStore } from '../../store/useCaseFileStore';
 
 interface Props {
     section: CaseFileSectionType;
@@ -23,6 +25,10 @@ export const CaseFileSectionBlock: FC<Props> = ({
 }) => {
     const [showCommentForm, setShowCommentForm] = useState(false);
     const [instruction, setInstruction] = useState('');
+    const [isHovered, setIsHovered] = useState(false);
+
+    const { acceptProposedContent, rejectProposedContent } = useCaseFileStore();
+    const renderedDiff = useDiffRenderer(section.content || '', section.proposedContent || '');
 
     const handleSubmitComment = () => {
         if (!instruction.trim() || !onAddSectionComment) return;
@@ -32,13 +38,50 @@ export const CaseFileSectionBlock: FC<Props> = ({
     };
 
     return (
-        <div className='cf-section' data-section-id={section.id}>
+        <div
+            className='cf-section'
+            data-section-id={section.id}
+            onMouseEnter={() => setIsHovered(true)}
+            onMouseLeave={() => setIsHovered(false)}
+            style={{ position: 'relative' }}
+        >
+            {isHovered && !showCommentForm && !section.proposedContent && (
+                <button
+                    className='icon-btn'
+                    title='Instruct the LLM to rewrite this section'
+                    onClick={() => setShowCommentForm(true)}
+                    style={{ position: 'absolute', top: '8px', right: '8px', background: '#8e44ad', color: 'white', border: 'none', borderRadius: '4px', padding: '4px', zIndex: 10 }}
+                >
+                    <Plus size={14} />
+                </button>
+            )}
 
-            {/* Rendered markdown – identical pipeline to chat bubble */}
-            <div
-                className='cf-section-content'
-                dangerouslySetInnerHTML={renderFn(section.content)}
-            />
+            {section.proposedContent ? (
+                <div>
+                    <div style={{ fontWeight: 'bold', fontSize: '0.85rem', color: 'var(--warning-orange)', marginBottom: '8px' }}>
+                        Proposed Changes:
+                    </div>
+                    <div
+                        className='cf-section-content proposed-diff'
+                        style={{ background: 'rgba(255, 255, 0, 0.05)', border: '1px dotted rgba(255,255,0,0.3)', padding: '10px', borderRadius: '4px' }}
+                    >
+                        {renderedDiff}
+                    </div>
+                    <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '12px' }}>
+                        <button className="button" style={{ background: '#10b981', color: 'white', border: 'none' }} onClick={() => acceptProposedContent(section.id)}>
+                            <Check size={14} style={{ marginRight: '4px' }} /> Accept
+                        </button>
+                        <button className="button secondary" onClick={() => rejectProposedContent(section.id)}>
+                            <X size={14} style={{ marginRight: '4px' }} /> Reject
+                        </button>
+                    </div>
+                </div>
+            ) : (
+                <div
+                    className='cf-section-content'
+                    dangerouslySetInnerHTML={renderFn(section.content)}
+                />
+            )}
 
             {/* Comments attached to this section */}
             {section.comments.length > 0 && (
@@ -57,9 +100,9 @@ export const CaseFileSectionBlock: FC<Props> = ({
                 </div>
             )}
 
-            {/* Always-visible comment toolbar */}
-            <div className='cf-section-toolbar'>
-                {showCommentForm ? (
+            {/* Inline comment toolbar */}
+            {showCommentForm && (
+                <div className='cf-section-toolbar'>
                     <div className='cf-inline-comment-form'>
                         <textarea
                             className='cf-comment-edit-textarea'
@@ -82,17 +125,8 @@ export const CaseFileSectionBlock: FC<Props> = ({
                             </button>
                         </div>
                     </div>
-                ) : (
-                    <button
-                        className='cf-add-comment-btn'
-                        title='Add a comment – the LLM will rewrite the whole section based on your instruction'
-                        onClick={() => setShowCommentForm(true)}
-                    >
-                        <MessageSquarePlus size={14} />
-                        Add Comment
-                    </button>
-                )}
-            </div>
+                </div>
+            )}
         </div>
     );
 };

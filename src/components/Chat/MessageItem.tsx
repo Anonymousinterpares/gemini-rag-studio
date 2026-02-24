@@ -1,8 +1,14 @@
 import { FC } from 'react';
-import { Bot, User, Check, XCircle, Trash2, RefreshCw, Edit2, Copy, Download, FolderOpen } from 'lucide-react';
+import { Bot, User, Check, XCircle, Trash2, RefreshCw, Edit2, Copy, Download, FolderOpen, Plus } from 'lucide-react';
 import { ChatMessage } from '../../types';
 import { sectionizeMessage } from '../../utils/chatUtils';
 import { DownloadReportButton } from '../DownloadReportButton';
+import { useDiffRenderer } from '../../hooks/useDiffRenderer';
+
+const MessageSectionDiff: FC<{ originalContent: string; proposedContent: string; }> = ({ originalContent, proposedContent }) => {
+    const renderedDiff = useDiffRenderer(originalContent, proposedContent);
+    return <>{renderedDiff}</>;
+};
 
 export interface MessageItemHandlers {
     handleSaveAndRerun: (idx: number) => void;
@@ -116,8 +122,13 @@ export const MessageItem: FC<MessageItemProps> = ({
                                                                         }
                                                                         return previewContent ? (
                                                                             <div className="pending-edit-preview">
-                                                                                <div style={{ fontWeight: 'bold', fontSize: '0.8rem', marginTop: '0.5rem', color: 'var(--warning-orange)' }}>PROPOSED CHANGE:</div>
-                                                                                <div dangerouslySetInnerHTML={handlers.renderModelMessage(previewContent, msg.content, msg.selectionComments, hoveredSelectionId)} />
+                                                                                <div style={{ fontWeight: 'bold', fontSize: '0.8rem', marginTop: '0.5rem', color: 'var(--warning-orange)' }}>PROPOSED CHANGE (Diff):</div>
+                                                                                <div
+                                                                                    className="cf-section-content proposed-diff"
+                                                                                    style={{ background: 'rgba(255, 255, 0, 0.05)', border: '1px dotted rgba(255,255,0,0.3)', padding: '10px', borderRadius: '4px', marginTop: '8px' }}
+                                                                                >
+                                                                                    <MessageSectionDiff originalContent={section.content} proposedContent={previewContent} />
+                                                                                </div>
                                                                                 <div className="edit-actions-floating">
                                                                                     <button className="button btn-confirm-edit" onClick={() => handlers.handleConfirmEdit(i, section.id)} title="Confirm Change"><Check size={12} /> Confirm</button>
                                                                                     <button className="button btn-reject-edit" onClick={() => handlers.handleRejectEdit(i, section.id)} title="Reject Change"><XCircle size={12} /> Reject</button>
@@ -126,8 +137,8 @@ export const MessageItem: FC<MessageItemProps> = ({
                                                                         ) : null;
                                                                     })()}
                                                                 </div>
-                                                                {!pendingEdit && isLast && (
-                                                                    <button className="add-comment-trigger" onClick={() => handlers.handleStartComment(i, section.id)} title="Add Comment">+</button>
+                                                                {!pendingEdit && (
+                                                                    <button className="add-comment-trigger" onClick={() => handlers.handleStartComment(i, section.id)} title="Add Comment"><Plus size={14} /></button>
                                                                 )}
                                                             </div>
                                                         </div>

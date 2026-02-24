@@ -27,10 +27,29 @@ export const useDossierAI = () => {
             ? `\n\n--- CASE FILE CONTEXT ---\n${caseFileStore.caseFile.sections.map((s: any) => `## ${s.title}\n${s.content}`).join('\n\n')}\n--- END CASE FILE ---`
             : '';
 
+        // Determine Dossier Title
+        let dossierTitle = subject;
+        if (subject.length > 30) {
+            try {
+                const titleResponse = await generateContent(selectedModel, apiKey, [
+                    { role: 'system', content: 'You are a highly concise assistant. Your task is to extract a brief 3-5 word title for the provided text. Return ONLY the title.' },
+                    { role: 'user', content: subject }
+                ]);
+                if (titleResponse.text && titleResponse.text.trim()) {
+                    dossierTitle = titleResponse.text.replace(/["']/g, '').trim();
+                } else {
+                    dossierTitle = subject.substring(0, 30) + '...';
+                }
+            } catch (err) {
+                console.error('Failed to generate title:', err);
+                dossierTitle = subject.substring(0, 30) + '...';
+            }
+        }
+
         // Mint a new dossier
         const store = useDossierStore.getState();
-        const newDossierId = store.createDossier(subject, 'custom');
-        addToast(`Dossier for "${subject}" under creation`, "info", 1500);
+        const newDossierId = store.createDossier(dossierTitle, 'custom');
+        addToast(`Dossier for "${dossierTitle}" under creation`, "info", 1500);
 
         try {
             const systemPrompt = `${DOSSIER_COMPILER_PROMPT}\n\nCURRENT ACTIVE DOSSIER ID: ${newDossierId}\nDOSSIER SUBJECT: ${subject}\n${cfContext}
@@ -56,9 +75,9 @@ export const useDossierAI = () => {
                         await handleDossierToolCall(tc.function.name, args);
                     }
                 }
-                addToast(`Dossier for "${subject}" was created`, "success", 1500);
+                addToast(`Dossier for "${dossierTitle}" was created`, "success", 1500);
             } else {
-                addToast(`Dossier creation unsuccessful - no data returned for "${subject}"`, "error", 2000);
+                addToast(`Dossier creation unsuccessful - no data returned for "${dossierTitle}"`, "error", 2000);
             }
         } catch (error) {
             console.error(`[DossierAI] Failed to compile dossier for ${subject}:`, error);

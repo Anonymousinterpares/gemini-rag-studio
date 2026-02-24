@@ -77,6 +77,9 @@ export interface CaseFileSection {
   title?: string;         // optional heading extracted at parse time
   content: string;        // raw markdown
   comments: CaseFileComment[];
+  proposedContent?: string;
+  resolvingCommentId?: string;
+  isProcessing?: boolean;
 }
 
 export type EntityType = 'person' | 'location' | 'event' | 'organization' | 'evidence' | 'group';
@@ -220,6 +223,8 @@ export interface DossierSection {
   content: string;        // Raw markdown
   updatedAt: number;
   sources: DossierSource[];
+  proposedContent?: string;
+  isProcessing?: boolean;
 }
 
 export interface Dossier {
