@@ -16,8 +16,6 @@ export const useChatComments = (chatHistory: ChatMessage[], handleUpdateMessage:
     } | null>(null);
 
     const handleMouseUp = (msgIndex: number) => () => {
-        if (msgIndex !== chatHistory.length - 1) return;
-
         const selection = window.getSelection();
         if (selection && selection.toString().trim().length > 0) {
             const range = selection.getRangeAt(0);
@@ -136,7 +134,6 @@ export const useChatComments = (chatHistory: ChatMessage[], handleUpdateMessage:
     };
 
     const handleStartComment = (msgIndex: number, sectionId: string) => {
-        if (msgIndex !== chatHistory.length - 1) return;
         setActiveCommentInput({ msgIndex, sectionId });
         setCommentText('');
     };

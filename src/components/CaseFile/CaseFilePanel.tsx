@@ -6,6 +6,7 @@ import { CaseFileSectionBlock } from './CaseFileSectionBlock';
 import { InvestigationMapCanvas } from './InvestigationMap/InvestigationMapCanvas';
 import { useCaseFileStore } from '../../store/useCaseFileStore';
 import { useCaseFileIO } from '../../hooks/useCaseFileIO';
+import { useDossierAI } from '../../hooks/useDossierAI'; // Added import
 import './CaseFilePanel.css';
 
 interface CaseFilePanelProps {
@@ -23,6 +24,7 @@ export const CaseFilePanel: FC<CaseFilePanelProps> = ({ onResolveComment, render
         caseFile, isOverlayOpen, setOverlayOpen, addComment, _fileHandle
     } = useCaseFileStore();
     const { handleSaveCaseFile, handleSaveAsCaseFile } = useCaseFileIO();
+    const { generateContextualDossier } = useDossierAI(); // Added retrieval
 
     const [activeView, setActiveView] = useState<'document' | 'map'>('document');
     const [isMaximized, setIsMaximized] = useState(false);
@@ -56,7 +58,7 @@ export const CaseFilePanel: FC<CaseFilePanelProps> = ({ onResolveComment, render
     const handleAddSectionComment = useCallback((sectionId: string, instruction: string) => {
         if (!caseFile || !instruction.trim()) return;
         const comment: CaseFileComment = {
-            id: `cfc-${Date.now()}`,
+            id: `cfc - ${Date.now()} `,
             sectionId,
             selectedText: '',   // no selection — whole section is the context
             instruction: instruction.trim(),
@@ -82,14 +84,14 @@ export const CaseFilePanel: FC<CaseFilePanelProps> = ({ onResolveComment, render
                     <h2>{caseFile.title}</h2>
                     <div className='cf-view-toggle' style={{ display: 'flex', gap: '8px', background: 'var(--input-bg-color)', padding: '4px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
                         <button
-                            className={`button ${activeView === 'document' ? '' : 'secondary'}`}
+                            className={`button ${activeView === 'document' ? '' : 'secondary'} `}
                             onClick={() => setActiveView('document')}
                             style={{ padding: '6px 12px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px' }}
                         >
                             <FileText size={14} /> Document
                         </button>
                         <button
-                            className={`button ${activeView === 'map' ? '' : 'secondary'}`}
+                            className={`button ${activeView === 'map' ? '' : 'secondary'} `}
                             onClick={() => setActiveView('map')}
                             style={{ padding: '6px 12px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px' }}
                         >
@@ -99,7 +101,7 @@ export const CaseFilePanel: FC<CaseFilePanelProps> = ({ onResolveComment, render
                     <div className='cf-header-actions'>
                         <button
                             className='button secondary'
-                            title={_fileHandle ? `Save – overwrite ${_fileHandle.name}` : 'Save case file'}
+                            title={_fileHandle ? `Save – overwrite ${_fileHandle.name} ` : 'Save case file'}
                             onClick={() => handleSaveCaseFile()}
                         >
                             <Save size={15} /> Save
@@ -192,9 +194,17 @@ export const CaseFilePanel: FC<CaseFilePanelProps> = ({ onResolveComment, render
                                 </div>
                             </div>
                         ) : (
-                            <button className='cf-selection-popover-btn' onClick={handleOpenCommentInput}>
-                                <Edit2 size={14} /> Comment on Selection
-                            </button>
+                            <div style={{ display: 'flex', gap: '4px', flexDirection: 'column' }}>
+                                <button className='cf-selection-popover-btn' onClick={handleOpenCommentInput}>
+                                    <Edit2 size={14} /> Comment on Selection
+                                </button>
+                                <button className='cf-selection-popover-btn' onClick={() => {
+                                    generateContextualDossier(selectionPopover.selectedText);
+                                    setSelectionPopover(null);
+                                }}>
+                                    <FileText size={14} /> Compile Dossier
+                                </button>
+                            </div>
                         )}
                     </div>
                 )}

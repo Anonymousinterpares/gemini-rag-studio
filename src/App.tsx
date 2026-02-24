@@ -15,7 +15,7 @@ import { useSettingsStore, useFileStore, useComputeStore } from './store';
 import { useCaseFileStore } from './store/useCaseFileStore';
 import { useCaseFileIO } from './hooks/useCaseFileIO';
 import { useChatStore } from './store/useChatStore';
-import { Edit2 } from 'lucide-react';
+import { Edit2, FileText } from 'lucide-react';
 
 // Extracted Components and Hooks
 import { useChatComments } from './hooks/useChatComments';
@@ -26,6 +26,8 @@ import { FilePanel } from './components/FilePanel';
 import { ChatPanel } from './components/ChatPanel';
 import { CaseFilePanel } from './components/CaseFile/CaseFilePanel';
 import { DossierPanel } from './components/Dossier/DossierPanel';
+import { ToastContainer } from './components/ToastContainer';
+import { useDossierAI } from './hooks/useDossierAI';
 
 import './style.css';
 import './progress-bar.css';
@@ -90,7 +92,7 @@ export const App: FC = () => {
     commentText, setCommentText,
     commentDraft, setCommentDraft,
     handleMouseUp,
-    selectionPopover,
+    selectionPopover, setSelectionPopover,
     handleOpenSelectionCommentInput,
     handleAddSelectionComment,
     handleDeleteSelectionComment,
@@ -138,6 +140,8 @@ export const App: FC = () => {
     showDropVideo, setShowDropVideo
   } = useAppUI({ isLoading, isEmbedding, activeJobCount, files, chatHistory, jobTimers, setJobTimers });
 
+  const { generateContextualDossier } = useDossierAI();
+
   // ── Combined undo / redo ────────────────────────────────
   const handleUndo = () => { undo(); undoCaseFile(); };
   const handleRedo = () => { redoChatFn(); redoCaseFile(); };
@@ -151,6 +155,11 @@ export const App: FC = () => {
       } else if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey)) && !isLoading) {
         e.preventDefault();
         redoChatFn(); redoCaseFile();
+      } else if ((e.ctrlKey || e.metaKey) && e.key === '\\') {
+        e.preventDefault();
+        const selection = window.getSelection();
+        const text = selection?.toString().trim() || '';
+        generateContextualDossier(text);
       }
     };
     window.addEventListener('keydown', handler);
@@ -390,12 +399,22 @@ export const App: FC = () => {
             </div>
           ) : (
             // Initial button
-            <button className="selection-popover-btn" onClick={handleOpenSelectionCommentInput}>
-              <Edit2 size={14} /> Review Selection
-            </button>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <button className="selection-popover-btn" onClick={handleOpenSelectionCommentInput}>
+                <Edit2 size={14} /> Review Selection
+              </button>
+              <button className="selection-popover-btn" onClick={() => {
+                generateContextualDossier(selectionPopover.text);
+                setSelectionPopover(null);
+              }}>
+                <FileText size={14} /> Compile Dossier
+              </button>
+            </div>
           )}
         </div>
       )}
+
+      <ToastContainer />
     </div>
   );
 };
