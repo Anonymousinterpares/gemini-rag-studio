@@ -55,12 +55,14 @@
 .message-container {
   display: flex;
   flex-direction: column;
-  max-width: 90%;
+  max-width: 100%;
   width: 100%;
 }
 
 .message-container.user {
   align-self: flex-end;
+  width: fit-content;
+  max-width: 85%;
 }
 
 .message-container.model {
@@ -101,6 +103,8 @@
 
 .chat-message.user {
   flex-direction: row-reverse;
+  background-color: #475569;
+  color: white;
 }
 
 .chat-message.model {
@@ -145,20 +149,28 @@
 /* Message Actions Container */
 .message-actions {
   display: flex;
+  flex-direction: column;
+  align-self: stretch;
+  margin-top: 0;
+}
+
+.message-actions-inner {
+  display: flex;
+  flex-direction: column;
   gap: 0.25rem;
-  margin-top: 0.5rem;
-  justify-content: flex-end;
+  position: sticky;
+  top: calc(50vh - 60px);
   opacity: 0.4;
   transition: opacity 0.2s;
 }
 
-.message-container:hover .message-actions {
+.message-container:hover .message-actions-inner {
   opacity: 1;
 }
 
-.chat-message.user .message-actions {
-  flex-direction: row-reverse;
-  justify-content: flex-start;
+.chat-message.user .message-actions-inner {
+  flex-direction: column;
+  /* User stays column but on left side due to flex-direction: row-reverse on the parent */
 }
 
 /* Edit Message Area */
@@ -999,5 +1011,45 @@
 
 .icon-btn.action-x:hover {
   background: rgba(255, 255, 255, 0.2);
+}
+
+.chat-message.user {
+  background: #475569;
+}
+
+.message-actions {
+  flex-direction: column;
+  align-self: stretch;
+}
+
+.message-actions-inner {
+  position: sticky;
+  top: 0;
+  /* or any other value for sticky behavior */
+}
+
+.scroll-to-bottom-btn {
+  position: absolute;
+  bottom: calc(100% + 15px);
+  right: 20px;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background-color: #000;
   color: white;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  z-index: 50;
+  transition: background-color 0.2s, transform 0.2s;
+  opacity: 0.8;
+}
+
+.scroll-to-bottom-btn:hover {
+  background-color: #222;
+  transform: scale(1.05);
+  opacity: 1;
 }

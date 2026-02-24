@@ -8,7 +8,7 @@
     # 2.2. Create story plot analysis and summary. Critical features:
         - applicaiton engine should be able to see chronology without mixups (know what part of analysed document e.g. a book, is earlier and which is later in the book) -- written chronology
         - app. should be able to analyse content to see if written chronology fully aligns with actual chronology, e.g. in a book, there can be parts (chapters, paragraphs, sections) which relate to the past compared with current chain of events -- engine & workflow needed to detect it
-        - standard RAG searcjh would NOT suffice to detect full plot without missing any information -- anakysis/brainstorm on how to maximize accuracy without pushing whole book context to LLM
+        - standard RAG searcjh would NOT suffice to detect full plot without missing any information -- anakysis/brainstorm on how to maximize accuracy without pushing whole book context to LLM #4f46e5
     # 2.3. rebuild/expand the applciation to enable it beeing an enterprise grade RAG system which would be able to handle tens, hundreds or even thousands of documents. Critical features:
         - robustness
         - ability to cope with even extremally large datasets

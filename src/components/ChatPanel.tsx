@@ -1,5 +1,5 @@
-import { FC } from 'react';
-import { ChevronLeft, ChevronRight, FileText, FolderOpen, FolderTree } from 'lucide-react';
+import { FC, useState, useRef, useCallback, useEffect } from 'react';
+import { ChevronLeft, ChevronRight, FileText, FolderOpen, FolderTree, ChevronDown } from 'lucide-react';
 import { ChatMessage, AppFile, TokenUsage } from '../types';
 import { MessageList } from './Chat/MessageList';
 import { ChatInputForm } from './Chat/ChatInputForm';
@@ -55,6 +55,21 @@ export const ChatPanel: FC<ChatPanelProps> = ({
     undo, redo, canUndo, canRedo,
     onLoadCaseFile, onOpenCaseFile, hasCaseFile, isDossierOpen, setIsDossierOpen
 }) => {
+    const scrollRef = useRef<HTMLDivElement>(null);
+    const [showScrollDown, setShowScrollDown] = useState(false);
+
+    const handleScroll = useCallback(() => {
+        if (scrollRef.current) {
+            const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
+            setShowScrollDown(scrollHeight - scrollTop - clientHeight > 100);
+        }
+    }, []);
+
+    // Also check on chatHistory changes in case scrollHeight grows
+    useEffect(() => {
+        handleScroll();
+    }, [chatHistory, handleScroll]);
+
     return (
         <div className='panel chat-panel'>
             <div className='chat-panel-header' style={{ justifyContent: 'space-between', display: 'flex' }}>
@@ -93,7 +108,7 @@ export const ChatPanel: FC<ChatPanelProps> = ({
                     <button className='background-btn' onClick={() => setAppSettings((p: import('../config').AppSettings) => ({ ...p, backgroundIndex: (p.backgroundIndex + 1) % (backgroundImages.length + 1) }))}><ChevronRight size={16} /></button>
                 </div>
             </div>
-            <div className='panel-content' onClick={handleSourceClick} style={{ backgroundImage: backgroundImages[appSettings.backgroundIndex - 1] ? `url('${backgroundImages[appSettings.backgroundIndex - 1]}')` : 'none', backgroundSize: 'cover' }}>
+            <div className='panel-content' ref={scrollRef} onScroll={handleScroll} onClick={handleSourceClick} style={{ backgroundImage: backgroundImages[appSettings.backgroundIndex - 1] ? `url('${backgroundImages[appSettings.backgroundIndex - 1]}')` : 'none', backgroundSize: 'cover' }}>
                 <MessageList
                     chatHistory={chatHistory}
                     appSettings={appSettings}
@@ -110,24 +125,40 @@ export const ChatPanel: FC<ChatPanelProps> = ({
                     handlers={handlers}
                 />
             </div>
-            <ChatInputForm
-                appSettings={appSettings}
-                setAppSettings={setAppSettings}
-                userInput={userInput}
-                setUserInput={setUserInput}
-                isLoading={isLoading}
-                activeJobCount={activeJobCount}
-                files={files}
-                chatHistory={chatHistory}
-                handleSubmit={handleSubmit}
-                stopGeneration={stopGeneration}
-                caseFileState={caseFileState}
-                setCaseFileState={setCaseFileState}
-                submitQuery={submitQuery}
-                tokenUsage={tokenUsage}
-                currentContextTokens={currentContextTokens}
-                undo={undo} redo={redo} canUndo={canUndo} canRedo={canRedo}
-            />
+
+            <div style={{ position: 'relative', flexShrink: 0 }}>
+                {showScrollDown && (
+                    <button
+                        className="scroll-to-bottom-btn"
+                        onClick={() => {
+                            if (scrollRef.current) {
+                                scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
+                            }
+                        }}
+                        title="Scroll to bottom"
+                    >
+                        <ChevronDown size={22} strokeWidth={3} color="#ffffff" stroke="#ffffff" />
+                    </button>
+                )}
+                <ChatInputForm
+                    appSettings={appSettings}
+                    setAppSettings={setAppSettings}
+                    userInput={userInput}
+                    setUserInput={setUserInput}
+                    isLoading={isLoading}
+                    activeJobCount={activeJobCount}
+                    files={files}
+                    chatHistory={chatHistory}
+                    handleSubmit={handleSubmit}
+                    stopGeneration={stopGeneration}
+                    caseFileState={caseFileState}
+                    setCaseFileState={setCaseFileState}
+                    submitQuery={submitQuery}
+                    tokenUsage={tokenUsage}
+                    currentContextTokens={currentContextTokens}
+                    undo={undo} redo={redo} canUndo={canUndo} canRedo={canRedo}
+                />
+            </div>
         </div>
     );
 };

@@ -1,4 +1,4 @@
-import { FC } from 'react';
+import { FC, useState, useEffect } from 'react';
 import { Bot, User, Check, XCircle, Trash2, RefreshCw, Edit2, Copy, Download, FolderOpen, Plus } from 'lucide-react';
 import { ChatMessage } from '../../types';
 import { sectionizeMessage } from '../../utils/chatUtils';
@@ -61,6 +61,50 @@ export const MessageItem: FC<MessageItemProps> = ({
     msg, i, isLast, appSettings, isLoading, isEmbedding, editingIndex, editingContent, setEditingContent,
     activeCommentInput, commentText, hoveredSelectionId, rootDirectoryHandle, chatHistory, handlers
 }) => {
+    // Typewriter effect state
+    const [displayLength, setDisplayLength] = useState(() => (isLast && msg.role === 'model') ? 0 : (msg.content?.length || 0));
+    const [isTyping, setIsTyping] = useState(false);
+
+    useEffect(() => {
+        if (isLast && msg.role === 'model' && msg.content && displayLength < msg.content.length) {
+            setIsTyping(true);
+        } else if (!isLast || msg.role !== 'model') {
+            setDisplayLength(msg.content?.length || 0);
+            setIsTyping(false);
+        }
+    }, [msg.content, isLast, msg.role]);
+
+    useEffect(() => {
+        if (isTyping && msg.content) {
+            const interval = setInterval(() => {
+                setDisplayLength(prev => {
+                    if (prev >= msg.content!.length) {
+                        setIsTyping(false);
+                        clearInterval(interval);
+                        return msg.content!.length;
+                    }
+                    // Advance by one "word" (up to the next space/newline)
+                    const nextSpace = msg.content!.indexOf(' ', prev + 1);
+                    const nextNewline = msg.content!.indexOf('\n', prev + 1);
+
+                    let nextIdx = msg.content!.length;
+                    if (nextSpace !== -1 && nextSpace < nextIdx) nextIdx = nextSpace;
+                    if (nextNewline !== -1 && nextNewline < nextIdx) nextIdx = nextNewline;
+
+                    // Add the space/newline character itself
+                    if (nextIdx < msg.content!.length) nextIdx++;
+
+                    return nextIdx;
+                });
+            }, 10);
+            return () => clearInterval(interval);
+        }
+    }, [isTyping, msg.content]);
+
+    const activeContent = (isLast && msg.role === 'model' && isTyping)
+        ? (msg.content || '').substring(0, displayLength)
+        : msg.content;
+
     return (
         <div className={`message-container ${msg.role}`} onMouseUp={handlers.handleMouseUp(i)}>
             <div className={`chat-message ${msg.role} bubble-${appSettings.chatBubbleColor}`}>
@@ -83,7 +127,9 @@ export const MessageItem: FC<MessageItemProps> = ({
                         <div className="message-row">
                             <div className="message-main-content">
                                 {msg.role === 'model' ? (() => {
-                                    const sections = msg.sections || sectionizeMessage(msg.content || '');
+                                    const sections = (isLast && msg.role === 'model' && isTyping)
+                                        ? sectionizeMessage(activeContent || '')
+                                        : (msg.sections || sectionizeMessage(msg.content || ''));
                                     return (
                                         <div className='message-markup'>
                                             {msg.pendingEdits?.some(e => e.sectionId === 'REWRITE') ? (
@@ -112,7 +158,7 @@ export const MessageItem: FC<MessageItemProps> = ({
                                                         <div className="message-main-content">
                                                             <div className="message-section-wrapper">
                                                                 <div className={`message-section ${pendingEdit ? 'highlight-pending' : ''}`}>
-                                                                    <div dangerouslySetInnerHTML={handlers.renderModelMessage(section.content, msg.content, msg.selectionComments?.filter(sc => sc.sectionId === section.id), hoveredSelectionId)} />
+                                                                    <div dangerouslySetInnerHTML={handlers.renderModelMessage(section.content, activeContent, msg.selectionComments?.filter(sc => sc.sectionId === section.id), hoveredSelectionId)} />
                                                                     {pendingEdit && (() => {
                                                                         let previewContent: string | null = null;
                                                                         if (pendingEdit.tableEdit) {
@@ -251,15 +297,17 @@ export const MessageItem: FC<MessageItemProps> = ({
                     )}
                 </div>
                 <div className="message-actions">
-                    <button onClick={() => handlers.handleCopy(i)} title="Copy"><Copy size={14} /></button>
-                    <button onClick={() => handlers.handleDownloadAction(i)} title="Download"><Download size={14} /></button>
-                    {msg.role === 'user' && editingIndex !== i && (
-                        <>
-                            <button onClick={() => handlers.handleStartEdit(i, msg.content || '')} title="Edit"><Edit2 size={14} /></button>
-                            <button onClick={() => handlers.handleRedo(i)} disabled={isLoading || isEmbedding} title="Redo"><RefreshCw size={14} /></button>
-                        </>
-                    )}
-                    <button onClick={() => handlers.handleRemoveMessage(i)} title="Remove"><Trash2 size={14} /></button>
+                    <div className="message-actions-inner">
+                        <button onClick={() => handlers.handleCopy(i)} title="Copy"><Copy size={14} /></button>
+                        <button onClick={() => handlers.handleDownloadAction(i)} title="Download"><Download size={14} /></button>
+                        {msg.role === 'user' && editingIndex !== i && (
+                            <>
+                                <button onClick={() => handlers.handleStartEdit(i, msg.content || '')} title="Edit"><Edit2 size={14} /></button>
+                                <button onClick={() => handlers.handleRedo(i)} disabled={isLoading || isEmbedding} title="Redo"><RefreshCw size={14} /></button>
+                            </>
+                        )}
+                        <button onClick={() => handlers.handleRemoveMessage(i)} title="Remove"><Trash2 size={14} /></button>
+                    </div>
                 </div>
             </div>
         </div>
