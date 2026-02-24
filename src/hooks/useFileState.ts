@@ -29,12 +29,12 @@ export const useFileState = ({
   vectorStore,
   resetLLMResponseState,
 }: UseFileStateProps) => {
-  const { 
-    files, 
-    setFiles, 
-    setIsDragging, 
-    setShowFolderReviewModal, 
-    setFolderReviewTreeData, 
+  const {
+    files,
+    setFiles,
+    setIsDragging,
+    setShowFolderReviewModal,
+    setFolderReviewTreeData,
     setFilesToProcessAfterReview,
     filesToProcessAfterReview,
     removeFile,
@@ -43,7 +43,7 @@ export const useFileState = ({
 
   const { appSettings, selectedModel, selectedProvider, apiKeys } = useSettingsStore();
   const { setChatHistory, setTokenUsage } = useChatStore();
-  const { setIsEmbedding, setJobTimers } = useComputeStore();
+  const { setIsEmbedding, setJobTimers, setActiveJobCount } = useComputeStore();
 
   const streamFileToCoordinator = useCallback(async (appFile: AppFile) => {
     if (!coordinator?.current || !appFile.file) return;
@@ -51,64 +51,64 @@ export const useFileState = ({
     const jobName = `Ingestion: ${appFile.id}`;
     setJobTimers((prev) => ({ ...prev, [jobName]: { startTime: Date.now(), elapsed: 0, isActive: true } }));
     setFiles((prev: AppFile[]) => prev.map((f: AppFile) => f.id === appFile.id ? { ...f, summaryStatus: 'in_progress' } : f));
-    
+
     // Create an empty ingestion job first
     const jobId = coordinator.current.addJob(jobName, [], false);
-    
+
     const reader = appFile.file.stream().getReader();
     const decoder = new TextDecoder();
     let isFirst = true;
 
     try {
-        // eslint-disable-next-line no-constant-condition
-        while (true) {
-            // BACKPRESSURE: If we have too many pending tasks for this job, wait.
-            // This prevents reading the entire 500MB file into memory if workers are slow.
-            while (coordinator.current.getPendingTaskCount(jobId) > 10) {
-                await new Promise(resolve => setTimeout(resolve, 100));
-            }
-
-            const { done, value } = await reader.read();
-            if (done) break;
-
-            const text = decoder.decode(value, { stream: true });
-            
-            coordinator.current.addTasksToJob(jobId, [{
-                id: `${appFile.id}-stream-${Date.now()}-${Math.random()}`,
-                priority: TaskPriority.P1_Primary,
-                payload: {
-                    type: TaskType.StreamChunk,
-                    docId: appFile.id,
-                    chunkText: text,
-                    isFirst,
-                    name: appFile.name,
-                    lastModified: appFile.lastModified,
-                    size: appFile.size,
-                }
-            }]);
-            isFirst = false;
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        // BACKPRESSURE: If we have too many pending tasks for this job, wait.
+        // This prevents reading the entire 500MB file into memory if workers are slow.
+        while (coordinator.current.getPendingTaskCount(jobId) > 10) {
+          await new Promise(resolve => setTimeout(resolve, 100));
         }
 
-        // Finalize the stream
-        coordinator.current.addTasksToJob(jobId, [{
-            id: `${appFile.id}-complete-${Date.now()}`,
-            priority: TaskPriority.P1_Primary,
-            payload: {
-                type: TaskType.CompleteStream,
-                docId: appFile.id,
-                name: appFile.name,
-                lastModified: appFile.lastModified,
-                size: appFile.size,
-                chunkSize: 1000,
-                chunkOverlap: 200,
-            }
-        }]);
+        const { done, value } = await reader.read();
+        if (done) break;
 
-        // Trigger layout calculation for the streamed file
-        const layoutTasks = await createFileTasks(appFile, 'layout', coordinator.current, docFontSize, selectedModel, selectedProvider, apiKeys, appSettings);
-        coordinator.current.addJob(`Layout: ${appFile.id}`, layoutTasks);
+        const text = decoder.decode(value, { stream: true });
+
+        coordinator.current.addTasksToJob(jobId, [{
+          id: `${appFile.id}-stream-${Date.now()}-${Math.random()}`,
+          priority: TaskPriority.P1_Primary,
+          payload: {
+            type: TaskType.StreamChunk,
+            docId: appFile.id,
+            chunkText: text,
+            isFirst,
+            name: appFile.name,
+            lastModified: appFile.lastModified,
+            size: appFile.size,
+          }
+        }]);
+        isFirst = false;
+      }
+
+      // Finalize the stream
+      coordinator.current.addTasksToJob(jobId, [{
+        id: `${appFile.id}-complete-${Date.now()}`,
+        priority: TaskPriority.P1_Primary,
+        payload: {
+          type: TaskType.CompleteStream,
+          docId: appFile.id,
+          name: appFile.name,
+          lastModified: appFile.lastModified,
+          size: appFile.size,
+          chunkSize: 1000,
+          chunkOverlap: 200,
+        }
+      }]);
+
+      // Trigger layout calculation for the streamed file
+      const layoutTasks = await createFileTasks(appFile, 'layout', coordinator.current, docFontSize, selectedModel, selectedProvider, apiKeys, appSettings);
+      coordinator.current.addJob(`Layout: ${appFile.id}`, layoutTasks);
     } catch (e) {
-        console.error(`[streamFileToCoordinator] Error streaming file ${appFile.id}:`, e);
+      console.error(`[streamFileToCoordinator] Error streaming file ${appFile.id}:`, e);
     }
   }, [coordinator, setJobTimers, setFiles, docFontSize, selectedModel, selectedProvider, apiKeys, appSettings]);
 
@@ -152,10 +152,10 @@ export const useFileState = ({
         const existingLayoutJobs = new Set(jobs.filter(j => j.name.startsWith('Layout: ')).map(j => j.name));
         for (const nf of uniqueNewFiles) {
           if (nf.content) { // Only add layout jobs if we have content
-              const jobName = `Layout: ${nf.id}`;
-              if (existingLayoutJobs.has(jobName)) continue;
-              const layoutTasks = await createFileTasks(nf, 'layout', coordinator.current, docFontSize, selectedModel, selectedProvider, apiKeys, appSettings);
-              coordinator.current.addJob(jobName, layoutTasks);
+            const jobName = `Layout: ${nf.id}`;
+            if (existingLayoutJobs.has(jobName)) continue;
+            const layoutTasks = await createFileTasks(nf, 'layout', coordinator.current, docFontSize, selectedModel, selectedProvider, apiKeys, appSettings);
+            coordinator.current.addJob(jobName, layoutTasks);
           }
         }
       } catch (e) {
@@ -177,13 +177,13 @@ export const useFileState = ({
             vectorStore?.current?.setIndexes(file.id, cachedEmbedding.entities, cachedEmbedding.structure);
           } else if (coordinator.current) {
             coordinator.current.addJob(`Index: ${file.id}`, [{
-                id: `${file.id}-index-cache`,
-                priority: TaskPriority.P1_Primary,
-                payload: {
-                    type: TaskType.IndexDocument,
-                    docId: file.id,
-                    parentChunks: cachedEmbedding.parentChunks,
-                }
+              id: `${file.id}-index-cache`,
+              priority: TaskPriority.P1_Primary,
+              payload: {
+                type: TaskType.IndexDocument,
+                docId: file.id,
+                parentChunks: cachedEmbedding.parentChunks,
+              }
             }]);
           }
         } else if (file.content) { // Need content for legacy path
@@ -193,17 +193,17 @@ export const useFileState = ({
               vectorStore?.current?.addChunkEmbedding(chunks[i], file.id, cachedEmbedding.embedding[i]);
             }
             if (cachedEmbedding.entities && cachedEmbedding.structure) {
-                vectorStore?.current?.setIndexes(file.id, cachedEmbedding.entities, cachedEmbedding.structure);
+              vectorStore?.current?.setIndexes(file.id, cachedEmbedding.entities, cachedEmbedding.structure);
             } else if (coordinator.current) {
-                coordinator.current.addJob(`Index: ${file.id}`, [{
-                    id: `${file.id}-index-cache-legacy`,
-                    priority: TaskPriority.P1_Primary,
-                    payload: {
-                        type: TaskType.IndexDocument,
-                        docId: file.id,
-                        parentChunks: chunks,
-                    }
-                }]);
+              coordinator.current.addJob(`Index: ${file.id}`, [{
+                id: `${file.id}-index-cache-legacy`,
+                priority: TaskPriority.P1_Primary,
+                payload: {
+                  type: TaskType.IndexDocument,
+                  docId: file.id,
+                  parentChunks: chunks,
+                }
+              }]);
             }
           } else {
             filesToProcess.push(file);
@@ -215,8 +215,8 @@ export const useFileState = ({
           // Summary might need content if we don't have enough embeddings or if it's the legacy path
           // For now, let's only trigger summary if content is available or it's a new file
           if (file.content) {
-              const summaryTasks = await createFileTasks(file, 'summary', coordinator.current, docFontSize, selectedModel, selectedProvider, apiKeys, appSettings);
-              coordinator.current.addJob(`Summary: ${file.id}`, summaryTasks);
+            const summaryTasks = await createFileTasks(file, 'summary', coordinator.current, docFontSize, selectedModel, selectedProvider, apiKeys, appSettings);
+            coordinator.current.addJob(`Summary: ${file.id}`, summaryTasks);
           }
         }
       }
@@ -228,16 +228,16 @@ export const useFileState = ({
 
       for (const file of filesToProcess) {
         if (!file.content && file.file && !file.name.endsWith('.docx') && !file.name.endsWith('.pdf')) {
-            // New Streaming Path for text files without pre-loaded content
-            await streamFileToCoordinator(file);
+          // New Streaming Path for text files without pre-loaded content
+          await streamFileToCoordinator(file);
         } else {
-            // Legacy Path (for .docx, .pdf, or small text files already loaded)
-            const jobName = `Ingestion: ${file.id}`;
-            setJobTimers((prev) => ({ ...prev, [jobName]: { startTime: Date.now(), elapsed: 0, isActive: true } }));
-            if (coordinator.current) {
-              const ingestionTasks = await createFileTasks(file, 'ingestion', coordinator.current, docFontSize, selectedModel, selectedProvider, apiKeys, appSettings);
-              coordinator.current.addJob(jobName, ingestionTasks);
-            }
+          // Legacy Path (for .docx, .pdf, or small text files already loaded)
+          const jobName = `Ingestion: ${file.id}`;
+          setJobTimers((prev) => ({ ...prev, [jobName]: { startTime: Date.now(), elapsed: 0, isActive: true } }));
+          if (coordinator.current) {
+            const ingestionTasks = await createFileTasks(file, 'ingestion', coordinator.current, docFontSize, selectedModel, selectedProvider, apiKeys, appSettings);
+            coordinator.current.addJob(jobName, ingestionTasks);
+          }
         }
       }
     }
@@ -265,7 +265,7 @@ export const useFileState = ({
         const fileEntry = entry as FileSystemFileEntry;
         const file = await new Promise<File>((resolve) => fileEntry.file(resolve));
         if (!isAllowedFileType(file.name)) return;
-        
+
         let content: string | undefined = undefined;
         // For non-text documents, we still read them fully for now as streaming them is complex.
         if (file.name.endsWith('.docx')) {
@@ -285,19 +285,19 @@ export const useFileState = ({
         } else {
           // For regular text files, we don't read them yet if they are large
           if (file.size < 1024 * 1024) { // Read if < 1MB for immediate use
-             try { content = await file.text(); } catch { return; }
+            try { content = await file.text(); } catch { return; }
           }
         }
 
         collectedFiles.push({
           id: generateFileId({ path: fullPath, name: file.name, size: file.size, lastModified: file.lastModified }),
-          path: fullPath, 
-          name: file.name, 
-          content, 
+          path: fullPath,
+          name: file.name,
+          content,
           file, // NEW: Store the File object
-          lastModified: file.lastModified, 
-          size: file.size, 
-          summaryStatus: 'missing', 
+          lastModified: file.lastModified,
+          size: file.size,
+          summaryStatus: 'missing',
           language: 'unknown',
         });
       } else if (entry.isDirectory) {
@@ -378,9 +378,9 @@ export const useFileState = ({
   const handleClearFiles = useCallback((initialHistory: ChatMessage[]) => {
     if (window.confirm('Clear all?')) {
       clearFiles(); setChatHistory(initialHistory); setTokenUsage({ promptTokens: 0, completionTokens: 0 });
-      setJobTimers({}); vectorStore?.current?.clear(); resetLLMResponseState();
+      setJobTimers({}); setActiveJobCount(0); vectorStore?.current?.clear(); resetLLMResponseState();
     }
-  }, [clearFiles, setChatHistory, setTokenUsage, setJobTimers, vectorStore, resetLLMResponseState]);
+  }, [clearFiles, setChatHistory, setTokenUsage, setJobTimers, setActiveJobCount, vectorStore, resetLLMResponseState]);
 
   const handleRemoveFile = useCallback((fileToRemove: AppFile) => {
     removeFile(fileToRemove.id); vectorStore?.current?.removeDocument(fileToRemove.id);
