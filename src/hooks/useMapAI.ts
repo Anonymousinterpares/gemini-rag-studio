@@ -492,20 +492,9 @@ export const useMapAI = () => {
         const allNodes = mapStore.nodes;
         const allEdges = mapStore.edges;
 
-        // Build neighborhood
-        let targetNodes: MapNode[];
-        if (nodeIds && nodeIds.length > 0) {
-            const targetSet = new Set(nodeIds);
-            // Include 1-hop neighbors
-            const neighborIds = new Set<string>(nodeIds);
-            allEdges.forEach(e => {
-                if (targetSet.has(e.source)) neighborIds.add(e.target);
-                if (targetSet.has(e.target)) neighborIds.add(e.source);
-            });
-            targetNodes = allNodes.filter(n => neighborIds.has(n.id));
-        } else {
-            targetNodes = allNodes;
-        }
+        // By default, provide all nodes so the LLM has context to find new connections across the map.
+        // Token warnings will catch it if it's too large.
+        let targetNodes = allNodes;
 
         const estimatedTokens = estimateNodeTokens(targetNodes);
 
@@ -527,11 +516,11 @@ export const useMapAI = () => {
                 const messages: ChatMessage[] = [
                     {
                         role: 'system',
-                        content: `${SYSTEM_BASE}\n\nTask: Review the connections between the given nodes for accuracy. Remove incorrect edges using remove_map_edge. Add missing connections using add_map_edges.`
+                        content: `${SYSTEM_BASE}\n\nTask: Review the connections between the given nodes for accuracy. Remove incorrect edges using remove_map_edge. Add missing connections using add_map_edges.\nCRITICAL: If the edge list is empty, or if specific nodes are provided, your primary job is to discover NEW logical connections between the nodes based on their descriptions. Do not output empty just because there are no existing edges.`
                     },
                     {
                         role: 'user',
-                        content: `Nodes to review:\n${nodeList}\n\nExisting edges:\n${edgeList}`
+                        content: `${nodeIds && nodeIds.length > 0 ? `Target Nodes to Focus On: ${nodeIds.join(', ')}\n\n` : ''}Available Nodes:\n${nodeList}\n\nExisting edges:\n${edgeList ? edgeList : '(No existing edges yet. Please look for relationships to establish!)'}`
                     }
                 ];
 
@@ -567,15 +556,15 @@ export const useMapAI = () => {
                 },
                 onConfirmTrimmed: () => {
                     setReviewTokenWarning(null);
-                    // Keep only top 15 by edge degree
-                    const degreeCounts = new Map<string, number>();
-                    allEdges.forEach(e => {
-                        degreeCounts.set(e.source, (degreeCounts.get(e.source) || 0) + 1);
-                        degreeCounts.set(e.target, (degreeCounts.get(e.target) || 0) + 1);
-                    });
+                    // Keep the requested target nodes absolutely safe from trimming
+                    const targetSet = new Set(nodeIds || []);
                     const trimmed = [...targetNodes]
-                        .sort((a, b) => (degreeCounts.get(b.id) || 0) - (degreeCounts.get(a.id) || 0))
-                        .slice(0, 15);
+                        .sort((a, b) => {
+                            if (targetSet.has(a.id) && !targetSet.has(b.id)) return -1;
+                            if (targetSet.has(b.id) && !targetSet.has(a.id)) return 1;
+                            return 0; // if both are targets or neither, could sort by degree, but this is fine
+                        })
+                        .slice(0, 30); // Arbitrary trim for connections
                     runReview(trimmed);
                 },
                 onCancel: () => setReviewTokenWarning(null),
