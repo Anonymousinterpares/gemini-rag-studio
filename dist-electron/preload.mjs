@@ -1,7 +1,7 @@
-import { contextBridge, ipcRenderer } from "electron";
-contextBridge.exposeInMainWorld("api", {
-  saveChatSession: (sessionData) => ipcRenderer.invoke("save-chat-session", sessionData),
-  loadAllChatSessions: () => ipcRenderer.invoke("load-all-chat-sessions"),
-  loadChatSession: (id) => ipcRenderer.invoke("load-chat-session", id),
-  deleteChatSession: (id) => ipcRenderer.invoke("delete-chat-session", id)
+import { contextBridge as o, ipcRenderer as s } from "electron";
+o.exposeInMainWorld("api", {
+  saveChatSession: (e) => s.invoke("save-chat-session", e),
+  loadAllChatSessions: () => s.invoke("load-all-chat-sessions"),
+  loadChatSession: (e) => s.invoke("load-chat-session", e),
+  deleteChatSession: (e) => s.invoke("delete-chat-session", e)
 });

@@ -1,4 +1,5 @@
 import { useCallback, useState } from 'react';
+import * as dagre from '@dagrejs/dagre';
 import { useMapStore } from '../store/useMapStore';
 import { useMapUpdateQueue } from '../store/useMapUpdateQueue';
 import { useSettingsStore } from '../store';
@@ -148,23 +149,37 @@ function gridLayout(nodes: { id: string; label: string; entityType?: string; des
     }));
 }
 
-function radialLayout(nodes: { id: string; label: string; entityType?: string; description?: string; sources?: MapNodeSource[] }[], cx: number, cy: number): MapNode[] {
-    const radius = 250;
-    return nodes.map((n, i) => {
-        const angle = (2 * Math.PI / Math.max(nodes.length, 1)) * i;
+// ─── Auto-layout with Dagre ───────────────────────────────────────────────────
+function autoLayout(nodes: MapNode[], edges: MapEdge[], direction: 'TB' | 'LR' = 'LR'): MapNode[] {
+    const dagreGraph = new dagre.graphlib.Graph();
+    dagreGraph.setDefaultEdgeLabel(() => ({}));
+
+    // Typical node sizes (can be refined if nodes grow/shrink dynamically)
+    const nodeWidth = 260;
+    const nodeHeight = 80;
+
+    dagreGraph.setGraph({ rankdir: direction, nodesep: 80, ranksep: 120 });
+
+    nodes.forEach((node) => {
+        dagreGraph.setNode(node.id, { width: nodeWidth, height: nodeHeight });
+    });
+
+    edges.forEach((edge) => {
+        dagreGraph.setEdge(edge.source, edge.target);
+    });
+
+    dagre.layout(dagreGraph);
+
+    return nodes.map((node) => {
+        const nodeWithPosition = dagreGraph.node(node.id);
+        if (!nodeWithPosition) return node;
+
+        // Dagre positions are center point, React Flow needs top-left
         return {
-            id: n.id,
-            type: 'customEntity' as const,
+            ...node,
             position: {
-                x: cx + Math.cos(angle) * (radius + Math.random() * 40),
-                y: cy + Math.sin(angle) * (radius + Math.random() * 40),
-            },
-            data: {
-                label: n.label,
-                entityType: (n.entityType as MapNode['data']['entityType']) || 'person',
-                description: n.description,
-                sources: n.sources,
-                lastUpdatedAt: Date.now(),
+                x: nodeWithPosition.x - nodeWidth / 2,
+                y: nodeWithPosition.y - nodeHeight / 2,
             },
         };
     });
@@ -266,18 +281,47 @@ export const useMapAI = () => {
                 userContent += `\n\nContext:\n${caseFileText.substring(0, 12000)}`;
             }
 
-            const messages: ChatMessage[] = [
-                { role: 'system', content: SYSTEM_BASE },
+            mapStore.setProgress({ phase: 1, batchCurrent: 1, batchTotal: 1, label: 'Updating entities...' });
+
+            const phase1Messages: ChatMessage[] = [
+                { role: 'system', content: `${SYSTEM_BASE}\n\nTask: Extract or update entities based on the instruction. Use add_map_nodes and update_map_node. Do NOT add edges yet.` },
                 { role: 'user', content: userContent }
             ];
 
-            const response = await generateContent(selectedModel, apiKey, messages, [ADD_NODES_TOOL, UPDATE_NODE_TOOL, ADD_EDGES_TOOL, REMOVE_EDGE_TOOL]);
+            const phase1Response = await generateContent(selectedModel, apiKey, phase1Messages, [ADD_NODES_TOOL, UPDATE_NODE_TOOL]);
 
-            if (response.toolCalls?.length) {
-                const cx = contextNodeId ? (currentNodes.find(n => n.id === contextNodeId)?.position.x ?? 400) : 400;
-                const cy = contextNodeId ? (currentNodes.find(n => n.id === contextNodeId)?.position.y ?? 400) : 400;
-                applyToolCalls(response.toolCalls, mapStore, (nodes) => radialLayout(nodes, cx, cy));
+            if (phase1Response.toolCalls?.length) {
+                applyToolCalls(phase1Response.toolCalls, mapStore, (nodes) => gridLayout(nodes, currentNodes.length));
             }
+
+            // Phase 2: Connections
+            mapStore.setProgress({ phase: 2, batchCurrent: 1, batchTotal: 1, label: 'Connecting entities...' });
+
+            const updatedNodes = useMapStore.getState().nodes;
+            const updatedNodeList = updatedNodes.map(n => `${n.id}: ${n.data.label} (${n.data.entityType})`).join('\n');
+
+            let phase2UserContent = `Instruction: ${instruction}\n\nExisting Nodes:\n${updatedNodeList}\n\nTotal edges: ${currentEdges.length}`;
+            if (caseFileText) {
+                phase2UserContent += `\n\nContext:\n${caseFileText.substring(0, 12000)}`;
+            }
+
+            const phase2Messages: ChatMessage[] = [
+                { role: 'system', content: `${SYSTEM_BASE}\n\nTask: ONLY wire connections between the existing nodes based on the instruction. Use add_map_edges and remove_map_edge only. Do NOT add new nodes.` },
+                { role: 'user', content: phase2UserContent }
+            ];
+
+            const phase2Response = await generateContent(selectedModel, apiKey, phase2Messages, [ADD_EDGES_TOOL, REMOVE_EDGE_TOOL]);
+
+            if (phase2Response.toolCalls?.length) {
+                applyToolCalls(phase2Response.toolCalls, mapStore, (nodes) => gridLayout(nodes, updatedNodes.length));
+
+                // Auto-layout after edge addition
+                const finalNodes = useMapStore.getState().nodes;
+                const finalEdges = useMapStore.getState().edges;
+                useMapStore.setState({ nodes: autoLayout(finalNodes, finalEdges, 'LR') });
+            }
+
+            addToast('Map updated successfully.', 'success');
         } catch (error) {
             console.error('[MapAI] handleMapInstruction error:', error);
         } finally {
@@ -362,7 +406,7 @@ export const useMapAI = () => {
             const phase2Messages: ChatMessage[] = [
                 {
                     role: 'system',
-                    content: `${SYSTEM_BASE}\n\nTask: ONLY wire connections between the existing nodes listed below. Use add_map_edges and update_map_node only. Do NOT add new nodes.`
+                    content: `${SYSTEM_BASE}\n\nTask: ONLY wire connections between the existing nodes listed below. Use add_map_edges only. Do NOT add new nodes.`
                 },
                 {
                     role: 'user',
@@ -370,17 +414,68 @@ export const useMapAI = () => {
                 }
             ];
 
-            const phase2Response = await generateContent(selectedModel, apiKey, phase2Messages, [ADD_EDGES_TOOL, UPDATE_NODE_TOOL]);
+            const runPhase2 = async (nodesToKeep?: MapNode[]) => {
+                try {
+                    // Update connection list based on trimmed nodes if necessary
+                    let modifiedMessages = phase2Messages;
+                    if (nodesToKeep) {
+                        const trimmedList = nodesToKeep.map(n => `${n.id}: ${n.data.label}`).join('\n');
+                        modifiedMessages = [
+                            phase2Messages[0],
+                            { role: 'user', content: `Existing nodes (TRIMMED to fit context):\n${trimmedList}\n\nCase file:\n${fullText.substring(0, 15000)}` }
+                        ];
+                    }
 
-            if (phase2Response.toolCalls?.length) {
-                applyToolCalls(phase2Response.toolCalls, mapStore, (nodes) => gridLayout(nodes, currentNodes.length));
+                    const phase2Response = await generateContent(selectedModel, apiKey, modifiedMessages, [ADD_EDGES_TOOL]);
+
+                    if (phase2Response.toolCalls?.length) {
+                        applyToolCalls(phase2Response.toolCalls, mapStore, (nodes) => gridLayout(nodes, currentNodes.length));
+                    }
+
+                    const finalNodes = useMapStore.getState().nodes;
+                    const finalEdges = useMapStore.getState().edges;
+                    if (finalNodes.length > 0) {
+                        useMapStore.setState({ nodes: autoLayout(finalNodes, finalEdges, 'LR') });
+                    }
+
+                    mapStore.setProgress({ phase: 2, batchCurrent: 1, batchTotal: 1, label: 'Done' });
+                } catch (error) {
+                    console.error('[MapAI] Phase 2 error:', error);
+                } finally {
+                    setIsMapProcessing(false);
+                    mapStore.releaseLock();
+                    mapStore.setProgress(null);
+                    drainUpdateQueue();
+                }
+            };
+
+            const estimatedTokens = estimateNodeTokens(currentNodes) + Math.floor(fullText.length / 4);
+            if (estimatedTokens > 8000) {
+                setReviewTokenWarning({
+                    estimatedTokens,
+                    onConfirmAll: () => {
+                        setReviewTokenWarning(null);
+                        runPhase2();
+                    },
+                    onConfirmTrimmed: () => {
+                        setReviewTokenWarning(null);
+                        // Sort by some heuristic (e.g., entity type priority or randomly keep a subset if too large)
+                        runPhase2(currentNodes.slice(0, 20)); // Arbitrary trim for initial generation phase 2
+                    },
+                    onCancel: () => {
+                        setReviewTokenWarning(null);
+                        setIsMapProcessing(false);
+                        mapStore.releaseLock();
+                        mapStore.setProgress(null);
+                        addToast('Map generation cancelled before Phase 2.', 'info');
+                    }
+                });
+            } else {
+                runPhase2();
             }
-
-            mapStore.setProgress({ phase: 2, batchCurrent: 1, batchTotal: 1, label: 'Done' });
 
         } catch (error) {
             console.error('[MapAI] generateMapFromDocument error:', error);
-        } finally {
             setIsMapProcessing(false);
             mapStore.releaseLock();
             mapStore.setProgress(null);
@@ -439,7 +534,13 @@ export const useMapAI = () => {
 
                 const response = await generateContent(selectedModel, apiKey, messages, [ADD_EDGES_TOOL, REMOVE_EDGE_TOOL, UPDATE_NODE_TOOL]);
                 if (response.toolCalls?.length) {
-                    applyToolCalls(response.toolCalls, mapStore, (nodes) => radialLayout(nodes, 400, 400));
+                    applyToolCalls(response.toolCalls, mapStore, (nodes) => gridLayout(nodes, allNodes.length));
+
+                    // Re-layout after significant edge changes
+                    const finalNodes = useMapStore.getState().nodes;
+                    const finalEdges = useMapStore.getState().edges;
+                    useMapStore.setState({ nodes: autoLayout(finalNodes, finalEdges, 'LR') });
+
                     addToast(`Map review complete: ${response.toolCalls.length} changes applied.`, 'success');
                 } else {
                     addToast('Map review complete: no changes needed.', 'info');

@@ -1,5 +1,5 @@
-import { FC } from 'react';
-import { Undo2, Redo2, Network, X, GitMerge, Loader } from 'lucide-react';
+import { FC, useState } from 'react';
+import { Undo2, Redo2, Network, X, GitMerge, Loader, Maximize2, Minimize2, Trash2 } from 'lucide-react';
 import { useMapStore } from '../../store/useMapStore';
 import { useMapAI } from '../../hooks/useMapAI';
 import { InvestigationMapCanvas } from './InvestigationMapCanvas';
@@ -40,11 +40,18 @@ const TokenBudgetWarning: FC<TokenWarningProps> = ({ estimatedTokens, onConfirmA
 );
 
 export const InvestigationMapPanel: FC<Props> = ({ onClose, onOpenDossierForNode }) => {
-    const { nodes, edges, undo, redo, undoStack, redoStack, progress, jobLock } = useMapStore();
+    const { nodes, edges, undo, redo, undoStack, redoStack, progress, jobLock, clearMap } = useMapStore();
     const { reviewMapConnections, reviewTokenWarning } = useMapAI();
+    const [isMaximized, setIsMaximized] = useState(false);
+
+    const handleClearMap = () => {
+        if (window.confirm("Are you sure you want to clear the entire map? This cannot be fully undone.")) {
+            clearMap();
+        }
+    };
 
     return (
-        <div className="investigation-map-panel">
+        <div className={`investigation-map-panel ${isMaximized ? 'maximized' : ''}`}>
 
             {/* ── Header ────────────────────────────────────────────────────── */}
             <div className="map-panel-header">
@@ -52,6 +59,14 @@ export const InvestigationMapPanel: FC<Props> = ({ onClose, onOpenDossierForNode
                     <Network size={18} />
                     <span className="map-panel-title">Investigation Map</span>
                     <span className="map-stat-badge">{nodes.length} nodes · {edges.length} edges</span>
+                    <button
+                        className="map-clear-btn"
+                        title="Clear entire map"
+                        onClick={handleClearMap}
+                        disabled={nodes.length === 0 || jobLock}
+                    >
+                        <Trash2 size={14} />
+                    </button>
                 </div>
 
                 {/* Progress bar */}
@@ -101,6 +116,13 @@ export const InvestigationMapPanel: FC<Props> = ({ onClose, onOpenDossierForNode
                         <Redo2 size={15} />
                     </button>
                     <div className="map-header-divider" />
+                    <button
+                        className="map-header-btn"
+                        title={isMaximized ? "Restore" : "Maximize"}
+                        onClick={() => setIsMaximized(!isMaximized)}
+                    >
+                        {isMaximized ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+                    </button>
                     <button className="map-header-btn" title="Close map panel" onClick={onClose}>
                         <X size={16} />
                     </button>
@@ -109,7 +131,9 @@ export const InvestigationMapPanel: FC<Props> = ({ onClose, onOpenDossierForNode
 
             {/* ── Canvas ────────────────────────────────────────────────────── */}
             <div className="map-panel-body">
-                <InvestigationMapCanvas onOpenDossierForNode={onOpenDossierForNode} />
+                <div className="map-canvas-container">
+                    <InvestigationMapCanvas onOpenDossierForNode={onOpenDossierForNode} />
+                </div>
             </div>
 
             {/* ── Token Budget Warning ────────────────────────────────────── */}

@@ -29,6 +29,7 @@ import { DossierPanel } from './components/Dossier/DossierPanel';
 import { InvestigationMapPanel } from './components/InvestigationMap/InvestigationMapPanel';
 import { ToastContainer } from './components/ToastContainer';
 import { useDossierAI } from './hooks/useDossierAI';
+import { useMapAI } from './hooks/useMapAI';
 
 import './style.css';
 import './progress-bar.css';
@@ -67,7 +68,7 @@ export const App: FC = () => {
     handleRedo: handleRerunQuery, handleSubmit, handleSourceClick, renderModelMessage,
     stopGeneration,
     handleClearConversation, handleRemoveMessage,
-    handleUpdateMessage, handleTruncateHistory,
+    handleUpdateMessage,
     handleSaveAndRerun: saveAndRerunAction,
     initialChatHistory,
     caseFileState, setCaseFileState,
@@ -105,6 +106,9 @@ export const App: FC = () => {
     handleEditComment,
     handleDeleteComment
   } = useChatComments(chatHistory, handleUpdateMessage);
+
+  // ── Map Integration ───────────────────────────────────────────────────────
+  const { handleMapInstruction, isMapProcessing } = useMapAI();
 
   const {
     handleConfirmEdit,
@@ -274,6 +278,11 @@ export const App: FC = () => {
     // "handleRedo" in MessageItemHandlers = per-message re-run (renamed to avoid collision)
     handleRedo: handleRerunQuery,
     handleRemoveMessage, handleMouseUp,
+    onUpdateMapFromMessage: (content: string) => {
+      setIsMapPanelOpen(true);
+      handleMapInstruction(content);
+    },
+    isMapProcessing,
     onOpenInCaseFile: (content: string, title?: string) => {
       // Strip the <!--searchResults:…--> annotation (may span multiple lines)
       const clean = content.replace(/<!--searchResults:[\s\S]*?-->/g, '').trim();

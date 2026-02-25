@@ -2,6 +2,7 @@ import { FC, memo, useState, MouseEvent } from 'react';
 import { Handle, Position, NodeProps } from '@xyflow/react';
 import { MapNode, EntityType } from '../../../../types';
 import { useMapAI } from '../../../../hooks/useMapAI';
+import { useMapStore } from '../../../../store/useMapStore';
 
 import {
     User,
@@ -39,15 +40,25 @@ export const EntityNode: FC<NodeProps<MapNode>> = memo(({ id, data, selected }) 
     const [menuOpen, setMenuOpen] = useState(false);
     const [instruction, setInstruction] = useState('');
     const { handleMapInstruction, isMapProcessing } = useMapAI();
+    const lastChanges = useMapStore(s => s.lastChanges);
 
     const onContextMenu = (e: MouseEvent) => {
         e.preventDefault();
         setMenuOpen(true);
     };
 
+    const isAdded = lastChanges?.added.includes(id);
+    const isUpdated = lastChanges?.updated.includes(id);
+    const isDisproven = data.certainty === 'disproven';
+
+    let stateClass = '';
+    if (isAdded) stateClass = 'node-state--added';
+    else if (isUpdated) stateClass = 'node-state--updated';
+    else if (isDisproven) stateClass = 'node-state--disproven';
+
     return (
         <div
-            className={`cf-map-node ${selected ? 'selected' : ''}`}
+            className={`cf-map-node ${stateClass} ${selected ? 'selected' : ''}`}
             onContextMenu={onContextMenu}
             style={{
                 padding: '8px 12px',
@@ -61,18 +72,23 @@ export const EntityNode: FC<NodeProps<MapNode>> = memo(({ id, data, selected }) 
                 minWidth: '120px',
                 color: 'var(--text-primary)',
                 fontSize: '12px',
-                position: 'relative'
+                position: 'relative',
+                opacity: isDisproven ? 0.5 : 1,
             }}
         >
             {/* Target handle connecting to the left/top */}
             <Handle type="target" position={Position.Top} style={{ background: color }} />
+
+            {isAdded && <div className="node-badge node-badge--new">NEW</div>}
+            {isUpdated && !isAdded && <div className="node-badge node-badge--updated">UPDATED</div>}
+            {isDisproven && <div className="node-badge node-badge--disproven">REMOVED</div>}
 
             <div style={{ color, display: 'flex' }}>
                 {getIconForEntity(data.entityType)}
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column' }}>
-                <strong style={{ fontWeight: 600 }}>{data.label}</strong>
+                <strong style={{ fontWeight: 600, textDecoration: isDisproven ? 'line-through' : 'none' }}>{data.label}</strong>
                 {data.description && (
                     <span style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>
                         {data.description.length > 30 ? data.description.substring(0, 30) + '...' : data.description}

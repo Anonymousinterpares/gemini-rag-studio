@@ -46,7 +46,7 @@ interface Props {
 }
 
 export const InvestigationMapCanvas: FC<Props> = ({ onOpenDossierForNode }) => {
-    const { nodes, edges, patchNodes, patchEdges } = useMapStore();
+    const { nodes, edges, patchNodes, patchEdges, hideDisproven } = useMapStore();
     const { caseFile } = useCaseFileStore();
     const { generateMapFromDocument, handleMapInstruction, reviewMapConnections, isMapProcessing } = useMapAI();
 
@@ -60,7 +60,10 @@ export const InvestigationMapCanvas: FC<Props> = ({ onOpenDossierForNode }) => {
     const [showInstructionInput, setShowInstructionInput] = useState<string | null>(null);
 
     // ── RF node/edge transform ─────────────────────────────────────────────────
-    const rfNodes: Node[] = useMemo(() => nodes.map(n => {
+    const rfNodes: Node[] = useMemo(() => nodes.filter(n => {
+        if (hideDisproven && n.data.certainty === 'disproven') return false;
+        return true;
+    }).map(n => {
         const isMatch = !searchQuery ||
             n.data.label.toLowerCase().includes(searchQuery.toLowerCase()) ||
             n.data.description?.toLowerCase().includes(searchQuery.toLowerCase());
@@ -70,12 +73,24 @@ export const InvestigationMapCanvas: FC<Props> = ({ onOpenDossierForNode }) => {
             style: { ...(((n as unknown) as Node).style || {}), opacity: isMatch ? 1 : 0.2 },
             data: { ...n.data, hideDescription: hideDescriptions },
         };
-    }), [nodes, searchQuery, hideDescriptions]);
+    }), [nodes, searchQuery, hideDescriptions, hideDisproven]);
 
-    const rfEdges: Edge[] = useMemo(() => edges.map(e => ({
-        ...e,
-        hidden: hideEdges,
-    })), [edges, hideEdges]);
+    const rfEdges: Edge[] = useMemo(() => {
+        // If hideDisproven is active, we also must hide any edges connected to disproven nodes
+        const visibleNodeIds = new Set(rfNodes.map(n => n.id));
+
+        return edges
+            .filter(e => {
+                if (hideDisproven) {
+                    return visibleNodeIds.has(e.source) && visibleNodeIds.has(e.target);
+                }
+                return true;
+            })
+            .map(e => ({
+                ...e,
+                hidden: hideEdges,
+            }));
+    }, [edges, hideEdges, hideDisproven, rfNodes]);
 
     // ── RF event handlers ───────────────────────────────────────────────────────
     const onNodesChange = useCallback((changes: NodeChange[]) => {
@@ -127,8 +142,17 @@ export const InvestigationMapCanvas: FC<Props> = ({ onOpenDossierForNode }) => {
 
     const handleDeleteNode = () => {
         if (!contextMenu) return;
+        // Soft delete (AI behavior) -> disproven
         patchNodes({ remove: [contextMenu.nodeId] });
-        patchEdges({ remove: edges.filter(e => e.source === contextMenu.nodeId || e.target === contextMenu.nodeId).map(e => e.id) });
+        setContextMenu(null);
+    };
+
+    const handleHardDeleteNode = () => {
+        if (!contextMenu) return;
+        if (window.confirm("Are you sure you want to permanently delete this node and its connections? This action cannot be fully undone if the node was discovered by AI.")) {
+            patchNodes({ hardRemove: [contextMenu.nodeId] });
+            patchEdges({ remove: edges.filter(e => e.source === contextMenu.nodeId || e.target === contextMenu.nodeId).map(e => e.id) });
+        }
         setContextMenu(null);
     };
 
@@ -232,7 +256,10 @@ export const InvestigationMapCanvas: FC<Props> = ({ onOpenDossierForNode }) => {
                             </DropdownMenu.Item>
                             <DropdownMenu.Separator className="map-context-separator" />
                             <DropdownMenu.Item className="map-context-item map-context-item--danger" onSelect={handleDeleteNode}>
-                                🗑️ Delete Node
+                                🗑️ Remove Node (Disproven)
+                            </DropdownMenu.Item>
+                            <DropdownMenu.Item className="map-context-item map-context-item--danger" onSelect={handleHardDeleteNode} style={{ color: 'var(--accent-red)' }}>
+                                ☠️ Delete Permanently
                             </DropdownMenu.Item>
                         </DropdownMenu.Content>
                     </DropdownMenu.Portal>

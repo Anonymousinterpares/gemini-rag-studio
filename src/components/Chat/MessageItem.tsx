@@ -1,5 +1,5 @@
 import { FC, useState, useEffect } from 'react';
-import { Bot, User, Check, XCircle, Trash2, RefreshCw, Edit2, Copy, Download, FolderOpen, Plus } from 'lucide-react';
+import { Bot, User, Check, XCircle, Trash2, RefreshCw, Edit2, Copy, Download, FolderOpen, Plus, Network, Loader } from 'lucide-react';
 import { ChatMessage } from '../../types';
 import { sectionizeMessage } from '../../utils/chatUtils';
 import { DownloadReportButton } from '../DownloadReportButton';
@@ -37,6 +37,10 @@ export interface MessageItemHandlers {
     handleMouseUp: (idx: number) => () => void;
     /** Parse the case_file_report message content and open it in the overlay */
     onOpenInCaseFile: (content: string, title?: string) => void;
+    /** Triggers a map update using this message's content as instructions */
+    onUpdateMapFromMessage?: (content: string) => void;
+    /** True if a map update is currently running */
+    isMapProcessing?: boolean;
 }
 
 interface MessageItemProps {
@@ -300,6 +304,15 @@ export const MessageItem: FC<MessageItemProps> = ({
                     <div className="message-actions-inner">
                         <button onClick={() => handlers.handleCopy(i)} title="Copy"><Copy size={14} /></button>
                         <button onClick={() => handlers.handleDownloadAction(i)} title="Download"><Download size={14} /></button>
+                        {msg.role === 'model' && handlers.onUpdateMapFromMessage && (
+                            <button
+                                onClick={() => handlers.onUpdateMapFromMessage!(msg.content || '')}
+                                title="Update Investigation Map from this message"
+                                disabled={handlers.isMapProcessing || !msg.content}
+                            >
+                                {handlers.isMapProcessing ? <Loader size={14} className="animate-spin" /> : <Network size={14} />}
+                            </button>
+                        )}
                         {msg.role === 'user' && editingIndex !== i && (
                             <>
                                 <button onClick={() => handlers.handleStartEdit(i, msg.content || '')} title="Edit"><Edit2 size={14} /></button>

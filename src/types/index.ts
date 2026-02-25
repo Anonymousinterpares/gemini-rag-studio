@@ -108,6 +108,7 @@ export interface MapNode {
     sources?: MapNodeSource[];
     lastUpdatedAt?: number;
     chatContextRefs?: string[];
+    certainty?: 'confirmed' | 'inferred' | 'disproven';
   };
   parentId?: string;
   extent?: 'parent';

@@ -25,11 +25,24 @@ interface MapState {
     // Progress indicator for multi-phase generation
     progress: MapProgress | null;
 
+    // Visual indicators for recent AI map updates
+    lastChanges: {
+        added: string[];
+        updated: string[];
+        disproven: string[]; // AI-removed nodes are marked "disproven"
+    } | null;
+    clearLastChanges: () => void;
+
+    // Map UI Filter
+    hideDisproven: boolean;
+    setHideDisproven: (hide: boolean) => void;
+
     // Actions — node/edge patching
     patchNodes: (patch: {
         add?: MapNode[];
         update?: (Partial<MapNode['data']> & { id: string })[];
-        remove?: string[];
+        remove?: string[];      // Soft remove (sets certainty='disproven')
+        hardRemove?: string[];  // Hard remove (deletes from store)
     }) => void;
     patchEdges: (patch: {
         add?: MapEdge[];
@@ -70,15 +83,44 @@ export const useMapStore = create<MapState>((set, get) => ({
     redoStack: [],
     jobLock: false,
     progress: null,
+    lastChanges: null,
+    hideDisproven: false,
 
-    patchNodes: ({ add = [], update = [], remove = [] }) => {
+    setHideDisproven: (hide) => set({ hideDisproven: hide }),
+
+    clearLastChanges: () => set({ lastChanges: null }),
+
+    patchNodes: ({ add = [], update = [], remove = [], hardRemove = [] }) => {
         set((state) => {
             let nodes = [...state.nodes];
 
-            // Remove
+            // Accumulate changes if job is locked, else reset
+            const baseChanges = (state.jobLock && state.lastChanges) ? state.lastChanges : { added: [] as string[], updated: [] as string[], disproven: [] as string[] };
+            const changes = {
+                added: [...baseChanges.added],
+                updated: [...baseChanges.updated],
+                disproven: [...baseChanges.disproven]
+            };
+
+            // Hard Remove
+            if (hardRemove.length > 0) {
+                const removeSet = new Set(hardRemove);
+                nodes = nodes.filter(n => !removeSet.has(n.id));
+            }
+
+            // Soft Remove (AI removal becomes 'disproven')
             if (remove.length > 0) {
                 const removeSet = new Set(remove);
-                nodes = nodes.filter(n => !removeSet.has(n.id));
+                nodes = nodes.map(n => {
+                    if (removeSet.has(n.id)) {
+                        changes.disproven.push(n.id);
+                        return {
+                            ...n,
+                            data: { ...n.data, certainty: 'disproven', lastUpdatedAt: Date.now() }
+                        };
+                    }
+                    return n;
+                });
             }
 
             // Update existing
@@ -87,6 +129,7 @@ export const useMapStore = create<MapState>((set, get) => ({
                     const patch = update.find(u => u.id === n.id);
                     if (!patch) return n;
                     const { id: _id, ...dataPatch } = patch;
+                    changes.updated.push(n.id);
                     return {
                         ...n,
                         data: { ...n.data, ...dataPatch, lastUpdatedAt: Date.now() },
@@ -104,10 +147,20 @@ export const useMapStore = create<MapState>((set, get) => ({
                     }
                     return true;
                 });
+                truly_new.forEach(n => changes.added.push(n.id));
                 nodes = [...nodes, ...truly_new];
             }
 
-            return { nodes, ...checkpoint(state) };
+            const hasChanges = changes.added.length > 0 || changes.updated.length > 0 || changes.disproven.length > 0;
+
+            // Notice we do NOT start a timeout here anymore. 
+            // releaseLock will handle starting the 8-second visual clear timeout for AI jobs.
+
+            return {
+                nodes,
+                lastChanges: hasChanges ? changes : null,
+                ...checkpoint(state)
+            };
         });
         get().persistToDB();
     },
@@ -148,6 +201,7 @@ export const useMapStore = create<MapState>((set, get) => ({
             return {
                 nodes: prev.nodes,
                 edges: prev.edges,
+                lastChanges: null, // Clear visual indicators on manual action
                 undoStack: state.undoStack.slice(0, -1),
                 redoStack: [...state.redoStack, { nodes: state.nodes, edges: state.edges }],
             };
@@ -162,6 +216,7 @@ export const useMapStore = create<MapState>((set, get) => ({
             return {
                 nodes: next.nodes,
                 edges: next.edges,
+                lastChanges: null, // Clear visual indicators on manual action
                 redoStack: state.redoStack.slice(0, -1),
                 undoStack: [...state.undoStack, { nodes: state.nodes, edges: state.edges }].slice(-MAX_UNDO_STACK),
             };
@@ -186,7 +241,14 @@ export const useMapStore = create<MapState>((set, get) => ({
         return true;
     },
 
-    releaseLock: () => set({ jobLock: false }),
+    releaseLock: () => {
+        set({ jobLock: false });
+        if (get().lastChanges) {
+            setTimeout(() => {
+                get().clearLastChanges();
+            }, 8000);
+        }
+    },
 
     setProgress: (progress) => set({ progress }),
 
