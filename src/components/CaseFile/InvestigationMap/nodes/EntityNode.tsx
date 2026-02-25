@@ -58,9 +58,9 @@ export const EntityNode: FC<NodeProps<MapNode>> = memo(({ id, data, selected }) 
 
     // Semantic zoom thresholds
     const zoom = (data as any).semanticZoom ?? 1;
-    const isMacroView = zoom < 0.35;
-    const isMidView = zoom >= 0.35 && zoom < 0.70;
-    const hideExtra = isMacroView || isMidView || (data as any).hideDescription;
+    const isMacroView = zoom <= 0.6;
+    const isMicroView = zoom >= 1.0;
+    const hideExtra = (data as any).hideDescription;
 
     return (
         <div
@@ -93,16 +93,26 @@ export const EntityNode: FC<NodeProps<MapNode>> = memo(({ id, data, selected }) 
                 {getIconForEntity(data.entityType)}
             </div>
 
-            {!isMacroView && (
-                <div style={{ display: 'flex', flexDirection: 'column' }}>
-                    <strong style={{ fontWeight: 600, textDecoration: isDisproven ? 'line-through' : 'none' }}>{data.label}</strong>
-                    {data.description && !hideExtra && (
-                        <span style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>
-                            {data.description.length > 30 ? data.description.substring(0, 30) + '...' : data.description}
-                        </span>
-                    )}
-                </div>
-            )}
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                <strong style={{ fontWeight: 600, textDecoration: isDisproven ? 'line-through' : 'none' }}>{data.label}</strong>
+                {!isMacroView && data.description && !hideExtra && (
+                    <span style={{
+                        fontSize: '10px',
+                        color: 'var(--text-secondary)',
+                        marginTop: '2px',
+                        maxWidth: isMicroView ? '240px' : '150px',
+                        display: '-webkit-box',
+                        WebkitLineClamp: isMicroView ? 5 : 1,
+                        WebkitBoxOrient: 'vertical',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'normal',
+                        lineHeight: 1.3
+                    }}>
+                        {data.description}
+                    </span>
+                )}
+            </div>
 
             {/* Source handle connecting to the right/bottom */}
             <Handle type="source" position={Position.Bottom} style={{ background: color }} />

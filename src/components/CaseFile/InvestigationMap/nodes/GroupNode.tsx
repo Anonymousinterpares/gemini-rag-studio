@@ -7,7 +7,7 @@ import { FolderOpen, FolderClosed } from 'lucide-react';
 export const GroupNode: FC<NodeProps<MapNode>> = memo(({ data, selected }) => {
     // Semantic zoom thresholds
     const zoom = (data as any).semanticZoom ?? 1;
-    const isMacroView = zoom < 0.35;
+    const isMacroView = zoom <= 0.6;
 
     return (
         <div
@@ -24,7 +24,7 @@ export const GroupNode: FC<NodeProps<MapNode>> = memo(({ data, selected }) => {
         >
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: isMacroView ? '0' : '8px', opacity: 0.8 }}>
                 {data.isCollapsed ? <FolderClosed size={16} /> : <FolderOpen size={16} />}
-                {!isMacroView && <strong style={{ fontSize: '12px' }}>{data.label}</strong>}
+                <strong style={{ fontSize: '12px' }}>{data.label}</strong>
             </div>
 
             {/* We still need handles on groups so we can connect to them when collapsed */}
