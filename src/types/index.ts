@@ -85,6 +85,16 @@ export interface CaseFileSection {
 export type EntityType = 'person' | 'location' | 'event' | 'organization' | 'evidence' | 'group';
 export type ConnectionType = 'knows' | 'involved_in' | 'owns' | 'located_at' | 'conflicts_with' | 'related_to';
 
+export interface MapNodeSource {
+  type: 'web' | 'document' | 'chat_exchange';
+  label: string;
+  url?: string;
+  fileId?: string;
+  chatSessionId?: string;
+  chatMessageIndex?: number;
+  snippet?: string;
+}
+
 export interface MapNode {
   id: string;
   type: 'customEntity' | 'customGroup';
@@ -95,6 +105,9 @@ export interface MapNode {
     description?: string;
     tags?: string[];
     isCollapsed?: boolean;
+    sources?: MapNodeSource[];
+    lastUpdatedAt?: number;
+    chatContextRefs?: string[];
   };
   parentId?: string;
   extent?: 'parent';

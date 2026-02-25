@@ -1,12 +1,11 @@
 import { FC, useEffect, useCallback, useState } from 'react';
-import { Save, Edit2, X, FileText, Network, Maximize2, Minimize2 } from 'lucide-react';
+import { Save, Edit2, X, FileText, Maximize2, Minimize2 } from 'lucide-react';
 import { CaseFile, CaseFileComment } from '../../types';
 import { useCaseFileComments } from '../../hooks/useCaseFileComments';
 import { CaseFileSectionBlock } from './CaseFileSectionBlock';
-import { InvestigationMapCanvas } from './InvestigationMap/InvestigationMapCanvas';
 import { useCaseFileStore } from '../../store/useCaseFileStore';
 import { useCaseFileIO } from '../../hooks/useCaseFileIO';
-import { useDossierAI } from '../../hooks/useDossierAI'; // Added import
+import { useDossierAI } from '../../hooks/useDossierAI';
 import './CaseFilePanel.css';
 
 interface CaseFilePanelProps {
@@ -26,7 +25,6 @@ export const CaseFilePanel: FC<CaseFilePanelProps> = ({ onResolveComment, render
     const { handleSaveCaseFile, handleSaveAsCaseFile } = useCaseFileIO();
     const { generateContextualDossier } = useDossierAI(); // Added retrieval
 
-    const [activeView, setActiveView] = useState<'document' | 'map'>('document');
     const [isMaximized, setIsMaximized] = useState(false);
 
     const handleClose = useCallback(() => setOverlayOpen(false), [setOverlayOpen]);
@@ -73,7 +71,7 @@ export const CaseFilePanel: FC<CaseFilePanelProps> = ({ onResolveComment, render
 
     const panelStyle: React.CSSProperties = isMaximized
         ? { width: '100vw', height: '100vh', maxHeight: '100vh', borderRadius: 0 }
-        : { height: activeView === 'map' ? '85vh' : undefined };
+        : {};
 
     return (
         <div className='cf-overlay' onMouseDown={(e) => { if (e.target === e.currentTarget) handleClose(); }}>
@@ -82,22 +80,6 @@ export const CaseFilePanel: FC<CaseFilePanelProps> = ({ onResolveComment, render
                 {/* ── Header ── */}
                 <div className='cf-header'>
                     <h2>{caseFile.title}</h2>
-                    <div className='cf-view-toggle' style={{ display: 'flex', gap: '8px', background: 'var(--input-bg-color)', padding: '4px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                        <button
-                            className={`button ${activeView === 'document' ? '' : 'secondary'} `}
-                            onClick={() => setActiveView('document')}
-                            style={{ padding: '6px 12px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px' }}
-                        >
-                            <FileText size={14} /> Document
-                        </button>
-                        <button
-                            className={`button ${activeView === 'map' ? '' : 'secondary'} `}
-                            onClick={() => setActiveView('map')}
-                            style={{ padding: '6px 12px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px' }}
-                        >
-                            <Network size={14} /> Map
-                        </button>
-                    </div>
                     <div className='cf-header-actions'>
                         <button
                             className='button secondary'
@@ -132,26 +114,20 @@ export const CaseFilePanel: FC<CaseFilePanelProps> = ({ onResolveComment, render
                 </div>
 
                 {/* ── Body ── */}
-                {activeView === 'document' ? (
-                    <div className='cf-body' onMouseUp={handleMouseUp}>
-                        {caseFile.sections.map((section) => (
-                            <CaseFileSectionBlock
-                                key={section.id}
-                                section={section}
-                                resolvingCommentId={resolvingCommentId}
-                                onEditComment={handleEditComment}
-                                onDeleteComment={handleDeleteComment}
-                                onResolveComment={handleResolveComment}
-                                onAddSectionComment={handleAddSectionComment}
-                                renderFn={renderModelMessage}
-                            />
-                        ))}
-                    </div>
-                ) : (
-                    <div className='cf-body' style={{ padding: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-                        <InvestigationMapCanvas />
-                    </div>
-                )}
+                <div className='cf-body' onMouseUp={handleMouseUp}>
+                    {caseFile.sections.map((section) => (
+                        <CaseFileSectionBlock
+                            key={section.id}
+                            section={section}
+                            resolvingCommentId={resolvingCommentId}
+                            onEditComment={handleEditComment}
+                            onDeleteComment={handleDeleteComment}
+                            onResolveComment={handleResolveComment}
+                            onAddSectionComment={handleAddSectionComment}
+                            renderFn={renderModelMessage}
+                        />
+                    ))}
+                </div>
 
                 {/* ── Selection popover (text-highlight shortcut) ── */}
                 {selectionPopover && (

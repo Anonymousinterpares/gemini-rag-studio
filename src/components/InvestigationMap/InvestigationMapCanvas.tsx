@@ -1,0 +1,401 @@
+import { FC, useCallback, useMemo, useState } from 'react';
+import {
+    ReactFlow,
+    Controls,
+    Background,
+    applyNodeChanges,
+    applyEdgeChanges,
+    Node,
+    Edge,
+    NodeChange,
+    EdgeChange,
+    Connection,
+    addEdge,
+    BackgroundVariant,
+    NodeMouseHandler,
+} from '@xyflow/react';
+import '@xyflow/react/dist/style.css';
+import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
+
+import { useMapStore } from '../../store/useMapStore';
+import { EntityNode } from '../CaseFile/InvestigationMap/nodes/EntityNode';
+import { GroupNode } from '../CaseFile/InvestigationMap/nodes/GroupNode';
+import { useMapAI } from '../../hooks/useMapAI';
+import { useCaseFileStore } from '../../store/useCaseFileStore';
+import { Search, GitFork, Loader, Eye, EyeOff, Trash2, Globe, FileText, MessageSquare, ExternalLink } from 'lucide-react';
+import { MapNode, MapNodeSource } from '../../types';
+
+/* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+const nodeTypes: any = {
+    customEntity: EntityNode,
+    customGroup: GroupNode,
+};
+
+interface ContextMenuState {
+    x: number;
+    y: number;
+    nodeId: string;
+}
+
+interface SourceDrawerState {
+    node: MapNode;
+}
+
+interface Props {
+    onOpenDossierForNode?: (nodeId: string) => void;
+}
+
+export const InvestigationMapCanvas: FC<Props> = ({ onOpenDossierForNode }) => {
+    const { nodes, edges, patchNodes, patchEdges } = useMapStore();
+    const { caseFile } = useCaseFileStore();
+    const { generateMapFromDocument, handleMapInstruction, reviewMapConnections, isMapProcessing } = useMapAI();
+
+    const [searchQuery, setSearchQuery] = useState('');
+    const [hideDescriptions, setHideDescriptions] = useState(false);
+    const [hideEdges, setHideEdges] = useState(false);
+    const [edgeToDelete, setEdgeToDelete] = useState<Edge | null>(null);
+    const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
+    const [sourceDrawer, setSourceDrawer] = useState<SourceDrawerState | null>(null);
+    const [customInstruction, setCustomInstruction] = useState('');
+    const [showInstructionInput, setShowInstructionInput] = useState<string | null>(null);
+
+    // ── RF node/edge transform ─────────────────────────────────────────────────
+    const rfNodes: Node[] = useMemo(() => nodes.map(n => {
+        const isMatch = !searchQuery ||
+            n.data.label.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            n.data.description?.toLowerCase().includes(searchQuery.toLowerCase());
+
+        return {
+            ...n,
+            style: { ...(((n as unknown) as Node).style || {}), opacity: isMatch ? 1 : 0.2 },
+            data: { ...n.data, hideDescription: hideDescriptions },
+        };
+    }), [nodes, searchQuery, hideDescriptions]);
+
+    const rfEdges: Edge[] = useMemo(() => edges.map(e => ({
+        ...e,
+        hidden: hideEdges,
+    })), [edges, hideEdges]);
+
+    // ── RF event handlers ───────────────────────────────────────────────────────
+    const onNodesChange = useCallback((changes: NodeChange[]) => {
+        const updated: MapNode[] = applyNodeChanges(changes, nodes as Node[]) as unknown as MapNode[];
+        patchNodes({ add: [], remove: [], update: [] });
+        // Position changes are applied via react flow locally; we synchronize on drag end
+        useMapStore.setState({ nodes: updated });
+    }, [nodes, patchNodes]);
+
+    const onEdgesChange = useCallback((changes: EdgeChange[]) => {
+        const updated = applyEdgeChanges(changes, edges as Edge[]);
+        useMapStore.setState({ edges: updated as import('../../types').MapEdge[] });
+    }, [edges]);
+
+    const onConnect = useCallback((params: Connection | Edge) => {
+        const newEdges = addEdge(params, edges as Edge[]) as unknown as import('../../types').MapEdge[];
+        useMapStore.setState({ edges: newEdges });
+    }, [edges]);
+
+    const onNodeDoubleClick = useCallback((_event: React.MouseEvent, clickedNode: Node) => {
+        const node = nodes.find(n => n.id === clickedNode.id);
+        if (node) setSourceDrawer({ node });
+    }, [nodes]);
+
+    const onEdgeDoubleClick = useCallback((_event: React.MouseEvent, clickedEdge: Edge) => {
+        setEdgeToDelete(clickedEdge);
+    }, []);
+
+    const onNodeContextMenu: NodeMouseHandler = useCallback((event, node) => {
+        event.preventDefault();
+        setContextMenu({ x: event.clientX, y: event.clientY, nodeId: node.id });
+    }, []);
+
+    // ── Context menu actions ───────────────────────────────────────────────────
+    const handleReviewNode = () => {
+        if (!contextMenu) return;
+        reviewMapConnections([contextMenu.nodeId]);
+        setContextMenu(null);
+    };
+
+    const handleDeepDive = () => {
+        if (!contextMenu) return;
+        const node = nodes.find(n => n.id === contextMenu.nodeId);
+        if (node) {
+            handleMapInstruction(`Deep dive on "${node.data.label}": search for additional connections and context.`, node.id);
+        }
+        setContextMenu(null);
+    };
+
+    const handleDeleteNode = () => {
+        if (!contextMenu) return;
+        patchNodes({ remove: [contextMenu.nodeId] });
+        patchEdges({ remove: edges.filter(e => e.source === contextMenu.nodeId || e.target === contextMenu.nodeId).map(e => e.id) });
+        setContextMenu(null);
+    };
+
+    const handleOpenDossier = () => {
+        if (!contextMenu) return;
+        onOpenDossierForNode?.(contextMenu.nodeId);
+        setContextMenu(null);
+    };
+
+    const confirmDeleteEdge = () => {
+        if (edgeToDelete) {
+            patchEdges({ remove: [edgeToDelete.id] });
+            setEdgeToDelete(null);
+        }
+    };
+
+    const handleExpandInstruction = async () => {
+        if (!showInstructionInput || !customInstruction.trim()) return;
+        await handleMapInstruction(customInstruction, showInstructionInput);
+        setCustomInstruction('');
+        setShowInstructionInput(null);
+    };
+
+    // ── Source icon helper ────────────────────────────────────────────────────
+    const SourceIcon: FC<{ type: MapNodeSource['type'] }> = ({ type }) => {
+        if (type === 'web') return <Globe size={14} />;
+        if (type === 'document') return <FileText size={14} />;
+        return <MessageSquare size={14} />;
+    };
+
+    return (
+        <div style={{ width: '100%', height: '100%', flex: 1, minHeight: '400px', background: 'var(--bg-primary)', position: 'relative' }}
+            onClick={() => setContextMenu(null)}>
+
+            {/* Filtering Toolbar */}
+            <div style={{
+                position: 'absolute', top: '16px', right: sourceDrawer ? '340px' : '16px', zIndex: 10,
+                background: 'var(--panel-bg-color)', border: '1px solid var(--border-color)',
+                borderRadius: '8px', padding: '6px 12px', display: 'flex', alignItems: 'center',
+                gap: '12px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', transition: 'right 0.3s ease'
+            }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', borderRight: '1px solid var(--border-color)', paddingRight: '12px' }}>
+                    <Search size={14} color="var(--text-color-secondary)" />
+                    <input
+                        type="text"
+                        placeholder="Filter nodes…"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        style={{ border: 'none', background: 'transparent', color: 'var(--text-color)', fontSize: '13px', outline: 'none', width: '140px' }}
+                    />
+                </div>
+                <button onClick={() => setHideDescriptions(!hideDescriptions)} className="map-toolbar-btn" title="Toggle node descriptions">
+                    {hideDescriptions ? <EyeOff size={14} /> : <Eye size={14} />} Text
+                </button>
+                <button onClick={() => setHideEdges(!hideEdges)} className="map-toolbar-btn" title="Toggle edge visibility">
+                    {hideEdges ? <EyeOff size={14} /> : <Eye size={14} />} Edges
+                </button>
+            </div>
+
+            {/* React Flow */}
+            <div style={{ position: 'absolute', inset: 0 }}>
+                <ReactFlow
+                    nodes={rfNodes}
+                    edges={rfEdges}
+                    onNodesChange={onNodesChange}
+                    onEdgesChange={onEdgesChange}
+                    onConnect={onConnect}
+                    onNodeDoubleClick={onNodeDoubleClick}
+                    onEdgeDoubleClick={onEdgeDoubleClick}
+                    onNodeContextMenu={onNodeContextMenu}
+                    nodeTypes={nodeTypes}
+                    fitView
+                >
+                    <Background variant={BackgroundVariant.Dots} gap={12} size={1} />
+                    <Controls />
+                </ReactFlow>
+            </div>
+
+            {/* Radix Context Menu */}
+            {contextMenu && (
+                <DropdownMenu.Root open={true} onOpenChange={(open) => !open && setContextMenu(null)}>
+                    <DropdownMenu.Trigger asChild>
+                        <div style={{ position: 'fixed', top: contextMenu.y, left: contextMenu.x, width: 1, height: 1 }} />
+                    </DropdownMenu.Trigger>
+                    <DropdownMenu.Portal>
+                        <DropdownMenu.Content className="map-context-menu" sideOffset={2}>
+                            <DropdownMenu.Item className="map-context-item" onSelect={handleReviewNode}>
+                                🔍 Review Connections
+                            </DropdownMenu.Item>
+                            <DropdownMenu.Item className="map-context-item" onSelect={handleDeepDive}>
+                                🌐 Deep Dive (Web Search)
+                            </DropdownMenu.Item>
+                            <DropdownMenu.Item className="map-context-item" onSelect={() => {
+                                setShowInstructionInput(contextMenu.nodeId);
+                                setContextMenu(null);
+                            }}>
+                                ✏️ Expand Details
+                            </DropdownMenu.Item>
+                            <DropdownMenu.Item className="map-context-item" onSelect={handleOpenDossier}>
+                                📄 Open Dossier
+                            </DropdownMenu.Item>
+                            <DropdownMenu.Separator className="map-context-separator" />
+                            <DropdownMenu.Item className="map-context-item map-context-item--danger" onSelect={handleDeleteNode}>
+                                🗑️ Delete Node
+                            </DropdownMenu.Item>
+                        </DropdownMenu.Content>
+                    </DropdownMenu.Portal>
+                </DropdownMenu.Root>
+            )}
+
+            {/* Custom Instruction Input */}
+            {showInstructionInput && (
+                <div className="map-instruction-overlay" onClick={() => setShowInstructionInput(null)}>
+                    <div className="map-instruction-box" onClick={e => e.stopPropagation()}>
+                        <p style={{ margin: '0 0 8px 0', fontSize: '13px', color: 'var(--text-color-secondary)' }}>
+                            Describe what to explore or add for this node:
+                        </p>
+                        <textarea
+                            autoFocus
+                            className="map-instruction-textarea"
+                            value={customInstruction}
+                            onChange={e => setCustomInstruction(e.target.value)}
+                            placeholder="e.g. Find related organizations and known associates…"
+                        />
+                        <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '8px' }}>
+                            <button className="button secondary" onClick={() => setShowInstructionInput(null)}>Cancel</button>
+                            <button className="button" onClick={handleExpandInstruction} disabled={isMapProcessing}>
+                                {isMapProcessing ? <Loader size={14} className="animate-spin" /> : 'Expand'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Source Drawer */}
+            {sourceDrawer && (
+                <div className="map-source-drawer">
+                    <div className="map-source-drawer-header">
+                        <div>
+                            <div className="map-source-node-label">{sourceDrawer.node.data.label}</div>
+                            <span className={`map-entity-badge map-entity-badge--${sourceDrawer.node.data.entityType}`}>
+                                {sourceDrawer.node.data.entityType}
+                            </span>
+                        </div>
+                        <button className="icon-btn" onClick={() => setSourceDrawer(null)}>✕</button>
+                    </div>
+
+                    <div className="map-source-drawer-body">
+                        {sourceDrawer.node.data.description && (
+                            <div className="map-source-section">
+                                <div className="map-source-section-title">Description</div>
+                                <p style={{ margin: 0, fontSize: '13px', lineHeight: 1.5 }}>{sourceDrawer.node.data.description}</p>
+                            </div>
+                        )}
+
+                        {sourceDrawer.node.data.tags && sourceDrawer.node.data.tags.length > 0 && (
+                            <div className="map-source-section">
+                                <div className="map-source-section-title">Tags</div>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                                    {sourceDrawer.node.data.tags.map(tag => (
+                                        <span key={tag} className="map-tag-pill">{tag}</span>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {sourceDrawer.node.data.sources && sourceDrawer.node.data.sources.length > 0 ? (
+                            <div className="map-source-section">
+                                <div className="map-source-section-title">Sources</div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                    {sourceDrawer.node.data.sources.map((src, i) => (
+                                        <div key={i} className="map-source-card">
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+                                                <SourceIcon type={src.type} />
+                                                <span style={{ fontSize: '12px', fontWeight: 600 }}>{src.label}</span>
+                                                {src.url && (
+                                                    <a href={src.url} target="_blank" rel="noopener noreferrer" style={{ marginLeft: 'auto' }}>
+                                                        <ExternalLink size={12} />
+                                                    </a>
+                                                )}
+                                            </div>
+                                            {src.snippet && (
+                                                <p style={{ margin: 0, fontSize: '11px', color: 'var(--text-color-secondary)', lineHeight: 1.4 }}>
+                                                    "{src.snippet}"
+                                                </p>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="map-source-section">
+                                <div style={{ fontSize: '12px', color: 'var(--text-color-secondary)', fontStyle: 'italic' }}>No sources recorded for this node.</div>
+                            </div>
+                        )}
+
+                        {/* Expand with AI */}
+                        <div className="map-source-section">
+                            <div className="map-source-section-title">Expand with AI</div>
+                            <textarea
+                                className="map-instruction-textarea"
+                                placeholder="Describe what to research about this entity…"
+                                value={showInstructionInput === sourceDrawer.node.id ? customInstruction : ''}
+                                onChange={e => {
+                                    setShowInstructionInput(sourceDrawer.node.id);
+                                    setCustomInstruction(e.target.value);
+                                }}
+                                rows={2}
+                            />
+                            <button
+                                className="button"
+                                style={{ width: '100%', marginTop: '8px' }}
+                                onClick={handleExpandInstruction}
+                                disabled={isMapProcessing || !customInstruction.trim()}
+                            >
+                                {isMapProcessing ? <><Loader size={14} className="animate-spin" /> Processing…</> : 'Expand'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Edge deletion dialog */}
+            {edgeToDelete && (
+                <div style={{ position: 'absolute', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(2px)' }}
+                    onClick={() => setEdgeToDelete(null)}>
+                    <div style={{ background: 'var(--panel-bg-color)', border: '1px solid var(--border-color)', padding: '20px', borderRadius: '12px', display: 'flex', flexDirection: 'column', gap: '16px', minWidth: '300px' }}
+                        onClick={e => e.stopPropagation()}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <Trash2 size={24} style={{ color: '#e74c3c' }} />
+                            <div>
+                                <h3 style={{ margin: 0, fontSize: '15px' }}>Remove Connection?</h3>
+                                <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: 'var(--text-color-secondary)' }}>This cannot be undone via this dialog but can be undone via the Undo button.</p>
+                            </div>
+                        </div>
+                        <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+                            <button className="button secondary" onClick={() => setEdgeToDelete(null)}>Cancel</button>
+                            <button className="button" style={{ background: '#e74c3c', borderColor: '#e74c3c' }} onClick={confirmDeleteEdge}>Remove</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Empty-state overlay */}
+            {nodes.length === 0 && (
+                <div style={{ position: 'absolute', inset: 0, zIndex: 50, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'rgba(10,12,20,0.85)', backdropFilter: 'blur(6px)', gap: '16px' }}>
+                    <GitFork size={48} style={{ color: 'var(--text-color-secondary)', opacity: 0.4 }} />
+                    <div style={{ textAlign: 'center' }}>
+                        <div style={{ fontSize: '18px', fontWeight: 700, color: 'var(--text-color)', marginBottom: '6px' }}>Map is empty</div>
+                        <div style={{ fontSize: '13px', color: 'var(--text-color-secondary)', maxWidth: '300px' }}>
+                            Load a Case File and generate the map, or use the chat to build it organically.
+                        </div>
+                    </div>
+                    {caseFile && (
+                        <button
+                            className="button"
+                            style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 20px', fontSize: '14px', fontWeight: 600 }}
+                            onClick={() => generateMapFromDocument(caseFile.sections)}
+                            disabled={isMapProcessing}
+                        >
+                            {isMapProcessing
+                                ? <><Loader size={16} className="animate-spin" /> Building map…</>
+                                : <><GitFork size={16} /> Generate Map from Document</>}
+                        </button>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+};

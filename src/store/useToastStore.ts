@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { v4 as uuidv4 } from 'uuid';
 
-export type ToastType = 'info' | 'success' | 'error';
+export type ToastType = 'info' | 'success' | 'error' | 'warning';
 
 export interface ToastMessage {
     id: string;

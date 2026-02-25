@@ -13,8 +13,8 @@ import RecoveryDialogContainer from './components/RecoveryDialogContainer';
 import { processExplorerItems, downloadMessage } from './utils/appActions';
 import { useSettingsStore, useFileStore, useComputeStore } from './store';
 import { useCaseFileStore } from './store/useCaseFileStore';
-import { useCaseFileIO } from './hooks/useCaseFileIO';
 import { useChatStore } from './store/useChatStore';
+import { useCaseFileIO } from './hooks/useCaseFileIO';
 import { Edit2, FileText } from 'lucide-react';
 
 // Extracted Components and Hooks
@@ -26,6 +26,7 @@ import { FilePanel } from './components/FilePanel';
 import { ChatPanel } from './components/ChatPanel';
 import { CaseFilePanel } from './components/CaseFile/CaseFilePanel';
 import { DossierPanel } from './components/Dossier/DossierPanel';
+import { InvestigationMapPanel } from './components/InvestigationMap/InvestigationMapPanel';
 import { ToastContainer } from './components/ToastContainer';
 import { useDossierAI } from './hooks/useDossierAI';
 
@@ -50,6 +51,7 @@ export const App: FC = () => {
   const [isExplorerOpen, setIsExplorerOpen] = useState(false);
   const [isDossierOpen, setIsDossierOpen] = useState(false);
   const [isPinned, setIsPinned] = useState(true);
+  const [isMapPanelOpen, setIsMapPanelOpen] = useState(false);
   const [rootDirectoryHandle, setRootDirectoryHandle] = useState<FileSystemDirectoryHandle | null>(null);
 
   const { coordinator, vectorStore, queryEmbeddingResolver, rerankPromiseResolver } = useCompute(docFontSize);
@@ -340,7 +342,15 @@ export const App: FC = () => {
         hasCaseFile={!!caseFile}
         isDossierOpen={isDossierOpen}
         setIsDossierOpen={setIsDossierOpen}
+        isMapPanelOpen={isMapPanelOpen}
+        setIsMapPanelOpen={setIsMapPanelOpen}
       />
+
+      {isMapPanelOpen && (
+        <InvestigationMapPanel
+          onClose={() => setIsMapPanelOpen(false)}
+        />
+      )}
 
       <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)}>
         <MemoizedDocViewer

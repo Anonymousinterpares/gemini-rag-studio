@@ -1,5 +1,5 @@
 import { FC, useState, useRef, useCallback, useEffect } from 'react';
-import { ChevronLeft, ChevronRight, FileText, FolderOpen, FolderTree } from 'lucide-react';
+import { ChevronLeft, ChevronRight, FileText, FolderOpen, FolderTree, Network } from 'lucide-react';
 import { ChatMessage, AppFile, TokenUsage } from '../types';
 import { MessageList } from './Chat/MessageList';
 import { ChatInputForm } from './Chat/ChatInputForm';
@@ -44,6 +44,8 @@ interface ChatPanelProps {
     hasCaseFile: boolean;
     isDossierOpen: boolean;
     setIsDossierOpen: React.Dispatch<React.SetStateAction<boolean>>;
+    isMapPanelOpen: boolean;
+    setIsMapPanelOpen: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
 export const ChatPanel: FC<ChatPanelProps> = ({
@@ -53,7 +55,9 @@ export const ChatPanel: FC<ChatPanelProps> = ({
     activeJobCount, files, handleSubmit, stopGeneration, setCaseFileState, submitQuery,
     tokenUsage, currentContextTokens,
     undo, redo, canUndo, canRedo,
-    onLoadCaseFile, onOpenCaseFile, hasCaseFile, isDossierOpen, setIsDossierOpen
+    onLoadCaseFile, onOpenCaseFile, hasCaseFile,
+    isDossierOpen, setIsDossierOpen,
+    isMapPanelOpen, setIsMapPanelOpen,
 }) => {
     const scrollRef = useRef<HTMLDivElement>(null);
     const [showScrollDown, setShowScrollDown] = useState(false);
@@ -111,6 +115,14 @@ export const ChatPanel: FC<ChatPanelProps> = ({
                     >
                         <FolderTree size={16} />
                     </button>
+                    <button
+                        className={`button secondary ${isMapPanelOpen ? 'active' : ''}`}
+                        title='Toggle Investigation Map panel'
+                        onClick={() => setIsMapPanelOpen(!isMapPanelOpen)}
+                        style={{ padding: '0.4rem', display: 'flex', alignItems: 'center', backgroundColor: isMapPanelOpen ? 'rgba(52, 152, 219, 0.2)' : undefined, borderColor: isMapPanelOpen ? '#3498db' : undefined }}
+                    >
+                        <Network size={16} />
+                    </button>
                 </div>
                 <div style={{ display: 'flex', gap: '8px', flex: 1, justifyContent: 'center' }}>
                     <ChatHistoryDropdown />
@@ -149,14 +161,14 @@ export const ChatPanel: FC<ChatPanelProps> = ({
                         }}
                         title="Scroll to bottom"
                     >
-                        <svg 
-                            width="24" 
-                            height="24" 
-                            viewBox="0 0 24 24" 
-                            fill="none" 
-                            stroke="white" 
-                            strokeWidth="3" 
-                            strokeLinecap="round" 
+                        <svg
+                            width="24"
+                            height="24"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="white"
+                            strokeWidth="3"
+                            strokeLinecap="round"
                             strokeLinejoin="round"
                             style={{ display: 'block' }}
                         >

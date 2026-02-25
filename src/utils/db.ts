@@ -10,11 +10,13 @@ declare global {
 }
 
 const DB_NAME = 'fileExplorerDB'; // Keeping original name for backwards compatibility
-const DB_VERSION = 2; // Upgraded to v2 for chat sessions
+const DB_VERSION = 3; // v3 adds investigation map store
 const DIRECTORY_STORE_NAME = 'directoryHandles';
 const DIRECTORY_KEY = 'rootDirectoryHandle';
 
 const CHAT_SESSIONS_STORE_NAME = 'chatSessions';
+const MAP_STORE_NAME = 'investigationMap';
+const MAP_KEY = 'current';
 
 /**
  * Opens the IndexedDB database.
@@ -36,6 +38,11 @@ function openDB(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains(CHAT_SESSIONS_STORE_NAME)) {
         const store = db.createObjectStore(CHAT_SESSIONS_STORE_NAME, { keyPath: 'id' });
         store.createIndex('updatedAt', 'updatedAt', { unique: false });
+      }
+
+      // v3: Investigation Map
+      if (!db.objectStoreNames.contains(MAP_STORE_NAME)) {
+        db.createObjectStore(MAP_STORE_NAME);
       }
     };
 
@@ -158,4 +165,35 @@ export async function deleteChatSession(id: string): Promise<void> {
     const result = await window.api.deleteChatSession(id);
     if (result.error) throw new Error(result.error);
   }
+}
+
+// ─── Investigation Map IO ──────────────────────────────────────────────────────
+
+import { MapNode, MapEdge } from '../types';
+
+export interface PersistedMap {
+  nodes: MapNode[];
+  edges: MapEdge[];
+}
+
+export async function saveMap(data: PersistedMap): Promise<void> {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(MAP_STORE_NAME, 'readwrite');
+    const store = tx.objectStore(MAP_STORE_NAME);
+    const request = store.put(data, MAP_KEY);
+    request.onsuccess = () => resolve();
+    request.onerror = (e) => reject((e.target as IDBRequest).error);
+  });
+}
+
+export async function loadMap(): Promise<PersistedMap | null> {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(MAP_STORE_NAME, 'readonly');
+    const store = tx.objectStore(MAP_STORE_NAME);
+    const request = store.get(MAP_KEY);
+    request.onsuccess = (e) => resolve((e.target as IDBRequest).result ?? null);
+    request.onerror = (e) => reject((e.target as IDBRequest).error);
+  });
 }

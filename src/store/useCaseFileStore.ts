@@ -21,10 +21,8 @@ interface CaseFileState {
     acceptProposedContent: (sectionId: string) => void;
     rejectProposedContent: (sectionId: string) => void;
 
-    // Map Actions
-    initializeMap: () => void;
-    updateMapNodes: (updater: import('../types').MapNode[] | ((prev: import('../types').MapNode[]) => import('../types').MapNode[])) => void;
-    updateMapEdges: (updater: import('../types').MapEdge[] | ((prev: import('../types').MapEdge[]) => import('../types').MapEdge[])) => void;
+    // Map seeding when a CaseFile is loaded (delegates to useMapStore)
+    seedMapFromCaseFile: (nodes: import('../types').MapNode[], edges: import('../types').MapEdge[]) => void;
 
     undo: () => void;
     redo: () => void;
@@ -168,37 +166,10 @@ export const useCaseFileStore = create<CaseFileState>((set) => ({
             };
         }),
 
-    initializeMap: () =>
-        set((state) => {
-            if (!state.caseFile || state.caseFile.map) return state;
-            const next: CaseFile = {
-                ...state.caseFile,
-                map: { id: `map-${Date.now()}`, caseFileId: state.caseFile.title, nodes: [], edges: [] }
-            };
-            return push(state, next);
-        }),
-
-    updateMapNodes: (updater) =>
-        set((state) => {
-            if (!state.caseFile || !state.caseFile.map) return state;
-            const nextNodes = typeof updater === 'function' ? (updater as (prev: import('../types').MapNode[]) => import('../types').MapNode[])(state.caseFile.map.nodes) : updater;
-            const next: CaseFile = {
-                ...state.caseFile,
-                map: { ...state.caseFile.map, nodes: nextNodes }
-            };
-            return push(state, next);
-        }),
-
-    updateMapEdges: (updater) =>
-        set((state) => {
-            if (!state.caseFile || !state.caseFile.map) return state;
-            const nextEdges = typeof updater === 'function' ? (updater as (prev: import('../types').MapEdge[]) => import('../types').MapEdge[])(state.caseFile.map.edges) : updater;
-            const next: CaseFile = {
-                ...state.caseFile,
-                map: { ...state.caseFile.map, edges: nextEdges }
-            };
-            return push(state, next);
-        }),
+    seedMapFromCaseFile: (nodes, edges) => {
+        const { loadMap } = (require('./useMapStore') as typeof import('./useMapStore')).useMapStore.getState();
+        loadMap(nodes, edges);
+    },
 
     undo: () =>
         set((state) => {
