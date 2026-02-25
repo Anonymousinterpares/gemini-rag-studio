@@ -55,7 +55,7 @@ export const App: FC = () => {
   const [showSettings, setShowSettings] = useState(true);
   const [isExplorerOpen, setIsExplorerOpen] = useState(false);
   const [isDossierOpen, setIsDossierOpen] = useState(false);
-  const [isPinned, setIsPinned] = useState(true);
+  const [isPinned, setIsPinned] = useState(false);
   const [isMapPanelOpen, setIsMapPanelOpen] = useState(false);
   const [rootDirectoryHandle, setRootDirectoryHandle] = useState<FileSystemDirectoryHandle | null>(null);
 

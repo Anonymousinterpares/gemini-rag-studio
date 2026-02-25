@@ -89,7 +89,7 @@ export const EntityNode: FC<NodeProps<MapNode>> = memo(({ id, data, selected }) 
 
             <div style={{ display: 'flex', flexDirection: 'column' }}>
                 <strong style={{ fontWeight: 600, textDecoration: isDisproven ? 'line-through' : 'none' }}>{data.label}</strong>
-                {data.description && (
+                {data.description && !(data as any).hideDescription && (
                     <span style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>
                         {data.description.length > 30 ? data.description.substring(0, 30) + '...' : data.description}
                     </span>

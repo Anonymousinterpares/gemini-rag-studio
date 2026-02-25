@@ -99,19 +99,29 @@ export const InvestigationMapCanvas: FC<Props> = ({ onOpenDossierForNode }) => {
     // ── RF event handlers ───────────────────────────────────────────────────────
     const onNodesChange = useCallback((changes: NodeChange[]) => {
         const updated: MapNode[] = applyNodeChanges(changes, nodes as Node[]) as unknown as MapNode[];
-        patchNodes({ add: [], remove: [], update: [] });
         // Position changes are applied via react flow locally; we synchronize on drag end
         useMapStore.setState({ nodes: updated });
-    }, [nodes, patchNodes]);
+        if (changes.some(c => c.type !== 'select' && c.type !== 'position')) {
+            useMapStore.getState().persistToDB();
+        }
+    }, [nodes]);
+
+    const onNodeDragStop = useCallback(() => {
+        useMapStore.getState().persistToDB();
+    }, []);
 
     const onEdgesChange = useCallback((changes: EdgeChange[]) => {
         const updated = applyEdgeChanges(changes, edges as Edge[]);
         useMapStore.setState({ edges: updated as import('../../types').MapEdge[] });
+        if (changes.some(c => c.type !== 'select')) {
+            useMapStore.getState().persistToDB();
+        }
     }, [edges]);
 
     const onConnect = useCallback((params: Connection | Edge) => {
         const newEdges = addEdge(params, edges as Edge[]) as unknown as import('../../types').MapEdge[];
         useMapStore.setState({ edges: newEdges });
+        useMapStore.getState().persistToDB();
     }, [edges]);
 
     const onNodeDoubleClick = useCallback((_event: React.MouseEvent, clickedNode: Node) => {
@@ -230,6 +240,7 @@ export const InvestigationMapCanvas: FC<Props> = ({ onOpenDossierForNode }) => {
                     nodes={rfNodes}
                     edges={rfEdges}
                     onNodesChange={onNodesChange}
+                    onNodeDragStop={onNodeDragStop}
                     onEdgesChange={onEdgesChange}
                     onConnect={onConnect}
                     onNodeDoubleClick={onNodeDoubleClick}
