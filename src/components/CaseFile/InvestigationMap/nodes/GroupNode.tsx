@@ -5,11 +5,15 @@ import { MapNode } from '../../../../types';
 import { FolderOpen, FolderClosed } from 'lucide-react';
 
 export const GroupNode: FC<NodeProps<MapNode>> = memo(({ data, selected }) => {
+    // Semantic zoom thresholds
+    const zoom = (data as any).semanticZoom ?? 1;
+    const isMacroView = zoom < 0.35;
+
     return (
         <div
             className={`cf-map-group-node ${selected ? 'selected' : ''}`}
             style={{
-                padding: '12px',
+                padding: isMacroView ? '6px' : '12px',
                 borderRadius: '8px',
                 background: 'rgba(255, 255, 255, 0.05)',
                 border: `2px dashed ${selected ? 'var(--accent-primary)' : 'var(--border-color)'}`,
@@ -18,9 +22,9 @@ export const GroupNode: FC<NodeProps<MapNode>> = memo(({ data, selected }) => {
                 color: 'var(--text-primary)',
             }}
         >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', opacity: 0.8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: isMacroView ? '0' : '8px', opacity: 0.8 }}>
                 {data.isCollapsed ? <FolderClosed size={16} /> : <FolderOpen size={16} />}
-                <strong style={{ fontSize: '12px' }}>{data.label}</strong>
+                {!isMacroView && <strong style={{ fontSize: '12px' }}>{data.label}</strong>}
             </div>
 
             {/* We still need handles on groups so we can connect to them when collapsed */}

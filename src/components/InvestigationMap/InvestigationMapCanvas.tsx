@@ -13,6 +13,8 @@ import {
     addEdge,
     BackgroundVariant,
     NodeMouseHandler,
+    useOnViewportChange,
+    ReactFlowProvider,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
@@ -24,7 +26,8 @@ import { useMapAI } from '../../hooks/useMapAI';
 import { useCaseFileStore } from '../../store/useCaseFileStore';
 import { useProjectStore } from '../../store/useProjectStore';
 import { useDossierAI } from '../../hooks/useDossierAI';
-import { Search, GitFork, Loader, Eye, EyeOff, Trash2, Globe, FileText, MessageSquare, ExternalLink } from 'lucide-react';
+import { useAutoLayout } from '../../hooks/useAutoLayout';
+import { Search, GitFork, Loader, Eye, EyeOff, Trash2, Globe, FileText, MessageSquare, ExternalLink, Network } from 'lucide-react';
 import { MapNode, MapNodeSource } from '../../types';
 
 /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
@@ -47,15 +50,17 @@ interface Props {
     onOpenDossierForNode?: (nodeId: string) => void;
 }
 
-export const InvestigationMapCanvas: FC<Props> = ({ onOpenDossierForNode }) => {
+const InvestigationMapCanvasInner: FC<Props> = ({ onOpenDossierForNode }) => {
     const { nodes, edges, patchNodes, patchEdges, hideDisproven } = useMapStore();
     const { caseFile } = useCaseFileStore();
     const { generateMapFromDocument, handleMapInstruction, reviewMapConnections, isMapProcessing } = useMapAI();
     const { findMatchingDossierId } = useProjectStore();
     const { generateContextualDossier } = useDossierAI();
+    const { runLayout, isLayingOut } = useAutoLayout();
 
     const [searchQuery, setSearchQuery] = useState('');
     const [hideDescriptions, setHideDescriptions] = useState(false);
+    const [semanticZoom, setSemanticZoom] = useState(1);
     const [hideEdges, setHideEdges] = useState(false);
     const [edgeToDelete, setEdgeToDelete] = useState<Edge | null>(null);
     const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
@@ -64,6 +69,10 @@ export const InvestigationMapCanvas: FC<Props> = ({ onOpenDossierForNode }) => {
     const [showInstructionInput, setShowInstructionInput] = useState<string | null>(null);
 
     // ── RF node/edge transform ─────────────────────────────────────────────────
+    useOnViewportChange({
+        onChange: (viewport) => setSemanticZoom(viewport.zoom),
+    });
+
     const rfNodes: Node[] = useMemo(() => nodes.filter(n => {
         if (hideDisproven && n.data.certainty === 'disproven') return false;
         return true;
@@ -75,9 +84,9 @@ export const InvestigationMapCanvas: FC<Props> = ({ onOpenDossierForNode }) => {
         return {
             ...n,
             style: { ...(((n as unknown) as Node).style || {}), opacity: isMatch ? 1 : 0.2 },
-            data: { ...n.data, hideDescription: hideDescriptions },
+            data: { ...n.data, hideDescription: hideDescriptions, semanticZoom },
         };
-    }), [nodes, searchQuery, hideDescriptions, hideDisproven]);
+    }), [nodes, searchQuery, hideDescriptions, hideDisproven, semanticZoom]);
 
     const rfEdges: Edge[] = useMemo(() => {
         // If hideDisproven is active, we also must hide any edges connected to disproven nodes
@@ -92,6 +101,7 @@ export const InvestigationMapCanvas: FC<Props> = ({ onOpenDossierForNode }) => {
             })
             .map(e => ({
                 ...e,
+                type: e.type || 'smoothstep', // Ensure edges default to smoothstep for smart routing
                 hidden: hideEdges,
             }));
     }, [edges, hideEdges, hideDisproven, rfNodes]);
@@ -226,6 +236,16 @@ export const InvestigationMapCanvas: FC<Props> = ({ onOpenDossierForNode }) => {
                         style={{ border: 'none', background: 'transparent', color: 'var(--text-color)', fontSize: '13px', outline: 'none', width: '140px' }}
                     />
                 </div>
+                <button
+                    onClick={() => runLayout()}
+                    className="map-toolbar-btn"
+                    title="Clean up map layout automatically"
+                    disabled={isLayingOut || nodes.length === 0}
+                    style={{ opacity: isLayingOut || nodes.length === 0 ? 0.5 : 1 }}
+                >
+                    {isLayingOut ? <Loader size={14} className="animate-spin" /> : <Network size={14} />} Layout
+                </button>
+                <div style={{ width: '1px', height: '16px', background: 'var(--border-color)' }}></div>
                 <button onClick={() => setHideDescriptions(!hideDescriptions)} className="map-toolbar-btn" title="Toggle node descriptions">
                     {hideDescriptions ? <EyeOff size={14} /> : <Eye size={14} />} Text
                 </button>
@@ -247,6 +267,7 @@ export const InvestigationMapCanvas: FC<Props> = ({ onOpenDossierForNode }) => {
                     onEdgeDoubleClick={onEdgeDoubleClick}
                     onNodeContextMenu={onNodeContextMenu}
                     nodeTypes={nodeTypes}
+                    defaultEdgeOptions={{ type: 'smoothstep' }} // Set default for new edges
                     fitView
                 >
                     <Background variant={BackgroundVariant.Dots} gap={12} size={1} />
@@ -478,5 +499,13 @@ export const InvestigationMapCanvas: FC<Props> = ({ onOpenDossierForNode }) => {
                 </div>
             )}
         </div>
+    );
+};
+
+export const InvestigationMapCanvas: FC<Props> = (props) => {
+    return (
+        <ReactFlowProvider>
+            <InvestigationMapCanvasInner {...props} />
+        </ReactFlowProvider>
     );
 };

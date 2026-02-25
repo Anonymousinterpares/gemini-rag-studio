@@ -56,6 +56,12 @@ export const EntityNode: FC<NodeProps<MapNode>> = memo(({ id, data, selected }) 
     else if (isUpdated) stateClass = 'node-state--updated';
     else if (isDisproven) stateClass = 'node-state--disproven';
 
+    // Semantic zoom thresholds
+    const zoom = (data as any).semanticZoom ?? 1;
+    const isMacroView = zoom < 0.35;
+    const isMidView = zoom >= 0.35 && zoom < 0.70;
+    const hideExtra = isMacroView || isMidView || (data as any).hideDescription;
+
     return (
         <div
             className={`cf-map-node ${stateClass} ${selected ? 'selected' : ''}`}
@@ -79,22 +85,24 @@ export const EntityNode: FC<NodeProps<MapNode>> = memo(({ id, data, selected }) 
             {/* Target handle connecting to the left/top */}
             <Handle type="target" position={Position.Top} style={{ background: color }} />
 
-            {isAdded && <div className="node-badge node-badge--new">NEW</div>}
-            {isUpdated && !isAdded && <div className="node-badge node-badge--updated">UPDATED</div>}
-            {isDisproven && <div className="node-badge node-badge--disproven">REMOVED</div>}
+            {!isMacroView && isAdded && <div className="node-badge node-badge--new">NEW</div>}
+            {!isMacroView && isUpdated && !isAdded && <div className="node-badge node-badge--updated">UPDATED</div>}
+            {!isMacroView && isDisproven && <div className="node-badge node-badge--disproven">REMOVED</div>}
 
             <div style={{ color, display: 'flex' }}>
                 {getIconForEntity(data.entityType)}
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-                <strong style={{ fontWeight: 600, textDecoration: isDisproven ? 'line-through' : 'none' }}>{data.label}</strong>
-                {data.description && !(data as any).hideDescription && (
-                    <span style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>
-                        {data.description.length > 30 ? data.description.substring(0, 30) + '...' : data.description}
-                    </span>
-                )}
-            </div>
+            {!isMacroView && (
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                    <strong style={{ fontWeight: 600, textDecoration: isDisproven ? 'line-through' : 'none' }}>{data.label}</strong>
+                    {data.description && !hideExtra && (
+                        <span style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>
+                            {data.description.length > 30 ? data.description.substring(0, 30) + '...' : data.description}
+                        </span>
+                    )}
+                </div>
+            )}
 
             {/* Source handle connecting to the right/bottom */}
             <Handle type="source" position={Position.Bottom} style={{ background: color }} />
