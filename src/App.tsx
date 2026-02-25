@@ -15,6 +15,7 @@ import { useSettingsStore, useFileStore, useComputeStore } from './store';
 import { useCaseFileStore } from './store/useCaseFileStore';
 import { useChatStore } from './store/useChatStore';
 import { useProjectStore } from './store/useProjectStore';
+import { useDossierStore } from './store/useDossierStore';
 import { useCaseFileIO } from './hooks/useCaseFileIO';
 import { Edit2, FileText } from 'lucide-react';
 
@@ -380,6 +381,10 @@ export const App: FC = () => {
         <div className="investigation-map-panel-wrapper">
           <InvestigationMapPanel
             onClose={() => setIsMapPanelOpen(false)}
+            onOpenDossierForNode={(dossierId) => {
+              useDossierStore.getState().setActiveDossier(dossierId);
+              setIsDossierOpen(true);
+            }}
           />
         </div>
       )}

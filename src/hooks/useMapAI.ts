@@ -34,6 +34,7 @@ const ADD_NODES_TOOL: Tool = {
                                         type: { type: SchemaType.STRING, description: 'One of: web, document, chat_exchange' },
                                         label: { type: SchemaType.STRING },
                                         snippet: { type: SchemaType.STRING },
+                                        url: { type: SchemaType.STRING, description: 'Optional URL, file path, or reference ID' },
                                     },
                                     required: ['type', 'label']
                                 }
@@ -67,6 +68,7 @@ const UPDATE_NODE_TOOL: Tool = {
                             type: { type: SchemaType.STRING },
                             label: { type: SchemaType.STRING },
                             snippet: { type: SchemaType.STRING },
+                            url: { type: SchemaType.STRING, description: 'Optional URL, file path, or reference ID' },
                         },
                         required: ['type', 'label']
                     }
@@ -232,7 +234,8 @@ STRICT RULES:
 1. USE ONLY THE PROVIDED TOOLS. No conversational text.
 2. NEVER add a node whose ID already appears in the existing node list.
 3. NEVER recreate the full map — only ADD or UPDATE specific items.
-4. Every node/edge you add MUST be grounded in the provided context.`;
+4. Every node/edge you add MUST be grounded in the provided context.
+5. When adding sources, ALWAYS populate the \`url\` field if referencing a specific file path, URL, or chat message ID.`;
 
 // ─── Hook ──────────────────────────────────────────────────────────────────────
 
