@@ -23,4 +23,71 @@
     investigation for case file -> created map in MERMAID -> EDITABLE BY LLM TO ADD MORE CONNECTIONS AND MAKE THEM MORE VISAALIZED, FILTERING SPECIFIC CONNECTIONS, THREADS, BRANCHES ETC.
 
     ## 2.6
+
     analysis required for IMPROVEMENT REQUEST FOR chat mode --> when building a case file, I want that file to be a completely separate from the main chat output area. the should be two new buttons added to the left panel: 'load case file' -> upon clicking, it shoudl allow user to select a case file by navigating in standard windows explorer window ; 'open case file' --> upon clicking, user should see an overlayed panel with the content of the case file. IMPORTANT --> commenting should be available in that file the same as in any standard chat bubbles.  ALSO, when commenting, LLM should have availabilty to the current chat content & the content of the case file and it should also have access to the internet with limitations set in the UI (the same ones as for the entire chat mode). The goal is to enable the case file to be expanded upon gradually, e.g. LLM created a case file tat touches several topics. Then user should be able to dig further in standard chat for more data and then, once user is satisfied, open the section with the case file, select desired section and ask llm to expand on that topic taking into account data already found and saved in the chat. BUT also, user should be able to request LLM to dig/expand on a topic even though it might be completely missing in the chat --> here is where the search option is necessary -> basically this should allow llm to do same research while writing comments and place big sections there. // additonal important think -> it should NOT be possible to remove selected part of text while leaving a comment requesting to make adjustments - if replacement is NOT successfull, the failed content that was suposed to replace selected one should be appended to the main CHAT so that new data would NOT be lost and old data would not be deleted. //addtionally, I need "undo" button at the bottom of the UI with a proper tooltip describing its functionality whic should be reversing the last action - e.g. if a comment was requested and data was replaced or failed data was appended to the chat, all of that since the last user input should be reversed by that button. there should be also a "redo" button specific for that functionality, next to undo button -> it should bring back what was undone --> this is to make applicaiton more robust and allow users to fix their potential errors easily. I need you to brainstorm hard on these and then, prepare a very detailed and very robust plan tacking each and every aspect of it
+
+
+    ## 3 UI/UX Architecture: The "Fluid Workspace"
+  Enterprise users require flexibility. The current fixed-width panel system (35% for files, 65% for chat) feels
+  restrictive on large monitors.
+   * Resizable Split Panes: Replace fixed CSS layouts with a library like react-resizable-panels to allow users to
+     customize their view.
+   * Collapsible Sidebars: Implement a "drawer" or "dock" system where panels can be collapsed into icons to maximize
+     focus during deep analysis.
+   * Design Tokens: Transition from basic CSS variables to a structured Design Token system. This ensures that spacing,
+     typography, and color semantic values (e.g., brand-primary, bg-subtle, border-muted) are consistent across all
+     custom components.
+
+
+    ## 4 Design System & Aesthetics
+  To achieve an "AAA" look, the app needs higher visual depth and consistent micro-interactions.
+   * Typography Overhaul: Implement a professional font stack (e.g., Inter for UI, JetBrains Mono for code) with a
+     strict modular scale for hierarchy.
+   * Elevation & Layering: Use shadows and semi-transparent backgrounds (glassmorphism) more effectively to distinguish
+     between the background, functional panels, and floating popovers.
+   * Standardized Iconography: Ensure all icons (currently using Lucide) use consistent stroke weights (e.g., 1.5px or
+     2px) and are aligned to a 20px or 24px grid.
+   * "Monster" vs. "Enterprise" Themes: Formalize the "Monster" theme as a creative flavor while providing a clean,
+     distraction-free "Standard Enterprise" light/dark theme by default.
+
+
+    ## 5 Interaction Design & Polish
+   * Skeleton Loaders: Replace the pulse animations in DocViewer and FilePanel with skeleton loaders that mimic the
+     actual layout of the data about to arrive.
+   * Command Palette (Ctrl + K): Add a global command palette for power users to quickly switch models, search projects,
+     or toggle settings without leaving the keyboard.
+   * Contextual Feedback: Improve the "Knowledge base updated" notifications. Instead of adding messages to the chat
+     history, use "Toast" notifications or a dedicated "System Status" bar at the bottom.
+   * Optimistic UI: When a user deletes a file or adds a comment, update the UI immediately before the backend/DB
+     confirms the action, making the app feel instantaneous.
+
+
+    ## 6 Performance & Scalability (Engineering)
+   * Component De-monolithization: App.tsx is currently a 400+ line monolith. Logic should be extracted into specialized
+     layout components (e.g., MainLayout, WorkspaceArea) and custom hooks.
+   * Code Splitting: Use React.lazy() and Suspense for heavy components like the InvestigationMapPanel, DossierPanel,
+     and DocViewer to reduce initial load time.
+   * State Management Hygiene: Move complex state logic out of App.tsx and into specialized Zustand stores or focused
+     useReducer hooks to prevent unnecessary re-renders of the entire app.
+   * Virtualization Expansion: Ensure every list (not just the DocViewer) uses react-window or virtuoso to handle
+     thousands of items (files, chat history, project logs) without lag.
+
+
+    ## 7 Enterprise-Grade Features
+   * Global Search: Implement a "Spotlight" search that finds text across all uploaded documents, not just the active
+     one.
+   * Accessibility (A11y): Perform a full ARIA audit. Ensure the app is fully keyboard-navigable and compatible with
+     screen readers (crucial for enterprise compliance/WCAG).
+   * Internationalization (i18n): Wrap hardcoded strings in a library like i18next to support global deployment.
+   * Audit & Telemetry: Add a dedicated "Developer/Debug Console" within the UI to monitor LLM token usage, RAG
+     retrieval latency, and embedding progress in real-time.
+
+
+    ## 8. Code Quality & Maintenance
+   * Schema Validation: Use Zod for validating settings and project files retrieved from IndexedDB/Storage to prevent
+     "state corruption" bugs.
+   * Component Documentation: Introduce Storybook to document Atoms (buttons, inputs) and Molecules (message items, file
+     rows) in isolation.
+   * Error Boundaries: Wrap major panels in React Error Boundaries to ensure that a crash in the Map functionality
+     doesn't take down the entire File and Chat interface.
+
