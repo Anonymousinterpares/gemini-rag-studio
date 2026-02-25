@@ -68,6 +68,7 @@ export const App: FC = () => {
     stopGeneration,
     handleClearConversation, handleRemoveMessage,
     handleUpdateMessage, handleTruncateHistory,
+    handleSaveAndRerun: saveAndRerunAction,
     initialChatHistory,
     caseFileState, setCaseFileState,
     resendWithComments,
@@ -185,11 +186,14 @@ export const App: FC = () => {
 
   const handleSaveAndRerun = async (idx: number) => {
     if (!editingContent.trim()) return;
-    handleUpdateMessage(idx, { content: editingContent });
-    handleTruncateHistory(idx);
+    saveAndRerunAction(idx, editingContent);
     setEditingIndex(null);
     setEditingContent('');
-    await handleRerunQuery(idx);
+    // Wait a tick for the store to update or pass the new history explicitly if handleRerunQuery allowed it.
+    // Since handleRerunQuery uses chatHistory from the hook, we need to make sure it's updated.
+    // Alternatively, we can call submitQuery directly with the new history.
+    const newHistory = useChatStore.getState().chatHistory;
+    await submitQuery(editingContent, newHistory.slice(0, idx));
   };
 
   const { handleDrop, handleClearFiles, addFilesAndEmbed } = useFileState({

@@ -109,6 +109,7 @@ export const useChat = ({
         isLoading, setIsLoading,
         abortController, setAbortController,
         clearHistory, updateMessage, truncateHistory,
+        saveAndRerun,
         caseFileState, setCaseFileState
     } = useChatStore();
 
@@ -1165,6 +1166,7 @@ CRITICAL RULES:
         handleRemoveMessage: (idx: number) => setChatHistory(prev => prev.filter((_, i) => i !== idx)),
         handleUpdateMessage: updateMessage,
         handleTruncateHistory: truncateHistory,
+        handleSaveAndRerun: saveAndRerun,
         pendingQuery, setPendingQuery,
         initialChatHistory,
         caseFileState, setCaseFileState,

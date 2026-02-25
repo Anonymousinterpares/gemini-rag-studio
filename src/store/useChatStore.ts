@@ -41,6 +41,7 @@ interface ChatState {
   clearHistory: (initialHistory: ChatMessage[]) => void;
   updateMessage: (index: number, update: Partial<ChatMessage>) => void;
   truncateHistory: (index: number) => void;
+  saveAndRerun: (index: number, content: string) => void;
   setCaseFileState: (state: Partial<ChatState['caseFileState']>) => void;
 }
 
@@ -138,6 +139,17 @@ export const useChatStore = create<ChatState>((set) => ({
   truncateHistory: (index) => set((state) => ({
     chatHistory: state.chatHistory.slice(0, index + 1)
   })),
+
+  saveAndRerun: (index, content) => set((state) => {
+    const newHistory = state.chatHistory.slice(0, index + 1);
+    if (newHistory[index]) {
+      newHistory[index] = { ...newHistory[index], content };
+    }
+    return {
+      historyStack: [...state.historyStack, state.chatHistory].slice(-20),
+      chatHistory: newHistory
+    };
+  }),
 
   setCaseFileState: (state) => set((prev) => ({
     caseFileState: { ...prev.caseFileState, ...state }
