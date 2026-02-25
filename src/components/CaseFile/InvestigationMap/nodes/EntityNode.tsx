@@ -70,8 +70,8 @@ export const EntityNode: FC<NodeProps<MapNode>> = memo(({ id, data, selected }) 
                 padding: '8px 12px',
                 borderRadius: '8px',
                 background: 'var(--bg-panel)',
-                border: `2px solid ${selected ? color : 'var(--border-color)'}`,
-                boxShadow: selected ? `0 0 0 2px ${color}40` : '0 2px 4px rgba(0,0,0,0.1)',
+                border: `3px solid ${selected ? color : 'var(--border-color)'}`,
+                boxShadow: selected ? `0 0 0 3px ${color}40` : '0 2px 4px rgba(0,0,0,0.1)',
                 display: 'flex',
                 alignItems: 'center',
                 gap: '8px',
@@ -94,7 +94,7 @@ export const EntityNode: FC<NodeProps<MapNode>> = memo(({ id, data, selected }) 
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column' }}>
-                <strong style={{ fontWeight: 600, textDecoration: isDisproven ? 'line-through' : 'none' }}>{data.label}</strong>
+                <strong style={{ fontSize: '13px', fontWeight: 600, textDecoration: isDisproven ? 'line-through' : 'none' }}>{data.label}</strong>
                 {!isMacroView && data.description && !hideExtra && (
                     <span style={{
                         fontSize: '10px',

@@ -16,7 +16,7 @@ export const GroupNode: FC<NodeProps<MapNode>> = memo(({ data, selected }) => {
                 padding: isMacroView ? '6px' : '12px',
                 borderRadius: '8px',
                 background: 'rgba(255, 255, 255, 0.05)',
-                border: `2px dashed ${selected ? 'var(--accent-primary)' : 'var(--border-color)'}`,
+                border: `3px dashed ${selected ? 'var(--accent-primary)' : 'var(--border-color)'}`,
                 minWidth: '200px',
                 minHeight: '150px',
                 color: 'var(--text-primary)',
@@ -24,7 +24,7 @@ export const GroupNode: FC<NodeProps<MapNode>> = memo(({ data, selected }) => {
         >
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: isMacroView ? '0' : '8px', opacity: 0.8 }}>
                 {data.isCollapsed ? <FolderClosed size={16} /> : <FolderOpen size={16} />}
-                <strong style={{ fontSize: '12px' }}>{data.label}</strong>
+                <strong style={{ fontSize: '13px' }}>{data.label}</strong>
             </div>
 
             {/* We still need handles on groups so we can connect to them when collapsed */}
