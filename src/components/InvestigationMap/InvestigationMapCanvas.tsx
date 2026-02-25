@@ -27,7 +27,8 @@ import { useCaseFileStore } from '../../store/useCaseFileStore';
 import { useProjectStore } from '../../store/useProjectStore';
 import { useDossierAI } from '../../hooks/useDossierAI';
 import { useAutoLayout } from '../../hooks/useAutoLayout';
-import { Search, GitFork, Loader, Eye, EyeOff, Trash2, Globe, FileText, MessageSquare, ExternalLink, Network } from 'lucide-react';
+import { useGraphPath } from '../../hooks/useGraphPath';
+import { Search, GitFork, Loader, Eye, EyeOff, Trash2, Globe, FileText, MessageSquare, ExternalLink, Network, Focus, X } from 'lucide-react';
 import { MapNode, MapNodeSource } from '../../types';
 
 /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
@@ -62,6 +63,12 @@ const InvestigationMapCanvasInner: FC<Props> = ({ onOpenDossierForNode }) => {
     const [hideDescriptions, setHideDescriptions] = useState(false);
     const [semanticZoom, setSemanticZoom] = useState(1);
     const [hideEdges, setHideEdges] = useState(false);
+
+    // Focus & Trace State
+    const [highlightedNodeId, setHighlightedNodeId] = useState<string | null>(null);
+    const [highlightDegree, setHighlightDegree] = useState<number>(1);
+    const networkNodeIds = useGraphPath(highlightedNodeId, edges, highlightDegree);
+
     const [edgeToDelete, setEdgeToDelete] = useState<Edge | null>(null);
     const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
     const [sourceDrawer, setSourceDrawer] = useState<SourceDrawerState | null>(null);
@@ -81,12 +88,16 @@ const InvestigationMapCanvasInner: FC<Props> = ({ onOpenDossierForNode }) => {
             n.data.label.toLowerCase().includes(searchQuery.toLowerCase()) ||
             n.data.description?.toLowerCase().includes(searchQuery.toLowerCase());
 
+        const isHighlighted = highlightedNodeId ? networkNodeIds.has(n.id) : true;
+        const opacity = (!isMatch || !isHighlighted) ? 0.15 : 1;
+        const pointerEvents = opacity === 1 ? 'auto' : 'none';
+
         return {
             ...n,
-            style: { ...(((n as unknown) as Node).style || {}), opacity: isMatch ? 1 : 0.2 },
+            style: { ...(((n as unknown) as Node).style || {}), opacity, pointerEvents, transition: 'opacity 0.3s ease' },
             data: { ...n.data, hideDescription: hideDescriptions, semanticZoom },
         };
-    }), [nodes, searchQuery, hideDescriptions, hideDisproven, semanticZoom]);
+    }), [nodes, searchQuery, hideDescriptions, hideDisproven, semanticZoom, highlightedNodeId, networkNodeIds]);
 
     const rfEdges: Edge[] = useMemo(() => {
         // If hideDisproven is active, we also must hide any edges connected to disproven nodes
@@ -99,12 +110,17 @@ const InvestigationMapCanvasInner: FC<Props> = ({ onOpenDossierForNode }) => {
                 }
                 return true;
             })
-            .map(e => ({
-                ...e,
-                type: e.type || 'smoothstep', // Ensure edges default to smoothstep for smart routing
-                hidden: hideEdges,
-            }));
-    }, [edges, hideEdges, hideDisproven, rfNodes]);
+            .map(e => {
+                const isHighlighted = highlightedNodeId ? (networkNodeIds.has(e.source) && networkNodeIds.has(e.target)) : true;
+                const rfEdge = e as unknown as Edge;
+                return {
+                    ...e,
+                    type: e.type || 'smoothstep', // Ensure edges default to smoothstep for smart routing
+                    hidden: hideEdges,
+                    style: { ...rfEdge.style, opacity: isHighlighted ? 1 : 0.1, transition: 'opacity 0.3s ease' }
+                };
+            });
+    }, [edges, hideEdges, hideDisproven, rfNodes, highlightedNodeId, networkNodeIds]);
 
     // ── RF event handlers ───────────────────────────────────────────────────────
     const onNodesChange = useCallback((changes: NodeChange[]) => {
@@ -208,6 +224,13 @@ const InvestigationMapCanvasInner: FC<Props> = ({ onOpenDossierForNode }) => {
         setShowInstructionInput(null);
     };
 
+    const handleFocusNetwork = () => {
+        if (!contextMenu) return;
+        setHighlightedNodeId(contextMenu.nodeId);
+        setHighlightDegree(1);
+        setContextMenu(null);
+    };
+
     // ── Source icon helper ────────────────────────────────────────────────────
     const SourceIcon: FC<{ type: MapNodeSource['type'] }> = ({ type }) => {
         if (type === 'web') return <Globe size={14} />;
@@ -288,6 +311,9 @@ const InvestigationMapCanvasInner: FC<Props> = ({ onOpenDossierForNode }) => {
                             </DropdownMenu.Item>
                             <DropdownMenu.Item className="map-context-item" onSelect={handleDeepDive}>
                                 🌐 Deep Dive (Web Search)
+                            </DropdownMenu.Item>
+                            <DropdownMenu.Item className="map-context-item" onSelect={handleFocusNetwork}>
+                                🎯 Focus on Network
                             </DropdownMenu.Item>
                             <DropdownMenu.Item className="map-context-item" onSelect={() => {
                                 setShowInstructionInput(contextMenu.nodeId);
@@ -496,6 +522,45 @@ const InvestigationMapCanvasInner: FC<Props> = ({ onOpenDossierForNode }) => {
                                 : <><GitFork size={16} /> Generate Map from Document</>}
                         </button>
                     )}
+                </div>
+            )}
+
+            {/* Float Highlight Control UI */}
+            {highlightedNodeId && (
+                <div style={{
+                    position: 'absolute', bottom: '24px', left: '50%', transform: 'translateX(-50%)',
+                    zIndex: 20, background: 'var(--panel-bg-color)', border: '1px solid var(--accent-primary)',
+                    borderRadius: '12px', padding: '12px 20px', display: 'flex', alignItems: 'center', gap: '16px',
+                    boxShadow: '0 8px 32px rgba(0,0,0,0.4)', color: 'var(--text-color)'
+                }}>
+                    <Focus size={18} color="var(--accent-primary)" />
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <div style={{ fontSize: '13px', fontWeight: 600 }}>
+                            Tracing: {nodes.find(n => n.id === highlightedNodeId)?.data.label || 'Node'}
+                        </div>
+                        <div style={{ fontSize: '11px', color: 'var(--text-color-secondary)' }}>
+                            Showing {highlightDegree}-degree connections ({networkNodeIds.size - 1} connected nodes)
+                        </div>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginLeft: '12px', borderLeft: '1px solid var(--border-color)', paddingLeft: '16px' }}>
+                        <span style={{ fontSize: '12px', color: 'var(--text-color-secondary)' }}>Distance:</span>
+                        <input
+                            type="range"
+                            min="1"
+                            max="5"
+                            value={highlightDegree}
+                            onChange={(e) => setHighlightDegree(Number(e.target.value))}
+                            style={{ width: '80px', accentColor: 'var(--accent-primary)' }}
+                        />
+                        <span style={{ fontSize: '12px', fontWeight: 600, width: '12px' }}>{highlightDegree}</span>
+                    </div>
+                    <button
+                        onClick={() => setHighlightedNodeId(null)}
+                        style={{ marginLeft: '12px', background: 'transparent', border: 'none', color: 'var(--text-color-secondary)', cursor: 'pointer', padding: '4px' }}
+                        title="Clear Focus"
+                    >
+                        <X size={18} />
+                    </button>
                 </div>
             )}
         </div>
