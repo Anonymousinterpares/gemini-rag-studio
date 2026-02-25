@@ -1,5 +1,5 @@
 import { FC, useState, useRef, useCallback, useEffect } from 'react';
-import { ChevronLeft, ChevronRight, FileText, FolderOpen, FolderTree, ChevronDown } from 'lucide-react';
+import { ChevronLeft, ChevronRight, FileText, FolderOpen, FolderTree } from 'lucide-react';
 import { ChatMessage, AppFile, TokenUsage } from '../types';
 import { MessageList } from './Chat/MessageList';
 import { ChatInputForm } from './Chat/ChatInputForm';
@@ -61,9 +61,21 @@ export const ChatPanel: FC<ChatPanelProps> = ({
     const handleScroll = useCallback(() => {
         if (scrollRef.current) {
             const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
-            setShowScrollDown(scrollHeight - scrollTop - clientHeight > 100);
+            const needsScroll = scrollHeight - scrollTop - clientHeight > 100;
+            if (needsScroll !== showScrollDown) {
+                console.log(`[ChatPanel] Scroll-to-bottom button visibility changing: ${needsScroll}`, {
+                    scrollTop, scrollHeight, clientHeight, diff: scrollHeight - scrollTop - clientHeight
+                });
+                setShowScrollDown(needsScroll);
+            }
         }
-    }, []);
+    }, [showScrollDown]);
+
+    // Log mounting for debug
+    useEffect(() => {
+        console.log('[ChatPanel] Mounted, initial scroll check');
+        handleScroll();
+    }, [handleScroll]);
 
     // Also check on chatHistory changes in case scrollHeight grows
     useEffect(() => {
@@ -137,7 +149,19 @@ export const ChatPanel: FC<ChatPanelProps> = ({
                         }}
                         title="Scroll to bottom"
                     >
-                        <ChevronDown size={22} strokeWidth={3} color="#ffffff" stroke="#ffffff" />
+                        <svg 
+                            width="24" 
+                            height="24" 
+                            viewBox="0 0 24 24" 
+                            fill="none" 
+                            stroke="white" 
+                            strokeWidth="3" 
+                            strokeLinecap="round" 
+                            strokeLinejoin="round"
+                            style={{ display: 'block' }}
+                        >
+                            <path d="M7 10l5 5 5-5" />
+                        </svg>
                     </button>
                 )}
                 <ChatInputForm

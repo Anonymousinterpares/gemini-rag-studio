@@ -1,83 +1,109 @@
-import { ipcMain as c, app as a, BrowserWindow as w } from "electron";
-import o from "path";
-import { fileURLToPath as m } from "url";
-import i from "fs/promises";
-const u = o.dirname(m(import.meta.url));
-process.env.APP_ROOT = o.join(u, "..");
-const h = process.env.VITE_DEV_SERVER_URL, D = o.join(process.env.APP_ROOT, "dist-electron"), f = o.join(process.env.APP_ROOT, "dist");
-process.env.VITE_PUBLIC = h ? o.join(process.env.APP_ROOT, "public") : f;
-let r;
-function j() {
-  r = new w({
-    icon: o.join(process.env.VITE_PUBLIC, "favicon.ico"),
+import { ipcMain, app, BrowserWindow } from "electron";
+import path from "path";
+import { fileURLToPath } from "url";
+import fs from "fs/promises";
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+process.env.APP_ROOT = path.join(__dirname, "..");
+const VITE_DEV_SERVER_URL = process.env["VITE_DEV_SERVER_URL"];
+const MAIN_DIST = path.join(process.env.APP_ROOT, "dist-electron");
+const RENDERER_DIST = path.join(process.env.APP_ROOT, "dist");
+process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL ? path.join(process.env.APP_ROOT, "public") : RENDERER_DIST;
+let win;
+function createWindow() {
+  win = new BrowserWindow({
+    icon: path.join(process.env.VITE_PUBLIC, "favicon.ico"),
     width: 1400,
     height: 900,
     webPreferences: {
-      preload: o.join(u, "preload.mjs"),
+      preload: path.join(__dirname, "preload.mjs"),
       // Security: Disable nodeIntegration, enable contextIsolation
-      nodeIntegration: !1,
-      contextIsolation: !0,
-      sandbox: !1
+      nodeIntegration: false,
+      contextIsolation: true,
+      sandbox: false
     }
-  }), r.webContents.on("did-finish-load", () => {
-    r == null || r.webContents.send("main-process-message", (/* @__PURE__ */ new Date()).toLocaleString());
-  }), h ? r.loadURL(h) : r.loadFile(o.join(f, "index.html"));
-}
-const l = async () => {
-  const n = a.getPath("userData"), s = o.join(n, "sessions");
-  try {
-    await i.mkdir(s, { recursive: !0 });
-  } catch {
+  });
+  win.webContents.on("did-finish-load", () => {
+    win == null ? void 0 : win.webContents.send("main-process-message", (/* @__PURE__ */ new Date()).toLocaleString());
+  });
+  if (VITE_DEV_SERVER_URL) {
+    win.loadURL(VITE_DEV_SERVER_URL);
+  } else {
+    win.loadFile(path.join(RENDERER_DIST, "index.html"));
   }
-  return s;
-};
-c.handle("save-chat-session", async (n, s) => {
+}
+const getSessionsDir = async () => {
+  const userData = app.getPath("userData");
+  const sessionsDir = path.join(userData, "sessions");
   try {
-    const e = await l(), t = o.join(e, `${s.id}.json`);
-    return await i.writeFile(t, JSON.stringify(s, null, 2), "utf-8"), { success: !0 };
+    await fs.mkdir(sessionsDir, { recursive: true });
   } catch (e) {
-    return console.error("Failed to save session:", e), { error: e.message };
+  }
+  return sessionsDir;
+};
+ipcMain.handle("save-chat-session", async (event, sessionData) => {
+  try {
+    const sessionsDir = await getSessionsDir();
+    const filePath = path.join(sessionsDir, `${sessionData.id}.json`);
+    await fs.writeFile(filePath, JSON.stringify(sessionData, null, 2), "utf-8");
+    return { success: true };
+  } catch (e) {
+    console.error("Failed to save session:", e);
+    return { error: e.message };
   }
 });
-c.handle("load-all-chat-sessions", async () => {
+ipcMain.handle("load-all-chat-sessions", async () => {
   try {
-    const n = await l(), s = await i.readdir(n), e = [];
-    for (const t of s)
-      if (t.endsWith(".json")) {
-        const d = o.join(n, t), p = await i.readFile(d, "utf-8");
+    const sessionsDir = await getSessionsDir();
+    const files = await fs.readdir(sessionsDir);
+    const sessions = [];
+    for (const file of files) {
+      if (file.endsWith(".json")) {
+        const filePath = path.join(sessionsDir, file);
+        const data = await fs.readFile(filePath, "utf-8");
         try {
-          e.push(JSON.parse(p));
-        } catch {
-          console.error(`Invalid session file: ${t}`);
+          sessions.push(JSON.parse(data));
+        } catch (e) {
+          console.error(`Invalid session file: ${file}`);
         }
       }
-    return e;
-  } catch (n) {
-    return console.error("Failed to load all sessions:", n), [];
-  }
-});
-c.handle("load-chat-session", async (n, s) => {
-  try {
-    const e = await l(), t = o.join(e, `${s}.json`), d = await i.readFile(t, "utf-8");
-    return JSON.parse(d);
+    }
+    return sessions;
   } catch (e) {
-    return console.error(`Failed to load session ${s}:`, e), null;
+    console.error("Failed to load all sessions:", e);
+    return [];
   }
 });
-c.handle("delete-chat-session", async (n, s) => {
+ipcMain.handle("load-chat-session", async (event, id) => {
   try {
-    const e = await l(), t = o.join(e, `${s}.json`);
-    return await i.unlink(t), { success: !0 };
+    const sessionsDir = await getSessionsDir();
+    const filePath = path.join(sessionsDir, `${id}.json`);
+    const data = await fs.readFile(filePath, "utf-8");
+    return JSON.parse(data);
   } catch (e) {
-    return console.error(`Failed to delete session ${s}:`, e), { error: e.message };
+    console.error(`Failed to load session ${id}:`, e);
+    return null;
   }
 });
-a.on("window-all-closed", () => {
-  process.platform !== "darwin" && (a.quit(), r = null);
+ipcMain.handle("delete-chat-session", async (event, id) => {
+  try {
+    const sessionsDir = await getSessionsDir();
+    const filePath = path.join(sessionsDir, `${id}.json`);
+    await fs.unlink(filePath);
+    return { success: true };
+  } catch (e) {
+    console.error(`Failed to delete session ${id}:`, e);
+    return { error: e.message };
+  }
 });
-a.whenReady().then(j);
+app.on("window-all-closed", () => {
+  if (process.platform !== "darwin") {
+    app.quit();
+    win = null;
+  }
+});
+app.whenReady().then(createWindow);
 export {
-  D as MAIN_DIST,
-  f as RENDERER_DIST,
-  h as VITE_DEV_SERVER_URL
+  MAIN_DIST,
+  RENDERER_DIST,
+  VITE_DEV_SERVER_URL
 };

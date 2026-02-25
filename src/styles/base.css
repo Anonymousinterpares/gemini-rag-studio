@@ -94,7 +94,21 @@ button:focus-visible {
   from {
     transform: rotate(0deg);
   }
+
   to {
     transform: rotate(360deg);
   }
+}
+
+/* Reading Content Text Justification */
+.message-markup p,
+.message-markup li,
+.cf-section-content p,
+.cf-section-content li,
+.doc-quick-view-chunk,
+.dossier-panel-container p,
+.dossier-panel-container li,
+.doc-line-text {
+  text-align: justify;
+  text-justify: inter-word;
 }
