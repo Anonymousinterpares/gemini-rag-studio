@@ -487,7 +487,7 @@ export const useMapAI = () => {
         const update = queue.dequeueUpdate();
         if (!update || update.length === 0) return;
 
-        const summaries = update.map(r => r.chunk?.substring(0, 200)).join('\n---\n');
+        const summaries = update.map(r => `**${r.title}** (${r.link})\n${r.snippet}`).join('\n---\n');
         await handleMapInstruction(`Incorporate the following new research findings into the map:\n${summaries}`);
 
         addToast(`Map updated from search results.`, 'success');

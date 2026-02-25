@@ -347,9 +347,11 @@ export const App: FC = () => {
       />
 
       {isMapPanelOpen && (
-        <InvestigationMapPanel
-          onClose={() => setIsMapPanelOpen(false)}
-        />
+        <div className="investigation-map-panel-wrapper">
+          <InvestigationMapPanel
+            onClose={() => setIsMapPanelOpen(false)}
+          />
+        </div>
       )}
 
       <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)}>

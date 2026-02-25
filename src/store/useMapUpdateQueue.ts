@@ -1,10 +1,11 @@
 import { create } from 'zustand';
-import { SearchResult } from '../types';
+import type { SearchResult as WebSearchResult } from '../utils/search';
 
 interface MapUpdateQueueState {
-    pendingUpdates: SearchResult[][];
-    enqueueUpdate: (results: SearchResult[]) => void;
-    dequeueUpdate: () => SearchResult[] | null;
+    /** Each item is a batch of web search results from a single search_web call */
+    pendingUpdates: WebSearchResult[][];
+    enqueueUpdate: (results: WebSearchResult[]) => void;
+    dequeueUpdate: () => WebSearchResult[] | null;
     clearQueue: () => void;
 }
 

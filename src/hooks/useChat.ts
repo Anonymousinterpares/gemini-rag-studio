@@ -470,6 +470,19 @@ export const useChat = ({
                                 console.log(`[Chat] Executing search_web with query: "${searchQuery}"`);
 
                                 const results = await searchWeb(searchQuery);
+
+                                // ── Map Update Queue ───────────────────────────────────────────────
+                                // Forward results to the map's update queue (fire-and-forget; map
+                                // may not be open, queue will drain lazily via useMapAI).
+                                try {
+                                    const { useMapUpdateQueue } = await import('../store/useMapUpdateQueue');
+                                    const resultArray = Array.isArray(results) ? results : [results];
+                                    if (resultArray.length > 0) {
+                                        useMapUpdateQueue.getState().enqueueUpdate(resultArray);
+                                    }
+                                } catch { /* map store not available – non-fatal */ }
+                                // ───────────────────────────────────────────────────────────────────
+
                                 const toolOutput = {
                                     role: 'tool' as const,
                                     tool_call_id: toolCall.id,

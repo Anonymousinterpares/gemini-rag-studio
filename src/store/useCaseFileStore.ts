@@ -48,8 +48,15 @@ export const useCaseFileStore = create<CaseFileState>((set) => ({
     isOverlayOpen: false,
     _fileHandle: null,
 
-    loadCaseFile: (file, handle) =>
-        set({ caseFile: file, undoStack: [], redoStack: [], isOverlayOpen: true, _fileHandle: handle ?? null }),
+    loadCaseFile: (file, handle) => {
+        set({ caseFile: file, undoStack: [], redoStack: [], isOverlayOpen: true, _fileHandle: handle ?? null });
+        // Seed the independent map store with any existing map data embedded in the case file
+        if (file.map && (file.map.nodes.length > 0 || file.map.edges.length > 0)) {
+            // Use getState() to avoid a circular reference through the store interface
+            const { useMapStore } = require('./useMapStore') as typeof import('./useMapStore');
+            useMapStore.getState().loadMap(file.map.nodes, file.map.edges);
+        }
+    },
 
     patchSection: (sectionId, newContent) =>
         set((state) => {
