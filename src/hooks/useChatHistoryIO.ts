@@ -1,5 +1,6 @@
 import { useCallback } from 'react';
 import { useChatStore } from '../store/useChatStore';
+import { useProjectStore } from '../store/useProjectStore';
 import { saveChatSession, loadAllChatSessions, deleteChatSession, loadChatSession } from '../utils/db';
 import { ChatMessage, TokenUsage } from '../types';
 
@@ -30,8 +31,11 @@ export const useChatHistoryIO = () => {
         // Prevent infinite loops by only booting up if there is no active session yet
         if (useChatStore.getState().activeSessionId) return;
 
+        const activeProjectId = useProjectStore.getState().activeProjectId;
+        if (!activeProjectId) return;
+
         try {
-            const sessions = await loadAllChatSessions();
+            const sessions = await loadAllChatSessions(activeProjectId);
 
             if (sessions.length > 0) {
                 setSessionList(sessions.map(s => ({ id: s.id, title: s.title, createdAt: s.createdAt, updatedAt: s.updatedAt })));
@@ -56,6 +60,9 @@ export const useChatHistoryIO = () => {
         // Do not save empty conversations to the database. They must have user content.
         if (history.length <= 1) return;
 
+        const activeProjectId = useProjectStore.getState().activeProjectId;
+        if (!activeProjectId) return;
+
         try {
             const existing = await loadChatSession(sessionId);
             const now = Date.now();
@@ -72,6 +79,7 @@ export const useChatHistoryIO = () => {
 
             const updatedSession = {
                 id: sessionId,
+                projectId: activeProjectId,
                 title,
                 createdAt: existing ? existing.createdAt : now,
                 updatedAt: now,
@@ -82,7 +90,7 @@ export const useChatHistoryIO = () => {
             await saveChatSession(updatedSession);
 
             // Refresh sidebar list
-            const sessions = await loadAllChatSessions();
+            const sessions = await loadAllChatSessions(activeProjectId);
             setSessionList(sessions.map(s => ({ id: s.id, title: s.title, createdAt: s.createdAt, updatedAt: s.updatedAt })));
 
         } catch (e) {
@@ -107,10 +115,13 @@ export const useChatHistoryIO = () => {
     }, [setActiveSessionId, clearHistory, setTokenUsage]);
 
     const deleteSession = useCallback(async (id: string) => {
+        const activeProjectId = useProjectStore.getState().activeProjectId;
+        if (!activeProjectId) return;
+
         try {
             await deleteChatSession(id);
 
-            const sessions = await loadAllChatSessions();
+            const sessions = await loadAllChatSessions(activeProjectId);
             setSessionList(sessions.map(s => ({ id: s.id, title: s.title, createdAt: s.createdAt, updatedAt: s.updatedAt })));
 
             // If we deleted the active one, pick the next most recent, or create a new one
@@ -127,13 +138,16 @@ export const useChatHistoryIO = () => {
     }, [activeSessionId, setSessionList, switchSession, createNewSession]);
 
     const renameSession = useCallback(async (id: string, newTitle: string) => {
+        const activeProjectId = useProjectStore.getState().activeProjectId;
+        if (!activeProjectId) return;
+
         try {
             const existing = await loadChatSession(id);
             if (existing) {
                 existing.title = newTitle;
                 await saveChatSession(existing);
 
-                const sessions = await loadAllChatSessions();
+                const sessions = await loadAllChatSessions(activeProjectId);
                 setSessionList(sessions.map(s => ({ id: s.id, title: s.title, createdAt: s.createdAt, updatedAt: s.updatedAt })));
             }
         } catch (e) {

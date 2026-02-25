@@ -69,7 +69,6 @@ export const InvestigationMapPanel: FC<Props> = ({ onClose, onOpenDossierForNode
                     </button>
                 </div>
 
-                {/* Progress bar */}
                 {progress && (
                     <div className="map-progress-container">
                         <Loader size={13} className="animate-spin" style={{ marginRight: 6 }} />
@@ -79,12 +78,6 @@ export const InvestigationMapPanel: FC<Props> = ({ onClose, onOpenDossierForNode
                                 {progress.batchCurrent}/{progress.batchTotal}
                             </span>
                         )}
-                        <div className="map-progress-bar-track">
-                            <div
-                                className="map-progress-bar-fill"
-                                style={{ width: `${progress.batchTotal > 0 ? (progress.batchCurrent / progress.batchTotal) * 100 : 0}%` }}
-                            />
-                        </div>
                     </div>
                 )}
 

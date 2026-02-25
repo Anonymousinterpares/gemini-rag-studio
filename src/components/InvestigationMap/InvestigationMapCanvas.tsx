@@ -22,6 +22,8 @@ import { EntityNode } from '../CaseFile/InvestigationMap/nodes/EntityNode';
 import { GroupNode } from '../CaseFile/InvestigationMap/nodes/GroupNode';
 import { useMapAI } from '../../hooks/useMapAI';
 import { useCaseFileStore } from '../../store/useCaseFileStore';
+import { useProjectStore } from '../../store/useProjectStore';
+import { useDossierAI } from '../../hooks/useDossierAI';
 import { Search, GitFork, Loader, Eye, EyeOff, Trash2, Globe, FileText, MessageSquare, ExternalLink } from 'lucide-react';
 import { MapNode, MapNodeSource } from '../../types';
 
@@ -49,6 +51,8 @@ export const InvestigationMapCanvas: FC<Props> = ({ onOpenDossierForNode }) => {
     const { nodes, edges, patchNodes, patchEdges, hideDisproven } = useMapStore();
     const { caseFile } = useCaseFileStore();
     const { generateMapFromDocument, handleMapInstruction, reviewMapConnections, isMapProcessing } = useMapAI();
+    const { findMatchingDossierId } = useProjectStore();
+    const { generateContextualDossier } = useDossierAI();
 
     const [searchQuery, setSearchQuery] = useState('');
     const [hideDescriptions, setHideDescriptions] = useState(false);
@@ -158,7 +162,15 @@ export const InvestigationMapCanvas: FC<Props> = ({ onOpenDossierForNode }) => {
 
     const handleOpenDossier = () => {
         if (!contextMenu) return;
-        onOpenDossierForNode?.(contextMenu.nodeId);
+        const node = nodes.find(n => n.id === contextMenu.nodeId);
+        if (!node) { setContextMenu(null); return; }
+
+        const matchId = findMatchingDossierId(node.data.label);
+        if (matchId) {
+            onOpenDossierForNode?.(matchId);
+        } else {
+            generateContextualDossier(`Create a dossier profiling ${node.data.label} acting as an entity of type ${node.data.entityType}. Focus on existing knowns and relationships.`);
+        }
         setContextMenu(null);
     };
 
@@ -252,7 +264,12 @@ export const InvestigationMapCanvas: FC<Props> = ({ onOpenDossierForNode }) => {
                                 ✏️ Expand Details
                             </DropdownMenu.Item>
                             <DropdownMenu.Item className="map-context-item" onSelect={handleOpenDossier}>
-                                📄 Open Dossier
+                                {(() => {
+                                    const node = nodes.find(n => n.id === contextMenu.nodeId);
+                                    if (!node) return '📄 Open Dossier';
+                                    const matchId = findMatchingDossierId(node.data.label);
+                                    return matchId ? '📄 Open Dossier' : '✨ Create AI Dossier';
+                                })()}
                             </DropdownMenu.Item>
                             <DropdownMenu.Separator className="map-context-separator" />
                             <DropdownMenu.Item className="map-context-item map-context-item--danger" onSelect={handleDeleteNode}>
@@ -304,6 +321,32 @@ export const InvestigationMapCanvas: FC<Props> = ({ onOpenDossierForNode }) => {
                     </div>
 
                     <div className="map-source-drawer-body">
+                        <div className="map-source-section">
+                            {(() => {
+                                const matchId = findMatchingDossierId(sourceDrawer.node.data.label);
+                                if (matchId) {
+                                    return (
+                                        <button
+                                            className="button secondary"
+                                            style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                                            onClick={() => onOpenDossierForNode?.(matchId)}
+                                        >
+                                            <FileText size={14} /> Open in Knowledge Base
+                                        </button>
+                                    );
+                                }
+                                return (
+                                    <button
+                                        className="button secondary"
+                                        style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                                        onClick={() => generateContextualDossier(`Create a dossier profiling ${sourceDrawer.node.data.label} acting as an entity of type ${sourceDrawer.node.data.entityType}. Focus on existing knowns and relationships.`)}
+                                    >
+                                        <ExternalLink size={14} /> Create AI Dossier
+                                    </button>
+                                );
+                            })()}
+                        </div>
+
                         {sourceDrawer.node.data.description && (
                             <div className="map-source-section">
                                 <div className="map-source-section-title">Description</div>

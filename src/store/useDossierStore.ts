@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { v4 as uuidv4 } from 'uuid';
 import { Dossier, DossierType, DossierSource, DossierSection } from '../types';
+import { useProjectStore } from './useProjectStore';
 
 interface DossierState {
     dossiers: Dossier[];
@@ -27,8 +28,11 @@ export const useDossierStore = create<DossierState>()(
             activeDossierId: null,
 
             createDossier: (title: string, type: DossierType) => {
+                const activeProjectId = useProjectStore.getState().activeProjectId;
+
                 const newDossier: Dossier = {
                     id: uuidv4(),
+                    projectId: activeProjectId || undefined,
                     title,
                     dossierType: type,
                     tags: [],

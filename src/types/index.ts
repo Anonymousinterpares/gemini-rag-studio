@@ -7,6 +7,13 @@ export interface Model {
   apiKeyRequired: boolean
 }
 
+export interface Project {
+  id: string;
+  name: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
 export type SummaryStatus = 'missing' | 'in_progress' | 'available';
 
 export interface AppFile {
@@ -129,7 +136,8 @@ export interface MapEdge {
 
 export interface InvestigationMap {
   id: string;
-  caseFileId: string;
+  projectId?: string; // Links map to a top-level project
+  caseFileId: string; // Legacy fallback/reference
   nodes: MapNode[];
   edges: MapEdge[];
 }
@@ -195,6 +203,7 @@ export interface TokenUsage {
 
 export interface ChatSession {
   id: string;              // UUID
+  projectId?: string;      // Links chat to a top-level project
   title: string;           // Auto-generated or user-editable
   createdAt: number;       // Unix timestamp ms
   updatedAt: number;       // Unix timestamp ms
@@ -243,6 +252,7 @@ export interface DossierSection {
 
 export interface Dossier {
   id: string;
+  projectId?: string;     // Links dossier to a top-level project
   title: string;          // Subject name, e.g. "John Smith"
   dossierType: DossierType;
   tags: string[];

@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { MapNode, MapEdge } from '../types';
+import { useProjectStore } from './useProjectStore';
 import { saveMap, loadMap } from '../utils/db';
 
 const MAX_UNDO_STACK = 50;
@@ -253,19 +254,27 @@ export const useMapStore = create<MapState>((set, get) => ({
     setProgress: (progress) => set({ progress }),
 
     persistToDB: async () => {
+        const activeProjectId = useProjectStore.getState().activeProjectId;
+        if (!activeProjectId) return;
+
         const { nodes, edges } = get();
         try {
-            await saveMap({ nodes, edges });
+            await saveMap(activeProjectId, { nodes, edges });
         } catch (e) {
             console.error('[MapStore] Failed to persist map to IndexedDB:', e);
         }
     },
 
     hydrateFromDB: async () => {
+        const activeProjectId = useProjectStore.getState().activeProjectId;
+        if (!activeProjectId) return;
+
         try {
-            const data = await loadMap();
+            const data = await loadMap(activeProjectId);
             if (data) {
                 set({ nodes: data.nodes, edges: data.edges });
+            } else {
+                set({ nodes: [], edges: [] });
             }
         } catch (e) {
             console.error('[MapStore] Failed to hydrate map from IndexedDB:', e);

@@ -8,10 +8,11 @@ import { ComputeCoordinator } from '../compute/coordinator';
 import { VectorStore } from '../rag/pipeline';
 import { useChatStore, useFileStore, useSettingsStore } from '../store';
 import { useCaseFileStore } from '../store/useCaseFileStore';
+import { useMapStore } from '../store/useMapStore';
+import { useDossierStore } from '../store/useDossierStore';
 import { searchWeb } from '../utils/search';
 import { sectionizeMessage, createFuzzyRegex } from '../utils/chatUtils';
 import { getDossierTools, handleDossierToolCall, DOSSIER_COMPILER_PROMPT } from '../agents/dossier';
-import { useDossierStore } from '../store/useDossierStore';
 
 
 const SEARCH_TOOL: Tool = {
@@ -201,11 +202,10 @@ export const useChat = ({
                 cfContext = `\n\n--- CASE FILE CONTEXT ---\n${caseFileStore.caseFile.sections.map((s: any) => `## ${s.title}\n${s.content}`).join('\n\n')}\n--- END CASE FILE ---`;
             }
 
+            const mapStore = useMapStore.getState();
             let mapContext = '';
-            if (caseFileStore.caseFile?.map) {
-                const nodesCount = caseFileStore.caseFile.map.nodes?.length || 0;
-                const edgesCount = caseFileStore.caseFile.map.edges?.length || 0;
-                mapContext = `\n\n--- INVESTIGATION MAP CONTEXT ---\nThe global map currently tracks ${nodesCount} entity nodes and ${edgesCount} relationship edges.\n--- END MAP ---`;
+            if (mapStore.nodes.length > 0 || mapStore.edges.length > 0) {
+                mapContext = `\n\n--- INVESTIGATION MAP CONTEXT ---\nThe global map currently tracks ${mapStore.nodes.length} entity nodes and ${mapStore.edges.length} relationship edges.\n--- END MAP ---`;
             }
 
             const dossierContext = `\n${DOSSIER_COMPILER_PROMPT}\n\nCURRENT ACTIVE DOSSIER ID: ${activeDossier.id}\nDOSSIER SUBJECT: ${activeDossier.title} (${activeDossier.dossierType})${cfContext}${mapContext}`;

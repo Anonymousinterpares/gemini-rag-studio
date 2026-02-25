@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 import { useSettingsStore } from '../store';
 import { useDossierStore } from '../store/useDossierStore';
-import { useCaseFileStore } from '../store/useCaseFileStore';
+import { useMapStore } from '../store/useMapStore';
 import { useToastStore } from '../store/useToastStore';
 import { generateContent } from '../api/llm-provider';
 import { getDossierTools, handleDossierToolCall, DOSSIER_COMPILER_PROMPT } from '../agents/dossier';
@@ -22,10 +22,11 @@ export const useDossierAI = () => {
             return;
         }
 
-        const caseFileStore = useCaseFileStore.getState();
-        const cfContext = caseFileStore.caseFile
-            ? `\n\n--- CASE FILE CONTEXT ---\n${caseFileStore.caseFile.sections.map((s: any) => `## ${s.title}\n${s.content}`).join('\n\n')}\n--- END CASE FILE ---`
-            : '';
+        const mapStore = useMapStore.getState();
+        let mapContext = '';
+        if (mapStore.nodes.length > 0 || mapStore.edges.length > 0) {
+            mapContext = `\n\n--- INVESTIGATION MAP CONTEXT ---\nThe global map currently tracks ${mapStore.nodes.length} entity nodes and ${mapStore.edges.length} relationship edges.\n--- END MAP ---`;
+        }
 
         // Determine Dossier Title
         let dossierTitle = subject;
@@ -57,9 +58,9 @@ export const useDossierAI = () => {
         addToast(`Dossier for "${dossierTitle}" under creation`, "info", 1500);
 
         try {
-            const systemPrompt = `${DOSSIER_COMPILER_PROMPT}\n\nCURRENT ACTIVE DOSSIER ID: ${newDossierId}\nDOSSIER SUBJECT: ${subject}\n${cfContext}
+            const systemPrompt = `${DOSSIER_COMPILER_PROMPT}\n\nCURRENT ACTIVE DOSSIER ID: ${newDossierId}\nDOSSIER SUBJECT: ${subject}\n${mapContext}
             
-            INSTRUCTION: Your task is to execute the 'update_dossier' tool ONLY. Read the provided Case File context and any external knowledge you have about "${subject}". Compile as complete a dossier as possible into the "Background" section, and if there are explicit timelines or key relations, create those sections too. DO NOT return conversational text, ONLY tool calls.`;
+            INSTRUCTION: Your task is to execute the 'update_dossier' tool ONLY. Read the provided Map context and any external knowledge you have about "${subject}". Compile as complete a dossier as possible into the "Background" section, and if there are explicit timelines or key relations, create those sections too. DO NOT return conversational text, ONLY tool calls.`;
 
             const userContent = `Create a comprehensive dossier for ${subject}.`;
 

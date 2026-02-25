@@ -14,6 +14,7 @@ import { processExplorerItems, downloadMessage } from './utils/appActions';
 import { useSettingsStore, useFileStore, useComputeStore } from './store';
 import { useCaseFileStore } from './store/useCaseFileStore';
 import { useChatStore } from './store/useChatStore';
+import { useProjectStore } from './store/useProjectStore';
 import { useCaseFileIO } from './hooks/useCaseFileIO';
 import { Edit2, FileText } from 'lucide-react';
 
@@ -21,12 +22,14 @@ import { Edit2, FileText } from 'lucide-react';
 import { useChatComments } from './hooks/useChatComments';
 import { useChatEdits } from './hooks/useChatEdits';
 import { useChatHistoryIO } from './hooks/useChatHistoryIO';
+import { useMigration } from './hooks/useMigration';
 import { useAppUI } from './hooks/useAppUI';
 import { FilePanel } from './components/FilePanel';
 import { ChatPanel } from './components/ChatPanel';
 import { CaseFilePanel } from './components/CaseFile/CaseFilePanel';
 import { DossierPanel } from './components/Dossier/DossierPanel';
 import { InvestigationMapPanel } from './components/InvestigationMap/InvestigationMapPanel';
+import { ProjectBrowser } from './components/ProjectBrowser/ProjectBrowser';
 import { ToastContainer } from './components/ToastContainer';
 import { useDossierAI } from './hooks/useDossierAI';
 import { useMapAI } from './hooks/useMapAI';
@@ -124,6 +127,8 @@ export const App: FC = () => {
 
   const { activeSessionId } = useChatStore();
 
+  useMigration();
+
   // Initialize sessions on mount
   useEffect(() => {
     initSessions();
@@ -139,6 +144,8 @@ export const App: FC = () => {
 
     return () => clearTimeout(token);
   }, [activeSessionId, chatHistory, tokenUsage, autoSaveCurrentSession]);
+
+  const { activeProjectId, setActiveProject } = useProjectStore();
 
   const {
     glowType, setGlowType,
@@ -319,6 +326,15 @@ export const App: FC = () => {
     if (h) setIsExplorerOpen(true);
   };
 
+  if (!activeProjectId) {
+    return (
+      <div style={{ width: '100vw', height: '100vh', display: 'flex' }}>
+        <ProjectBrowser />
+        <ToastContainer />
+      </div>
+    );
+  }
+
   return (
     <div className='app-container'>
       <FilePanel
@@ -334,6 +350,7 @@ export const App: FC = () => {
         onOpenExplorer={onOpenExplorer}
         isPinned={isPinned}
         setIsPinned={setIsPinned}
+        onBackToProjects={() => setActiveProject(null)}
       />
       <ChatPanel
         appSettings={appSettings} setAppSettings={setAppSettings}

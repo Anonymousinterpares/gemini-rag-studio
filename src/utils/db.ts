@@ -16,7 +16,6 @@ const DIRECTORY_KEY = 'rootDirectoryHandle';
 
 const CHAT_SESSIONS_STORE_NAME = 'chatSessions';
 const MAP_STORE_NAME = 'investigationMap';
-const MAP_KEY = 'current';
 
 /**
  * Opens the IndexedDB database.
@@ -144,11 +143,13 @@ export async function saveChatSession(session: ChatSession): Promise<void> {
   }
 }
 
-export async function loadAllChatSessions(): Promise<ChatSession[]> {
+export async function loadAllChatSessions(projectId: string): Promise<ChatSession[]> {
   if (window.api) {
     const sessions = await window.api.loadAllChatSessions();
+    // Filter by project ID
+    const projectSessions = sessions.filter((s: ChatSession) => s.projectId === projectId);
     // Sort descending by updatedAt
-    return sessions.sort((a: ChatSession, b: ChatSession) => b.updatedAt - a.updatedAt);
+    return projectSessions.sort((a: ChatSession, b: ChatSession) => b.updatedAt - a.updatedAt);
   }
   return [];
 }
@@ -176,23 +177,23 @@ export interface PersistedMap {
   edges: MapEdge[];
 }
 
-export async function saveMap(data: PersistedMap): Promise<void> {
+export async function saveMap(projectId: string, data: PersistedMap): Promise<void> {
   const db = await openDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(MAP_STORE_NAME, 'readwrite');
     const store = tx.objectStore(MAP_STORE_NAME);
-    const request = store.put(data, MAP_KEY);
+    const request = store.put(data, projectId);
     request.onsuccess = () => resolve();
     request.onerror = (e) => reject((e.target as IDBRequest).error);
   });
 }
 
-export async function loadMap(): Promise<PersistedMap | null> {
+export async function loadMap(projectId: string): Promise<PersistedMap | null> {
   const db = await openDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(MAP_STORE_NAME, 'readonly');
     const store = tx.objectStore(MAP_STORE_NAME);
-    const request = store.get(MAP_KEY);
+    const request = store.get(projectId);
     request.onsuccess = (e) => resolve((e.target as IDBRequest).result ?? null);
     request.onerror = (e) => reject((e.target as IDBRequest).error);
   });

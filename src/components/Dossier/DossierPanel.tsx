@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useDossierStore } from '../../store/useDossierStore';
+import { useProjectStore } from '../../store/useProjectStore';
 import { Plus, Trash2, RefreshCw, FileText, User, Users, MapPin, Calendar, Hash, ExternalLink, X, Search, SortDesc, SortAsc, CaseSensitive, Loader2 } from 'lucide-react';
 import { marked } from 'marked';
 import { DossierType, DossierSection } from '../../types';
@@ -143,6 +144,7 @@ interface DossierPanelProps {
 
 export const DossierPanel: React.FC<DossierPanelProps> = ({ isOpen, onClose }) => {
     const { dossiers, activeDossierId, createDossier, setActiveDossier, deleteDossier } = useDossierStore();
+    const { activeProjectId } = useProjectStore();
     const [isCreating, setIsCreating] = useState(false);
     const [newTitle, setNewTitle] = useState('');
     const [newType, setNewType] = useState<DossierType>('person');
@@ -189,7 +191,7 @@ export const DossierPanel: React.FC<DossierPanelProps> = ({ isOpen, onClose }) =
     const activeDossier = dossiers.find(d => d.id === activeDossierId);
 
     const filteredAndSortedDossiers = React.useMemo(() => {
-        let result = dossiers;
+        let result = dossiers.filter(d => d.projectId === activeProjectId);
 
         // Search Filter
         if (searchQuery) {

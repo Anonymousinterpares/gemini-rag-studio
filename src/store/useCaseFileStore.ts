@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { CaseFile } from '../types';
+import { useMapStore } from './useMapStore';
 
 const MAX_STACK = 50;
 
@@ -53,7 +54,6 @@ export const useCaseFileStore = create<CaseFileState>((set) => ({
         // Seed the independent map store with any existing map data embedded in the case file
         if (file.map && (file.map.nodes.length > 0 || file.map.edges.length > 0)) {
             // Use getState() to avoid a circular reference through the store interface
-            const { useMapStore } = require('./useMapStore') as typeof import('./useMapStore');
             useMapStore.getState().loadMap(file.map.nodes, file.map.edges);
         }
     },
@@ -174,7 +174,7 @@ export const useCaseFileStore = create<CaseFileState>((set) => ({
         }),
 
     seedMapFromCaseFile: (nodes, edges) => {
-        const { loadMap } = (require('./useMapStore') as typeof import('./useMapStore')).useMapStore.getState();
+        const { loadMap } = useMapStore.getState();
         loadMap(nodes, edges);
     },
 

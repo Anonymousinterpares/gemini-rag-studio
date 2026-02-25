@@ -1,5 +1,5 @@
 import { FC, useRef } from 'react';
-import { Trash2, X, RefreshCw, LayoutGrid, List as ListIcon, FolderTree, Pin, PinOff } from 'lucide-react';
+import { Trash2, X, RefreshCw, LayoutGrid, List as ListIcon, FolderTree, Pin, PinOff, ArrowLeft } from 'lucide-react';
 import { SpeechBubble, DigestParticles, FloatingArrows, RejectionBubble } from './Monster';
 import Settings from './Settings';
 import MemoizedFileTreeView from './FileTreeView';
@@ -34,6 +34,7 @@ interface FilePanelProps {
     onOpenExplorer: () => void;
     isPinned: boolean;
     setIsPinned: React.Dispatch<React.SetStateAction<boolean>>;
+    onBackToProjects: () => void;
 }
 
 export const FilePanel: FC<FilePanelProps> = ({
@@ -42,13 +43,21 @@ export const FilePanel: FC<FilePanelProps> = ({
     dropVideoSrc, setShowDropVideo, handleClearFiles, initialChatHistory,
     handleClearConversation, chatHistory, handleClear,
     computeDevice, mlWorkerCount, viewMode, setViewMode, fileTree, handleShowSum,
-    onOpenExplorer, isPinned, setIsPinned
+    onOpenExplorer, isPinned, setIsPinned, onBackToProjects
 }) => {
     const dropVideoRef = useRef<HTMLVideoElement>(null);
 
     return (
         <div className={`panel file-panel ${!showSettings ? 'settings-hidden' : ''} ${!isPinned ? 'auto-hide' : ''}`}>
             <div className='file-panel-header'>
+                <button
+                    className='button secondary'
+                    onClick={onBackToProjects}
+                    title="Back to Projects"
+                    style={{ padding: '0.4rem', marginRight: '4px' }}
+                >
+                    <ArrowLeft size={16} />
+                </button>
                 <button
                     className='button secondary'
                     onClick={() => setIsPinned(!isPinned)}
