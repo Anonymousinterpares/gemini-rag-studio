@@ -16,6 +16,7 @@ import { useCaseFileStore } from './store/useCaseFileStore';
 import { useChatStore } from './store/useChatStore';
 import { useProjectStore } from './store/useProjectStore';
 import { useDossierStore } from './store/useDossierStore';
+import { useMapStore } from './store/useMapStore';
 import { useCaseFileIO } from './hooks/useCaseFileIO';
 import { Edit2, FileText } from 'lucide-react';
 
@@ -147,6 +148,12 @@ export const App: FC = () => {
   }, [activeSessionId, chatHistory, tokenUsage, autoSaveCurrentSession]);
 
   const { activeProjectId, setActiveProject } = useProjectStore();
+
+  useEffect(() => {
+    if (activeProjectId) {
+      useMapStore.getState().hydrateFromDB();
+    }
+  }, [activeProjectId]);
 
   const {
     glowType, setGlowType,
