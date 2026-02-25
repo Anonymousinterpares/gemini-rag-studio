@@ -86,6 +86,10 @@ export const ChatPanel: FC<ChatPanelProps> = ({
         handleScroll();
     }, [chatHistory, handleScroll]);
 
+    const prefetchCaseFile = () => import('./CaseFile/CaseFilePanel');
+    const prefetchDossier = () => import('./Dossier/DossierPanel');
+    const prefetchMap = () => import('./InvestigationMap/InvestigationMapPanel');
+
     return (
         <div className='panel chat-panel'>
             <div className='chat-panel-header' style={{ justifyContent: 'space-between', display: 'flex' }}>
@@ -94,6 +98,7 @@ export const ChatPanel: FC<ChatPanelProps> = ({
                         className='button secondary'
                         title='Load a case file (.json or .md) from your computer'
                         onClick={onLoadCaseFile}
+                        onMouseEnter={prefetchCaseFile}
                         style={{ padding: '0.4rem', display: 'flex', alignItems: 'center' }}
                     >
                         <FileText size={16} />
@@ -102,6 +107,7 @@ export const ChatPanel: FC<ChatPanelProps> = ({
                         className='button secondary'
                         title='Open the loaded case file in the overlay panel'
                         onClick={onOpenCaseFile}
+                        onMouseEnter={prefetchCaseFile}
                         disabled={!hasCaseFile}
                         style={{ padding: '0.4rem', display: 'flex', alignItems: 'center' }}
                     >
@@ -111,6 +117,7 @@ export const ChatPanel: FC<ChatPanelProps> = ({
                         className={`button secondary ${isDossierOpen ? 'active' : ''}`}
                         title='Open the Knowledge Base to manage Dossiers and Topics'
                         onClick={() => setIsDossierOpen(!isDossierOpen)}
+                        onMouseEnter={prefetchDossier}
                         style={{ padding: '0.4rem', display: 'flex', alignItems: 'center', backgroundColor: isDossierOpen ? 'rgba(52, 152, 219, 0.2)' : undefined, borderColor: isDossierOpen ? '#3498db' : undefined }}
                     >
                         <FolderTree size={16} />
@@ -119,6 +126,7 @@ export const ChatPanel: FC<ChatPanelProps> = ({
                         className={`button secondary ${isMapPanelOpen ? 'active' : ''}`}
                         title='Toggle Investigation Map panel'
                         onClick={() => setIsMapPanelOpen(!isMapPanelOpen)}
+                        onMouseEnter={prefetchMap}
                         style={{ padding: '0.4rem', display: 'flex', alignItems: 'center', backgroundColor: isMapPanelOpen ? 'rgba(52, 152, 219, 0.2)' : undefined, borderColor: isMapPanelOpen ? '#3498db' : undefined }}
                     >
                         <Network size={16} />
