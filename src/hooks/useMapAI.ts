@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import * as dagre from '@dagrejs/dagre';
+import dagre from '@dagrejs/dagre';
 import { useMapStore } from '../store/useMapStore';
 import { useMapUpdateQueue } from '../store/useMapUpdateQueue';
 import { useSettingsStore } from '../store';

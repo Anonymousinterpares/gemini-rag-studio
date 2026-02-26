@@ -1,27 +1,15 @@
 import { FC } from 'react';
-import { ChatMessage } from '../../types';
-import { MessageItem, MessageItemHandlers } from './MessageItem';
+import { MessageItem } from './MessageItem';
+import { useChatStore } from '../../store';
+import { useShallow } from 'zustand/shallow';
 
-interface MessageListProps {
-    chatHistory: ChatMessage[];
-    appSettings: import('../../config').AppSettings;
-    isLoading: boolean;
-    isEmbedding: boolean;
-    editingIndex: number | null;
-    editingContent: string;
-    setEditingContent: (c: string) => void;
-    activeCommentInput: { msgIndex: number, sectionId: string } | null;
-    commentText: string;
-    hoveredSelectionId: string | null;
-    rootDirectoryHandle: FileSystemDirectoryHandle | null;
-    caseFileState: { isAwaitingFeedback: boolean; metadata?: import('../../store/useChatStore').CaseFileMetadata };
-    handlers: MessageItemHandlers;
-}
+export const MessageList: FC = () => {
+    const { chatHistory, isLoading, caseFileState } = useChatStore(useShallow(s => ({
+        chatHistory: s.chatHistory,
+        isLoading: s.isLoading,
+        caseFileState: s.caseFileState
+    })));
 
-export const MessageList: FC<MessageListProps> = ({
-    chatHistory, appSettings, isLoading, isEmbedding, editingIndex, editingContent, setEditingContent,
-    activeCommentInput, commentText, hoveredSelectionId, rootDirectoryHandle, caseFileState, handlers
-}) => {
     return (
         <div className='chat-history'>
             {chatHistory.map((msg, i) => ({ msg, i })).filter(({ msg }) => {
@@ -36,18 +24,6 @@ export const MessageList: FC<MessageListProps> = ({
                     msg={msg}
                     i={i}
                     isLast={i === chatHistory.length - 1}
-                    appSettings={appSettings}
-                    isLoading={isLoading}
-                    isEmbedding={isEmbedding}
-                    editingIndex={editingIndex}
-                    editingContent={editingContent}
-                    setEditingContent={setEditingContent}
-                    activeCommentInput={activeCommentInput}
-                    commentText={commentText}
-                    hoveredSelectionId={hoveredSelectionId}
-                    rootDirectoryHandle={rootDirectoryHandle}
-                    chatHistory={chatHistory}
-                    handlers={handlers}
                 />
             ))}
             {isLoading && (
