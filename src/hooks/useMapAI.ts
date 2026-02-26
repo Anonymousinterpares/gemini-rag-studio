@@ -26,6 +26,8 @@ const ADD_NODES_TOOL: Tool = {
                             label: { type: SchemaType.STRING },
                             entityType: { type: SchemaType.STRING, description: 'One of: person, location, event, organization, evidence, group' },
                             description: { type: SchemaType.STRING },
+                            timestamp: { type: SchemaType.STRING, description: 'Precise timestamp in DD.MM.YYYY HH:MM:SS format. LEAVE EMPTY if unknown or unsure. DO NOT GUESS.' },
+                            certaintyScore: { type: SchemaType.NUMBER, description: 'AI confidence score from 0 to 100 based on evidence strength.' },
                             sources: {
                                 type: SchemaType.ARRAY,
                                 items: {
@@ -53,12 +55,14 @@ const UPDATE_NODE_TOOL: Tool = {
     type: 'function',
     function: {
         name: 'update_map_node',
-        description: 'Update an EXISTING node by its ID. Only allowed fields: description, tags, sources. Never change label or entityType.',
+        description: 'Update an EXISTING node by its ID. Only allowed fields: description, tags, sources, timestamp, certaintyScore. Never change label or entityType.',
         parameters: {
             type: SchemaType.OBJECT,
             properties: {
                 id: { type: SchemaType.STRING, description: 'Existing node ID to update' },
                 description: { type: SchemaType.STRING },
+                timestamp: { type: SchemaType.STRING, description: 'Precise timestamp in DD.MM.YYYY HH:MM:SS format. LEAVE EMPTY if unknown or unsure.' },
+                certaintyScore: { type: SchemaType.NUMBER, description: 'AI confidence score from 0 to 100.' },
                 tags: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING } },
                 sources: {
                     type: SchemaType.ARRAY,
@@ -132,7 +136,7 @@ function estimateNodeTokens(nodes: MapNode[]): number {
 }
 
 // ─── Node layout helpers ─────────────────────────────────────────────────────────
-function gridLayout(nodes: { id: string; label: string; entityType?: string; description?: string; sources?: MapNodeSource[] }[], existingCount: number): MapNode[] {
+function gridLayout(nodes: { id: string; label: string; entityType?: string; description?: string; sources?: MapNodeSource[]; timestamp?: string; certaintyScore?: number }[], existingCount: number): MapNode[] {
     const cols = Math.max(4, Math.ceil(Math.sqrt(nodes.length)));
     return nodes.map((n, i) => ({
         id: n.id,
@@ -146,6 +150,10 @@ function gridLayout(nodes: { id: string; label: string; entityType?: string; des
             entityType: (n.entityType as MapNode['data']['entityType']) || 'person',
             description: n.description,
             sources: n.sources,
+            timestamp: n.timestamp,
+            isTimestampVerified: false,
+            certaintyScore: n.certaintyScore,
+            isCertaintyVerified: false,
             lastUpdatedAt: Date.now(),
         },
     }));
@@ -202,8 +210,21 @@ function applyToolCalls(
                 break;
             }
             case 'update_map_node': {
-                const { id, ...rest } = args;
-                mapStore.patchNodes({ update: [{ id, ...rest }] });
+                const { id, description, timestamp, certaintyScore, tags, sources } = args;
+                const updatePatch: Partial<MapNode['data']> & { id: string } = { id };
+                if (description !== undefined) updatePatch.description = description;
+                if (timestamp !== undefined) {
+                    updatePatch.timestamp = timestamp;
+                    updatePatch.isTimestampVerified = false;
+                }
+                if (certaintyScore !== undefined) {
+                    updatePatch.certaintyScore = certaintyScore;
+                    updatePatch.isCertaintyVerified = false;
+                }
+                if (tags !== undefined) updatePatch.tags = tags;
+                if (sources !== undefined) updatePatch.sources = sources;
+                
+                mapStore.patchNodes({ update: [updatePatch] });
                 break;
             }
             case 'add_map_edges': {
@@ -235,7 +256,9 @@ STRICT RULES:
 2. NEVER add a node whose ID already appears in the existing node list.
 3. NEVER recreate the full map — only ADD or UPDATE specific items.
 4. Every node/edge you add MUST be grounded in the provided context.
-5. When adding sources, ALWAYS populate the \`url\` field if referencing a specific file path, URL, or chat message ID.`;
+5. When adding sources, ALWAYS populate the \`url\` field if referencing a specific file path, URL, or chat message ID.
+6. TIMESTAMPS: Extract precise timestamps in DD.MM.YYYY HH:MM:SS format. If a specific time is not explicitly stated or if you are unsure, leave the field EMPTY. Do not guess.
+7. CERTAINTY: Assign a certaintyScore (0-100) based on how explicit and cross-referenced the evidence is.`;
 
 // ─── Hook ──────────────────────────────────────────────────────────────────────
 

@@ -116,6 +116,12 @@ export interface MapNode {
     lastUpdatedAt?: number;
     chatContextRefs?: string[];
     certainty?: 'confirmed' | 'inferred' | 'disproven';
+    certaintyScore?: number; // 0-100
+    isCertaintyVerified?: boolean;
+    timestamp?: string | null; // DD.MM.YYYY | HH:MM:SS
+    isTimestampVerified?: boolean;
+    mass?: number;
+    semanticFactId?: string | null;
     semanticZoom?: number;
     hideDescription?: boolean;
   };

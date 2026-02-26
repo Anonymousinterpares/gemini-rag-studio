@@ -1,6 +1,7 @@
 import { FC, memo } from 'react';
 import { Handle, Position, NodeProps } from '@xyflow/react';
 import { MapNode } from '../../../../types';
+import { BeaconOverlay } from '../../../InvestigationMap/BeaconOverlay';
 
 import { FolderOpen, FolderClosed } from 'lucide-react';
 
@@ -20,8 +21,14 @@ export const GroupNode: FC<NodeProps<MapNode>> = memo(({ data, selected }) => {
                 minWidth: '200px',
                 minHeight: '150px',
                 color: 'var(--text-primary)',
+                position: 'relative',
             }}
         >
+            <BeaconOverlay 
+                showTimestampBeacon={!!data.timestamp && !data.isTimestampVerified} 
+                showCertaintyBeacon={data.certaintyScore !== undefined && !data.isCertaintyVerified} 
+            />
+
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: isMacroView ? '0' : '8px', opacity: 0.8 }}>
                 {data.isCollapsed ? <FolderClosed size={16} /> : <FolderOpen size={16} />}
                 <strong style={{ fontSize: '13px' }}>{data.label}</strong>

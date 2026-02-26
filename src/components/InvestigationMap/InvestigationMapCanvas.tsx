@@ -412,6 +412,71 @@ const InvestigationMapCanvasInner: FC<Props> = ({ onOpenDossierForNode }) => {
                             </div>
                         )}
 
+                        {/* Phase 1 Verification Fields */}
+                        <div className="map-source-section" style={{ border: '1px solid var(--border-color)', borderRadius: '8px', padding: '10px', background: 'rgba(255,255,255,0.02)' }}>
+                            <div className="map-source-section-title" style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <Network size={14} /> Analytical Verification
+                            </div>
+                            
+                            {/* Timestamp Verification */}
+                            <div style={{ marginBottom: '12px' }}>
+                                <div style={{ fontSize: '11px', color: 'var(--text-color-secondary)', marginBottom: '4px' }}>Timestamp (DD.MM.YYYY HH:MM:SS)</div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <input 
+                                        type="text" 
+                                        className="map-instruction-textarea" 
+                                        style={{ height: '32px', margin: 0, padding: '4px 8px' }}
+                                        value={sourceDrawer.node.data.timestamp || ''}
+                                        onChange={(e) => {
+                                            const newTimestamp = e.target.value;
+                                            patchNodes({ update: [{ id: sourceDrawer.node.id, timestamp: newTimestamp, isTimestampVerified: false }] });
+                                        }}
+                                        placeholder="No timestamp"
+                                    />
+                                    <button 
+                                        className="icon-btn" 
+                                        style={{ color: sourceDrawer.node.data.isTimestampVerified ? 'var(--accent-green)' : 'var(--text-color-secondary)' }}
+                                        onClick={() => patchNodes({ update: [{ id: sourceDrawer.node.id, isTimestampVerified: true }] })}
+                                        title="Verify Timestamp"
+                                    >
+                                        ✓
+                                    </button>
+                                    <button 
+                                        className="icon-btn" 
+                                        onClick={() => patchNodes({ update: [{ id: sourceDrawer.node.id, timestamp: null, isTimestampVerified: false }] })}
+                                        title="Clear Timestamp"
+                                    >
+                                        ✕
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Certainty Verification */}
+                            <div>
+                                <div style={{ fontSize: '11px', color: 'var(--text-color-secondary)', marginBottom: '4px' }}>AI Certainty Score (0-100)</div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <input 
+                                        type="range" 
+                                        min="0" max="100" 
+                                        style={{ flex: 1, accentColor: 'var(--accent-primary)' }}
+                                        value={sourceDrawer.node.data.certaintyScore || 50}
+                                        onChange={(e) => {
+                                            patchNodes({ update: [{ id: sourceDrawer.node.id, certaintyScore: parseInt(e.target.value), isCertaintyVerified: false }] });
+                                        }}
+                                    />
+                                    <span style={{ fontSize: '12px', minWidth: '25px' }}>{sourceDrawer.node.data.certaintyScore || 0}%</span>
+                                    <button 
+                                        className="icon-btn" 
+                                        style={{ color: sourceDrawer.node.data.isCertaintyVerified ? 'var(--accent-green)' : 'var(--text-color-secondary)' }}
+                                        onClick={() => patchNodes({ update: [{ id: sourceDrawer.node.id, isCertaintyVerified: true }] })}
+                                        title="Verify Certainty"
+                                    >
+                                        ✓
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
                         {sourceDrawer.node.data.tags && sourceDrawer.node.data.tags.length > 0 && (
                             <div className="map-source-section">
                                 <div className="map-source-section-title">Tags</div>

@@ -3,6 +3,7 @@ import { Handle, Position, NodeProps } from '@xyflow/react';
 import { MapNode, EntityType } from '../../../../types';
 import { useMapAI } from '../../../../hooks/useMapAI';
 import { useMapStore } from '../../../../store/useMapStore';
+import { BeaconOverlay } from '../../../InvestigationMap/BeaconOverlay';
 
 import {
     User,
@@ -84,6 +85,11 @@ export const EntityNode: FC<NodeProps<MapNode>> = memo(({ id, data, selected }) 
         >
             {/* Target handle connecting to the left/top */}
             <Handle type="target" position={Position.Top} style={{ background: color }} />
+
+            <BeaconOverlay 
+                showTimestampBeacon={!!data.timestamp && !data.isTimestampVerified} 
+                showCertaintyBeacon={data.certaintyScore !== undefined && !data.isCertaintyVerified} 
+            />
 
             {!isMacroView && isAdded && <div className="node-badge node-badge--new">NEW</div>}
             {!isMacroView && isUpdated && !isAdded && <div className="node-badge node-badge--updated">UPDATED</div>}

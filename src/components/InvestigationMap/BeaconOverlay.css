@@ -1,0 +1,42 @@
+.beacon-container {
+    position: absolute;
+    top: -10px;
+    right: -10px;
+    display: flex;
+    gap: 4px;
+    pointer-events: all; /* Allow tooltips */
+    z-index: 100;
+}
+
+.beacon {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background-color: #ffd700; /* Yellow */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 0 8px rgba(255, 215, 0, 0.6);
+    cursor: help;
+    animation: pulse-yellow 2s infinite ease-in-out;
+}
+
+.beacon-icon {
+    font-size: 10px;
+    user-select: none;
+}
+
+@keyframes pulse-yellow {
+    0% {
+        box-shadow: 0 0 0 0 rgba(255, 215, 0, 0.7);
+        transform: scale(0.95);
+    }
+    70% {
+        box-shadow: 0 0 0 10px rgba(255, 215, 0, 0);
+        transform: scale(1);
+    }
+    100% {
+        box-shadow: 0 0 0 0 rgba(255, 215, 0, 0);
+        transform: scale(0.95);
+    }
+}
