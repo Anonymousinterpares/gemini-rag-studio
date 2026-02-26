@@ -10,7 +10,7 @@ export const useDossierAI = () => {
     const { selectedModel, selectedProvider, apiKeys } = useSettingsStore();
     const { addToast } = useToastStore();
 
-    const generateContextualDossier = useCallback(async (subject: string, existingDossierId?: string) => {
+    const generateContextualDossier = useCallback(async (subject: string, existingDossierId?: string, linkedMapNodeId?: string) => {
         if (!subject.trim()) {
             addToast("Dossier creation request unsuccessful - no text selected", "error", 1500);
             return;
@@ -55,6 +55,12 @@ export const useDossierAI = () => {
         } else {
             store.clearDossierSections(newDossierId);
         }
+
+        // Apply Map Node Link if provided
+        if (linkedMapNodeId) {
+            store.linkDossierToMapNode(newDossierId, linkedMapNodeId);
+        }
+
         addToast(`Dossier for "${dossierTitle}" under creation`, "info", 1500);
 
         try {

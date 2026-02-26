@@ -15,7 +15,7 @@ interface ProjectState {
     setActiveProject: (id: string | null) => void;
 
     // Fuzzy matching for Map -> Dossier Resolution
-    findMatchingDossierId: (nodeLabel: string) => string | null;
+    findMatchingDossierId: (nodeLabel: string, nodeId?: string) => string | null;
 }
 
 export const useProjectStore = create<ProjectState>()(
@@ -57,12 +57,18 @@ export const useProjectStore = create<ProjectState>()(
                 set({ activeProjectId: id });
             },
 
-            findMatchingDossierId: (nodeLabel: string) => {
+            findMatchingDossierId: (nodeLabel: string, nodeId?: string) => {
                 const { activeProjectId } = get();
                 if (!activeProjectId) return null;
 
                 // Dynamically require useDossierStore to avoid circular imports if any
                 const dossiers = useDossierStore.getState().dossiers.filter(d => d.projectId === activeProjectId);
+
+                // 0. ID Link Match (Strongest)
+                if (nodeId) {
+                    const linkedMatch = dossiers.find(d => d.linkedMapNodeId === nodeId);
+                    if (linkedMatch) return linkedMatch.id;
+                }
 
                 const cleanLabel = nodeLabel.toLowerCase().trim();
 

@@ -20,16 +20,19 @@ import '@xyflow/react/dist/style.css';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 
 import { useMapStore } from '../../store/useMapStore';
+import { useToastStore } from '../../store/useToastStore';
 import { EntityNode } from '../CaseFile/InvestigationMap/nodes/EntityNode';
 import { GroupNode } from '../CaseFile/InvestigationMap/nodes/GroupNode';
 import { useMapAI } from '../../hooks/useMapAI';
 import { useCaseFileStore } from '../../store/useCaseFileStore';
 import { useProjectStore } from '../../store/useProjectStore';
+import { useDossierStore } from '../../store/useDossierStore';
 import { useDossierAI } from '../../hooks/useDossierAI';
 import { useAutoLayout } from '../../hooks/useAutoLayout';
 import { useGraphPath } from '../../hooks/useGraphPath';
 import { Search, GitFork, Loader, Eye, EyeOff, Trash2, Globe, FileText, MessageSquare, ExternalLink, Network, Focus, X } from 'lucide-react';
 import { MapNode, MapNodeSource } from '../../types';
+import { ValidatedDateTimeInput } from './ValidatedDateTimeInput';
 
 /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
 const nodeTypes: any = {
@@ -53,7 +56,9 @@ interface Props {
 
 const InvestigationMapCanvasInner: FC<Props> = ({ onOpenDossierForNode }) => {
     const { nodes, edges, patchNodes, patchEdges, hideDisproven } = useMapStore();
+    const { addToast } = useToastStore();
     const { caseFile } = useCaseFileStore();
+    const { dossiers } = useDossierStore();
     const { generateMapFromDocument, handleMapInstruction, reviewMapConnections, isMapProcessing } = useMapAI();
     const { findMatchingDossierId } = useProjectStore();
     const { generateContextualDossier } = useDossierAI();
@@ -72,8 +77,15 @@ const InvestigationMapCanvasInner: FC<Props> = ({ onOpenDossierForNode }) => {
     const [edgeToDelete, setEdgeToDelete] = useState<Edge | null>(null);
     const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
     const [sourceDrawer, setSourceDrawer] = useState<SourceDrawerState | null>(null);
+
+    const activeNode = useMemo(() => {
+        if (!sourceDrawer) return null;
+        return nodes.find(n => n.id === sourceDrawer.node.id) || null;
+    }, [nodes, sourceDrawer, dossiers]); // Added dossiers to reactivity
+
     const [customInstruction, setCustomInstruction] = useState('');
     const [showInstructionInput, setShowInstructionInput] = useState<string | null>(null);
+
 
     // ── RF node/edge transform ─────────────────────────────────────────────────
     useOnViewportChange({
@@ -201,11 +213,11 @@ const InvestigationMapCanvasInner: FC<Props> = ({ onOpenDossierForNode }) => {
         const node = nodes.find(n => n.id === contextMenu.nodeId);
         if (!node) { setContextMenu(null); return; }
 
-        const matchId = findMatchingDossierId(node.data.label);
+        const matchId = findMatchingDossierId(node.data.label, node.id);
         if (matchId) {
             onOpenDossierForNode?.(matchId);
         } else {
-            generateContextualDossier(`Create a dossier profiling ${node.data.label} acting as an entity of type ${node.data.entityType}. Focus on existing knowns and relationships.`);
+            generateContextualDossier(`Create a dossier profiling ${node.data.label} acting as an entity of type ${node.data.entityType}. Focus on existing knowns and relationships.`, undefined, node.id);
         }
         setContextMenu(null);
     };
@@ -325,7 +337,7 @@ const InvestigationMapCanvasInner: FC<Props> = ({ onOpenDossierForNode }) => {
                                 {(() => {
                                     const node = nodes.find(n => n.id === contextMenu.nodeId);
                                     if (!node) return '📄 Open Dossier';
-                                    const matchId = findMatchingDossierId(node.data.label);
+                                    const matchId = findMatchingDossierId(node.data.label, node.id);
                                     return matchId ? '📄 Open Dossier' : '✨ Create AI Dossier';
                                 })()}
                             </DropdownMenu.Item>
@@ -366,13 +378,13 @@ const InvestigationMapCanvasInner: FC<Props> = ({ onOpenDossierForNode }) => {
             )}
 
             {/* Source Drawer */}
-            {sourceDrawer && (
+            {activeNode && (
                 <div className="map-source-drawer">
                     <div className="map-source-drawer-header">
                         <div>
-                            <div className="map-source-node-label">{sourceDrawer.node.data.label}</div>
-                            <span className={`map-entity-badge map-entity-badge--${sourceDrawer.node.data.entityType}`}>
-                                {sourceDrawer.node.data.entityType}
+                            <div className="map-source-node-label">{activeNode.data.label}</div>
+                            <span className={`map-entity-badge map-entity-badge--${activeNode.data.entityType}`}>
+                                {activeNode.data.entityType}
                             </span>
                         </div>
                         <button className="icon-btn" onClick={() => setSourceDrawer(null)}>✕</button>
@@ -381,7 +393,7 @@ const InvestigationMapCanvasInner: FC<Props> = ({ onOpenDossierForNode }) => {
                     <div className="map-source-drawer-body">
                         <div className="map-source-section">
                             {(() => {
-                                const matchId = findMatchingDossierId(sourceDrawer.node.data.label);
+                                const matchId = findMatchingDossierId(activeNode.data.label, activeNode.id);
                                 if (matchId) {
                                     return (
                                         <button
@@ -397,7 +409,7 @@ const InvestigationMapCanvasInner: FC<Props> = ({ onOpenDossierForNode }) => {
                                     <button
                                         className="button secondary"
                                         style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
-                                        onClick={() => generateContextualDossier(`Create a dossier profiling ${sourceDrawer.node.data.label} acting as an entity of type ${sourceDrawer.node.data.entityType}. Focus on existing knowns and relationships.`)}
+                                        onClick={() => generateContextualDossier(`Create a dossier profiling ${activeNode.data.label} acting as an entity of type ${activeNode.data.entityType}. Focus on existing knowns and relationships.`, undefined, activeNode.id)}
                                     >
                                         <ExternalLink size={14} /> Create AI Dossier
                                     </button>
@@ -405,10 +417,10 @@ const InvestigationMapCanvasInner: FC<Props> = ({ onOpenDossierForNode }) => {
                             })()}
                         </div>
 
-                        {sourceDrawer.node.data.description && (
+                        {activeNode.data.description && (
                             <div className="map-source-section">
                                 <div className="map-source-section-title">Description</div>
-                                <p style={{ margin: 0, fontSize: '13px', lineHeight: 1.5 }}>{sourceDrawer.node.data.description}</p>
+                                <p style={{ margin: 0, fontSize: '13px', lineHeight: 1.5 }}>{activeNode.data.description}</p>
                             </div>
                         )}
 
@@ -422,28 +434,33 @@ const InvestigationMapCanvasInner: FC<Props> = ({ onOpenDossierForNode }) => {
                             <div style={{ marginBottom: '12px' }}>
                                 <div style={{ fontSize: '11px', color: 'var(--text-color-secondary)', marginBottom: '4px' }}>Timestamp (DD.MM.YYYY HH:MM:SS)</div>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                    <input 
-                                        type="text" 
-                                        className="map-instruction-textarea" 
-                                        style={{ height: '32px', margin: 0, padding: '4px 8px' }}
-                                        value={sourceDrawer.node.data.timestamp || ''}
-                                        onChange={(e) => {
-                                            const newTimestamp = e.target.value;
-                                            patchNodes({ update: [{ id: sourceDrawer.node.id, timestamp: newTimestamp, isTimestampVerified: false }] });
+                                    <ValidatedDateTimeInput 
+                                        value={activeNode.data.timestamp || null}
+                                        onChange={(newTimestamp) => {
+                                            patchNodes({ update: [{ id: activeNode.id, timestamp: newTimestamp, isTimestampVerified: false }] });
                                         }}
-                                        placeholder="No timestamp"
+                                        onConfirm={() => {
+                                            // Handle Enter confirmation
+                                            if (!activeNode.data.isTimestampVerified && activeNode.data.timestamp) {
+                                                patchNodes({ update: [{ id: activeNode.id, isTimestampVerified: true }] });
+                                                addToast('Timestamp verified.', 'success');
+                                            } else if (!activeNode.data.isCertaintyVerified && activeNode.data.certaintyScore !== undefined) {
+                                                patchNodes({ update: [{ id: activeNode.id, isCertaintyVerified: true }] });
+                                                addToast('Certainty verified.', 'success');
+                                            }
+                                        }}
                                     />
                                     <button 
                                         className="icon-btn" 
-                                        style={{ color: sourceDrawer.node.data.isTimestampVerified ? 'var(--accent-green)' : 'var(--text-color-secondary)' }}
-                                        onClick={() => patchNodes({ update: [{ id: sourceDrawer.node.id, isTimestampVerified: true }] })}
+                                        style={{ color: activeNode.data.isTimestampVerified ? 'var(--accent-green)' : 'var(--text-color-secondary)' }}
+                                        onClick={() => patchNodes({ update: [{ id: activeNode.id, isTimestampVerified: true }] })}
                                         title="Verify Timestamp"
                                     >
                                         ✓
                                     </button>
                                     <button 
                                         className="icon-btn" 
-                                        onClick={() => patchNodes({ update: [{ id: sourceDrawer.node.id, timestamp: null, isTimestampVerified: false }] })}
+                                        onClick={() => patchNodes({ update: [{ id: activeNode.id, timestamp: null, isTimestampVerified: false }] })}
                                         title="Clear Timestamp"
                                     >
                                         ✕
@@ -459,16 +476,16 @@ const InvestigationMapCanvasInner: FC<Props> = ({ onOpenDossierForNode }) => {
                                         type="range" 
                                         min="0" max="100" 
                                         style={{ flex: 1, accentColor: 'var(--accent-primary)' }}
-                                        value={sourceDrawer.node.data.certaintyScore || 50}
+                                        value={activeNode.data.certaintyScore || 50}
                                         onChange={(e) => {
-                                            patchNodes({ update: [{ id: sourceDrawer.node.id, certaintyScore: parseInt(e.target.value), isCertaintyVerified: false }] });
+                                            patchNodes({ update: [{ id: activeNode.id, certaintyScore: parseInt(e.target.value), isCertaintyVerified: false }] });
                                         }}
                                     />
-                                    <span style={{ fontSize: '12px', minWidth: '25px' }}>{sourceDrawer.node.data.certaintyScore || 0}%</span>
+                                    <span style={{ fontSize: '12px', minWidth: '25px' }}>{activeNode.data.certaintyScore || 0}%</span>
                                     <button 
                                         className="icon-btn" 
-                                        style={{ color: sourceDrawer.node.data.isCertaintyVerified ? 'var(--accent-green)' : 'var(--text-color-secondary)' }}
-                                        onClick={() => patchNodes({ update: [{ id: sourceDrawer.node.id, isCertaintyVerified: true }] })}
+                                        style={{ color: activeNode.data.isCertaintyVerified ? 'var(--accent-green)' : 'var(--text-color-secondary)' }}
+                                        onClick={() => patchNodes({ update: [{ id: activeNode.id, isCertaintyVerified: true }] })}
                                         title="Verify Certainty"
                                     >
                                         ✓
@@ -477,22 +494,22 @@ const InvestigationMapCanvasInner: FC<Props> = ({ onOpenDossierForNode }) => {
                             </div>
                         </div>
 
-                        {sourceDrawer.node.data.tags && sourceDrawer.node.data.tags.length > 0 && (
+                        {activeNode.data.tags && activeNode.data.tags.length > 0 && (
                             <div className="map-source-section">
                                 <div className="map-source-section-title">Tags</div>
                                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                                    {sourceDrawer.node.data.tags.map(tag => (
+                                    {activeNode.data.tags.map(tag => (
                                         <span key={tag} className="map-tag-pill">{tag}</span>
                                     ))}
                                 </div>
                             </div>
                         )}
 
-                        {sourceDrawer.node.data.sources && sourceDrawer.node.data.sources.length > 0 ? (
+                        {activeNode.data.sources && activeNode.data.sources.length > 0 ? (
                             <div className="map-source-section">
                                 <div className="map-source-section-title">Sources</div>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                    {sourceDrawer.node.data.sources.map((src, i) => (
+                                    {activeNode.data.sources.map((src, i) => (
                                         <div key={i} className="map-source-card">
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
                                                 <SourceIcon type={src.type} />
@@ -524,9 +541,9 @@ const InvestigationMapCanvasInner: FC<Props> = ({ onOpenDossierForNode }) => {
                             <textarea
                                 className="map-instruction-textarea"
                                 placeholder="Describe what to research about this entity…"
-                                value={showInstructionInput === sourceDrawer.node.id ? customInstruction : ''}
+                                value={showInstructionInput === activeNode.id ? customInstruction : ''}
                                 onChange={e => {
-                                    setShowInstructionInput(sourceDrawer.node.id);
+                                    setShowInstructionInput(activeNode.id);
                                     setCustomInstruction(e.target.value);
                                 }}
                                 rows={2}

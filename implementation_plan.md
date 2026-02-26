@@ -37,7 +37,6 @@
   Phase 2: The "Steel-Wall" Input & Keyboard Workflow
   Goal: Implement the bulletproof input prevention and ergonomic verification controls.
 
-
   2.1 ValidatedDateTimeInput Component
    * Action: Create a segmented input component for DD.MM.YYYY HH:MM:SS.
    * Logic:
