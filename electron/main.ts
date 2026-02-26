@@ -58,7 +58,7 @@ const getSessionsDir = async () => {
     const sessionsDir = path.join(userData, 'sessions');
     try {
         await fs.mkdir(sessionsDir, { recursive: true });
-    } catch (e) {
+    } catch {
         // ignore
     }
     return sessionsDir;
@@ -71,9 +71,9 @@ ipcMain.handle('save-chat-session', async (event, sessionData) => {
         const filePath = path.join(sessionsDir, `${sessionData.id}.json`);
         await fs.writeFile(filePath, JSON.stringify(sessionData, null, 2), 'utf-8');
         return { success: true };
-    } catch (e: any) {
+    } catch (e: unknown) {
         console.error('Failed to save session:', e);
-        return { error: e.message };
+        return { error: (e as Error).message };
     }
 });
 
@@ -89,7 +89,7 @@ ipcMain.handle('load-all-chat-sessions', async () => {
                 const data = await fs.readFile(filePath, 'utf-8');
                 try {
                     sessions.push(JSON.parse(data));
-                } catch (e) {
+                } catch {
                     console.error(`Invalid session file: ${file}`);
                 }
             }
@@ -97,7 +97,7 @@ ipcMain.handle('load-all-chat-sessions', async () => {
 
         // Sort logic happens frontend, but we can do it here too if needed
         return sessions;
-    } catch (e: any) {
+    } catch (e: unknown) {
         console.error('Failed to load all sessions:', e);
         return [];
     }
@@ -109,7 +109,7 @@ ipcMain.handle('load-chat-session', async (event, id) => {
         const filePath = path.join(sessionsDir, `${id}.json`);
         const data = await fs.readFile(filePath, 'utf-8');
         return JSON.parse(data);
-    } catch (e: any) {
+    } catch (e: unknown) {
         console.error(`Failed to load session ${id}:`, e);
         return null;
     }
@@ -121,9 +121,9 @@ ipcMain.handle('delete-chat-session', async (event, id) => {
         const filePath = path.join(sessionsDir, `${id}.json`);
         await fs.unlink(filePath);
         return { success: true };
-    } catch (e: any) {
+    } catch (e: unknown) {
         console.error(`Failed to delete session ${id}:`, e);
-        return { error: e.message };
+        return { error: (e as Error).message };
     }
 });
 

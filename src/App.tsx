@@ -1,4 +1,4 @@
-import { useState, useEffect, FC } from 'react';
+import { useState, useEffect, FC, useMemo, useCallback } from 'react';
 import { getStoredDirectoryHandle, storeDirectoryHandle, clearStoredDirectoryHandle } from './utils/db';
 import { useFileState, useCompute, useChat } from './hooks';
 import { AppFile, ViewMode, SearchResult, Model } from './types';
@@ -11,6 +11,7 @@ import MemoizedDocViewer from './components/DocViewer';
 import CustomFileExplorer from './components/CustomFileExplorer';
 import RecoveryDialogContainer from './components/RecoveryDialogContainer';
 import { processExplorerItems, downloadMessage } from './utils/appActions';
+import { scanDirectoryHandle } from './utils/fileExplorer';
 import { useSettingsStore, useFileStore, useComputeStore } from './store';
 import { useCaseFileStore } from './store/useCaseFileStore';
 import { useChatStore } from './store/useChatStore';
@@ -42,8 +43,8 @@ import './Modal.css';
 
 export const App: FC = () => {
   const { appSettings, setAppSettings, modelsList, selectedModel, setSelectedModel, apiKeys, setApiKeys } = useSettingsStore();
-  const { files, setFiles, fileTree, selectedFile, isDragging } = useFileStore();
-  const { isEmbedding, setIsEmbedding, jobTimers, setJobTimers, computeDevice, mlWorkerCount, activeJobCount } = useComputeStore();
+  const { fileTree, selectedFile, isDragging } = useFileStore();
+  const { computeDevice, mlWorkerCount } = useComputeStore();
 
   const [viewMode, setViewMode] = useState<ViewMode>('tree');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -61,6 +62,11 @@ export const App: FC = () => {
   const [rootDirectoryHandle, setRootDirectoryHandle] = useState<FileSystemDirectoryHandle | null>(null);
 
   const { coordinator, vectorStore, queryEmbeddingResolver, rerankPromiseResolver } = useCompute(docFontSize);
+
+  const chatConfig = useMemo(() => ({
+    coordinator, vectorStore, queryEmbeddingResolver, rerankPromiseResolver, 
+    setRerankProgress: () => { }, setActiveSource, setIsModalOpen
+  }), [coordinator, vectorStore, queryEmbeddingResolver, rerankPromiseResolver, setActiveSource, setIsModalOpen]);
 
   const {
     userInput, setUserInput,
@@ -80,9 +86,7 @@ export const App: FC = () => {
     resendWithComments,
     hoveredSelectionId, setHoveredSelectionId,
     submitCaseFileComment
-  } = useChat({
-    coordinator, vectorStore, queryEmbeddingResolver, rerankPromiseResolver, setRerankProgress: () => { }, setActiveSource, setIsModalOpen
-  });
+  } = useChat(chatConfig);
 
   // ── Case file store + IO ──────────────────────────────────────────────────
   const {
@@ -122,6 +126,56 @@ export const App: FC = () => {
     handleRejectAllEdits
   } = useChatEdits(chatHistory, handleUpdateMessage);
 
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [editingContent, setEditingContent] = useState('');
+
+  const handleStartEdit = useCallback((idx: number, content: string) => {
+    setEditingIndex(idx);
+    setEditingContent(content);
+  }, []);
+
+  const handleCancelEdit = useCallback(() => {
+    setEditingIndex(null);
+    setEditingContent('');
+  }, []);
+
+  const handleSaveAndRerun = useCallback(async (idx: number) => {
+    if (!editingContent.trim()) return;
+    saveAndRerunAction(idx, editingContent);
+    setEditingIndex(null);
+    setEditingContent('');
+    // Wait a tick for the store to update or pass the new history explicitly if handleRerunQuery allowed it.
+    // Since handleRerunQuery uses chatHistory from the hook, we need to make sure it's updated.
+    // Alternatively, we can call submitQuery directly with the new history.
+    const newHistory = useChatStore.getState().chatHistory;
+    await submitQuery(editingContent, newHistory.slice(0, idx));
+  }, [editingContent, saveAndRerunAction, submitQuery]);
+
+  const {
+    jobTimers, setJobTimers, activeJobCount, isEmbedding, setIsEmbedding
+  } = useComputeStore();
+
+  const { files, setFiles, clearFiles } = useFileStore();
+
+  const uiConfig = useMemo(() => ({ 
+    isLoading, isEmbedding, activeJobCount, files, chatHistory, jobTimers, setJobTimers 
+  }), [isLoading, isEmbedding, activeJobCount, files, chatHistory, jobTimers, setJobTimers]);
+
+  const {
+    glowType, setGlowType,
+    showRejectionBubble, setShowRejectionBubble,
+    setHasLLMResponded,
+    backgroundImages, dropVideoSrc, setDropVideoSrc,
+    showDropVideo, setShowDropVideo
+  } = useAppUI(uiConfig);
+
+  const fileConfig = useMemo(() => ({
+    vectorStore, docFontSize, coordinator, 
+    resetLLMResponseState: () => setHasLLMResponded(false)
+  }), [vectorStore, docFontSize, coordinator, setHasLLMResponded]);
+
+  const { handleDrop, handleClearFiles, addFilesAndEmbed } = useFileState(fileConfig);
+
   const {
     initSessions,
     autoSaveCurrentSession
@@ -149,19 +203,64 @@ export const App: FC = () => {
 
   const { activeProjectId, setActiveProject } = useProjectStore();
 
+  // ── Project Switching Logic ──────────────────────────────────────────────
   useEffect(() => {
-    if (activeProjectId) {
-      useMapStore.getState().hydrateFromDB();
+    // Narrow dependency array to activeProjectId to avoid render loops from unstable hook functions.
+    // We call everything within the effect; dependencies like addFilesAndEmbed are unstable 
+    // because they depend on the files state we modify here.
+    if (!activeProjectId) {
+      clearFiles();
+      vectorStore?.current?.clear();
+      useChatStore.getState().setActiveSessionId(null);
+      useChatStore.getState().setSessionList([]);
+      useChatStore.getState().setChatHistory([]);
+      useMapStore.getState().resetMap();
+      useCaseFileStore.getState().resetCaseFile();
+      useDossierStore.getState().setActiveDossier(null);
+      setRootDirectoryHandle(null);
+      return;
     }
-  }, [activeProjectId]);
 
-  const {
-    glowType, setGlowType,
-    showRejectionBubble, setShowRejectionBubble,
-    setHasLLMResponded,
-    backgroundImages, dropVideoSrc, setDropVideoSrc,
-    showDropVideo, setShowDropVideo
-  } = useAppUI({ isLoading, isEmbedding, activeJobCount, files, chatHistory, jobTimers, setJobTimers });
+    const switchProject = async () => {
+      console.log(`[App] Switching to project: ${activeProjectId}`);
+
+      clearFiles();
+      vectorStore?.current?.clear();
+      useChatStore.getState().setActiveSessionId(null);
+      useChatStore.getState().setSessionList([]);
+      useChatStore.getState().setChatHistory([]);
+      useMapStore.getState().resetMap();
+      useCaseFileStore.getState().resetCaseFile();
+      useDossierStore.getState().setActiveDossier(null);
+
+      await useMapStore.getState().hydrateFromDB();
+      await initSessions();
+
+      try {
+        const handle = await getStoredDirectoryHandle(activeProjectId);
+        if (handle) {
+          if ((await handle.queryPermission()) === 'granted') {
+            setRootDirectoryHandle(handle);
+            const items = await scanDirectoryHandle(handle);
+            const projectFiles = await processExplorerItems(items);
+            if (projectFiles.length > 0) {
+              await addFilesAndEmbed(projectFiles);
+            }
+          } else {
+            setRootDirectoryHandle(null);
+          }
+        } else {
+          setRootDirectoryHandle(null);
+        }
+      } catch (e) {
+        console.error('[App] Failed to load directory handle:', e);
+        setRootDirectoryHandle(null);
+      }
+    };
+
+    switchProject();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeProjectId]);
 
   const { generateContextualDossier } = useDossierAI();
 
@@ -190,35 +289,6 @@ export const App: FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLoading]);
 
-  const [editingIndex, setEditingIndex] = useState<number | null>(null);
-  const [editingContent, setEditingContent] = useState('');
-
-  const handleStartEdit = (idx: number, content: string) => {
-    setEditingIndex(idx);
-    setEditingContent(content);
-  };
-
-  const handleCancelEdit = () => {
-    setEditingIndex(null);
-    setEditingContent('');
-  };
-
-  const handleSaveAndRerun = async (idx: number) => {
-    if (!editingContent.trim()) return;
-    saveAndRerunAction(idx, editingContent);
-    setEditingIndex(null);
-    setEditingContent('');
-    // Wait a tick for the store to update or pass the new history explicitly if handleRerunQuery allowed it.
-    // Since handleRerunQuery uses chatHistory from the hook, we need to make sure it's updated.
-    // Alternatively, we can call submitQuery directly with the new history.
-    const newHistory = useChatStore.getState().chatHistory;
-    await submitQuery(editingContent, newHistory.slice(0, idx));
-  };
-
-  const { handleDrop, handleClearFiles, addFilesAndEmbed } = useFileState({
-    vectorStore, docFontSize, coordinator, resetLLMResponseState: () => setHasLLMResponded(false)
-  });
-
   const handleCopy = async (idx: number) => {
     const msg = chatHistory[idx];
     if (msg?.content) await navigator.clipboard.writeText(msg.content);
@@ -238,14 +308,7 @@ export const App: FC = () => {
     }
   }, [appSettings.isLoggingEnabled, appSettings.numMlWorkers, coordinator]);
 
-  useEffect(() => {
-    const load = async () => {
-      const handle = await getStoredDirectoryHandle();
-      if (handle && (await handle.queryPermission()) === 'granted') setRootDirectoryHandle(handle);
-      else await clearStoredDirectoryHandle();
-    };
-    load();
-  }, []);
+
 
   useEffect(() => {
     if (activeJobCount > 0) setIsEmbedding(true);
@@ -328,9 +391,24 @@ export const App: FC = () => {
   };
 
   const onOpenExplorer = async () => {
+    if (!activeProjectId) return;
     let h = rootDirectoryHandle;
-    if (h && (await h.queryPermission()) !== 'granted') { await clearStoredDirectoryHandle(); h = null; setRootDirectoryHandle(null); }
-    if (!h) try { h = await window.showDirectoryPicker(); if (h) { await storeDirectoryHandle(h); setRootDirectoryHandle(h); } } catch { /* ignore */ }
+    if (h && (await h.queryPermission()) !== 'granted') {
+      await clearStoredDirectoryHandle(activeProjectId);
+      h = null;
+      setRootDirectoryHandle(null);
+    }
+    if (!h) {
+      try {
+        h = await window.showDirectoryPicker();
+        if (h) {
+          await storeDirectoryHandle(activeProjectId, h);
+          setRootDirectoryHandle(h);
+        }
+      } catch (e) {
+        console.warn('[App] Directory picker cancelled or failed:', e);
+      }
+    }
     if (h) setIsExplorerOpen(true);
   };
 

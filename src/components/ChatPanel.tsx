@@ -65,15 +65,17 @@ export const ChatPanel: FC<ChatPanelProps> = ({
     const handleScroll = useCallback(() => {
         if (scrollRef.current) {
             const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
-            const needsScroll = scrollHeight - scrollTop - clientHeight > 100;
-            if (needsScroll !== showScrollDown) {
-                console.log(`[ChatPanel] Scroll-to-bottom button visibility changing: ${needsScroll}`, {
-                    scrollTop, scrollHeight, clientHeight, diff: scrollHeight - scrollTop - clientHeight
-                });
-                setShowScrollDown(needsScroll);
-            }
+            // Increase buffer to 150 to avoid layout shifting loops
+            const needsScroll = scrollHeight - scrollTop - clientHeight > 150;
+            
+            setShowScrollDown(prev => {
+                if (prev !== needsScroll) {
+                    return needsScroll;
+                }
+                return prev;
+            });
         }
-    }, [showScrollDown]);
+    }, []);
 
     // Log mounting for debug
     useEffect(() => {

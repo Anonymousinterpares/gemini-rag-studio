@@ -219,7 +219,7 @@ export const DossierPanel: React.FC<DossierPanelProps> = ({ isOpen, onClose }) =
         });
 
         return result;
-    }, [dossiers, searchQuery, isCaseSensitive, sortBy, sortOrder]);
+    }, [dossiers, searchQuery, isCaseSensitive, sortBy, sortOrder, activeProjectId]);
 
     const handleCreate = (e: React.FormEvent) => {
         e.preventDefault();
@@ -286,7 +286,7 @@ export const DossierPanel: React.FC<DossierPanelProps> = ({ isOpen, onClose }) =
                         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                             <select
                                 value={sortBy}
-                                onChange={e => setSortBy(e.target.value as any)}
+                                onChange={e => setSortBy(e.target.value as 'updatedAt' | 'title')}
                                 style={{ flex: 1, padding: '4px', fontSize: '0.8rem', borderRadius: '4px', border: '1px solid var(--border-color)', background: 'var(--panel-bg-color)', color: 'var(--text-color)' }}
                             >
                                 <option style={{ background: 'var(--panel-bg-color)' }} value="updatedAt">By Date</option>

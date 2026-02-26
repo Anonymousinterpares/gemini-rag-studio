@@ -116,6 +116,8 @@ export interface MapNode {
     lastUpdatedAt?: number;
     chatContextRefs?: string[];
     certainty?: 'confirmed' | 'inferred' | 'disproven';
+    semanticZoom?: number;
+    hideDescription?: boolean;
   };
   parentId?: string;
   extent?: 'parent';

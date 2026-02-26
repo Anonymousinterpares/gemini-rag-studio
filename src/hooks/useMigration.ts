@@ -99,6 +99,29 @@ export const useMigration = () => {
                 console.warn('[Migration] Failed to migrate dossiers.', e);
             }
 
+            // 5. Migrate Directory Handle
+            try {
+                const db = await new Promise<IDBDatabase>((resolve, reject) => {
+                    const req = indexedDB.open('fileExplorerDB', 3);
+                    req.onsuccess = () => resolve(req.result);
+                    req.onerror = () => reject(req.error);
+                });
+
+                const dirTx = db.transaction('directoryHandles', 'readwrite');
+                const dirStore = dirTx.objectStore('directoryHandles');
+                const getDirReq = dirStore.get('rootDirectoryHandle');
+
+                getDirReq.onsuccess = () => {
+                    const handle = getDirReq.result;
+                    if (handle) {
+                        dirStore.put(handle, `rootDirectoryHandle_${defaultProjectId}`);
+                        console.log(`[Migration] Migrated legacy Directory Handle to default project.`);
+                    }
+                }
+            } catch (e) {
+                console.warn('[Migration] Failed to migrate directory handle.', e);
+            }
+
             // Drop user into the Project Browser to see the new feature upon successful migration
             projectStore.setActiveProject(null);
             console.log('[Migration] One-Time Data Migration Complete.');

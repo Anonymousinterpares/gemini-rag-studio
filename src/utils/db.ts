@@ -5,6 +5,7 @@ import { ChatSession } from '../types';
 
 declare global {
   interface Window {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     api?: any;
   }
 }
@@ -58,18 +59,19 @@ function openDB(): Promise<IDBDatabase> {
 
 /**
  * Stores a FileSystemDirectoryHandle in IndexedDB.
+ * @param projectId The project ID to link this handle to.
  * @param handle The FileSystemDirectoryHandle to store.
  * @returns A Promise that resolves when the handle is successfully stored.
  */
-export async function storeDirectoryHandle(handle: FileSystemDirectoryHandle): Promise<void> {
+export async function storeDirectoryHandle(projectId: string, handle: FileSystemDirectoryHandle): Promise<void> {
   const db = await openDB();
   return new Promise((resolve, reject) => {
     const transaction = db.transaction(DIRECTORY_STORE_NAME, 'readwrite');
     const store = transaction.objectStore(DIRECTORY_STORE_NAME);
-    const request = store.put(handle, DIRECTORY_KEY);
+    const request = store.put(handle, `${DIRECTORY_KEY}_${projectId}`);
 
     request.onsuccess = () => {
-      console.log('Directory handle stored in IndexedDB.');
+      console.log(`Directory handle stored in IndexedDB for project ${projectId}.`);
       resolve();
     };
 
@@ -82,22 +84,23 @@ export async function storeDirectoryHandle(handle: FileSystemDirectoryHandle): P
 
 /**
  * Retrieves a FileSystemDirectoryHandle from IndexedDB.
+ * @param projectId The project ID to retrieve the handle for.
  * @returns A Promise that resolves with the retrieved FileSystemDirectoryHandle, or null if not found.
  */
-export async function getStoredDirectoryHandle(): Promise<FileSystemDirectoryHandle | null> {
+export async function getStoredDirectoryHandle(projectId: string): Promise<FileSystemDirectoryHandle | null> {
   const db = await openDB();
   return new Promise((resolve, reject) => {
     const transaction = db.transaction(DIRECTORY_STORE_NAME, 'readonly');
     const store = transaction.objectStore(DIRECTORY_STORE_NAME);
-    const request = store.get(DIRECTORY_KEY);
+    const request = store.get(`${DIRECTORY_KEY}_${projectId}`);
 
     request.onsuccess = (event) => {
       const handle = (event.target as IDBRequest).result as FileSystemDirectoryHandle | undefined;
       if (handle) {
-        console.log('Directory handle retrieved from IndexedDB.');
+        console.log(`Directory handle retrieved from IndexedDB for project ${projectId}.`);
         resolve(handle);
       } else {
-        console.log('No directory handle found in IndexedDB.');
+        console.log(`No directory handle found in IndexedDB for project ${projectId}.`);
         resolve(null);
       }
     };
@@ -111,17 +114,18 @@ export async function getStoredDirectoryHandle(): Promise<FileSystemDirectoryHan
 
 /**
  * Clears the stored FileSystemDirectoryHandle from IndexedDB.
+ * @param projectId The project ID to clear the handle for.
  * @returns A Promise that resolves when the handle is successfully cleared.
  */
-export async function clearStoredDirectoryHandle(): Promise<void> {
+export async function clearStoredDirectoryHandle(projectId: string): Promise<void> {
   const db = await openDB();
   return new Promise((resolve, reject) => {
     const transaction = db.transaction(DIRECTORY_STORE_NAME, 'readwrite');
     const store = transaction.objectStore(DIRECTORY_STORE_NAME);
-    const request = store.delete(DIRECTORY_KEY);
+    const request = store.delete(`${DIRECTORY_KEY}_${projectId}`);
 
     request.onsuccess = () => {
-      console.log('Directory handle cleared from IndexedDB.');
+      console.log(`Directory handle cleared from IndexedDB for project ${projectId}.`);
       resolve();
     };
 

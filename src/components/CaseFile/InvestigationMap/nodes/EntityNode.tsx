@@ -57,10 +57,10 @@ export const EntityNode: FC<NodeProps<MapNode>> = memo(({ id, data, selected }) 
     else if (isDisproven) stateClass = 'node-state--disproven';
 
     // Semantic zoom thresholds
-    const zoom = (data as any).semanticZoom ?? 1;
+    const zoom = data.semanticZoom ?? 1;
     const isMacroView = zoom <= 0.6;
     const isMicroView = zoom >= 1.0;
-    const hideExtra = (data as any).hideDescription;
+    const hideExtra = data.hideDescription;
 
     return (
         <div

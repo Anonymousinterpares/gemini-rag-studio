@@ -57,6 +57,7 @@ interface MapState {
     // Bulk load from a CaseFile map or on startup
     loadMap: (nodes: MapNode[], edges: MapEdge[]) => void;
     clearMap: () => void;
+    resetMap: () => void;
 
     // Job lock
     acquireLock: () => boolean;   // returns false if already locked
@@ -227,12 +228,15 @@ export const useMapStore = create<MapState>((set, get) => ({
 
     loadMap: (nodes, edges) => {
         set({ nodes, edges, undoStack: [], redoStack: [] });
-        get().persistToDB();
     },
 
     clearMap: () => {
         set({ nodes: [], edges: [], undoStack: [], redoStack: [] });
         get().persistToDB();
+    },
+
+    resetMap: () => {
+        set({ nodes: [], edges: [], undoStack: [], redoStack: [] });
     },
 
     acquireLock: () => {
@@ -272,9 +276,25 @@ export const useMapStore = create<MapState>((set, get) => ({
         try {
             const data = await loadMap(activeProjectId);
             if (data) {
-                set({ nodes: data.nodes, edges: data.edges });
+                set({ 
+                    nodes: data.nodes, 
+                    edges: data.edges,
+                    undoStack: [],
+                    redoStack: [],
+                    lastChanges: null,
+                    progress: null,
+                    jobLock: false
+                });
             } else {
-                set({ nodes: [], edges: [] });
+                set({ 
+                    nodes: [], 
+                    edges: [],
+                    undoStack: [],
+                    redoStack: [],
+                    lastChanges: null,
+                    progress: null,
+                    jobLock: false
+                });
             }
         } catch (e) {
             console.error('[MapStore] Failed to hydrate map from IndexedDB:', e);

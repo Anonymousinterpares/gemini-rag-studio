@@ -127,9 +127,9 @@ export const useDossierAI = () => {
             }
 
             return { text: response.text, didEdit };
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error('Local Dossier Chat Error:', err);
-            return { didEdit: false, text: `Error: ${err.message}` };
+            return { didEdit: false, text: `Error: ${(err as Error).message}` };
         }
     }, [selectedModel, selectedProvider, apiKeys, addToast]);
 

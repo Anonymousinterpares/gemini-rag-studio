@@ -76,7 +76,7 @@ export const MessageItem: FC<MessageItemProps> = ({
             setDisplayLength(msg.content?.length || 0);
             setIsTyping(false);
         }
-    }, [msg.content, isLast, msg.role]);
+    }, [msg.content, isLast, msg.role, displayLength]);
 
     useEffect(() => {
         if (isTyping && msg.content) {

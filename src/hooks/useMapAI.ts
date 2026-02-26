@@ -251,12 +251,30 @@ export const useMapAI = () => {
     const { selectedModel, selectedProvider, apiKeys } = useSettingsStore();
     const { addToast } = useToastStore();
 
+    // ── drainUpdateQueue ────────────────────────────────────────────────────────
+    const drainUpdateQueue = useCallback(async () => {
+        const queue = useMapUpdateQueue.getState();
+        const update = queue.dequeueUpdate();
+        if (!update || update.length === 0) return;
+
+        const summaries = update.map(r => `**${r.title}** (${r.link})\n${r.snippet}`).join('\n---\n');
+        // We call it via a global reference to avoid circular dependency in useCallback
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        if ((window as any)._handleMapInstruction) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            await (window as any)._handleMapInstruction(`Incorporate the following new research findings into the map:\n${summaries}`);
+            addToast(`Map updated from search results.`, 'success');
+        }
+    }, [addToast]);
+
     // ── handleMapInstruction ──────────────────────────────────────────────────
     const handleMapInstruction = useCallback(async (
         instruction: string,
         contextNodeId?: string,
         caseFileText?: string
     ) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (window as any)._handleMapInstruction = handleMapInstruction;
         const mapStore = useMapStore.getState();
         if (!mapStore.acquireLock()) {
             addToast('Map update already in progress. Please wait.', 'warning');
@@ -322,6 +340,7 @@ export const useMapAI = () => {
                 const finalNodes = useMapStore.getState().nodes;
                 const finalEdges = useMapStore.getState().edges;
                 useMapStore.setState({ nodes: autoLayout(finalNodes, finalEdges, 'LR') });
+                useMapStore.getState().persistToDB();
             }
 
             addToast('Map updated successfully.', 'success');
@@ -334,7 +353,7 @@ export const useMapAI = () => {
             // Drain one queued update
             drainUpdateQueue();
         }
-    }, [apiKeys, selectedProvider, selectedModel, addToast]);
+    }, [apiKeys, selectedProvider, selectedModel, addToast, drainUpdateQueue]);
 
     // ── generateMapFromDocument (Two-Phase) ────────────────────────────────────
     const generateMapFromDocument = useCallback(async (caseFileSections: CaseFileSection[]) => {
@@ -439,6 +458,7 @@ export const useMapAI = () => {
                     const finalEdges = useMapStore.getState().edges;
                     if (finalNodes.length > 0) {
                         useMapStore.setState({ nodes: autoLayout(finalNodes, finalEdges, 'LR') });
+                        useMapStore.getState().persistToDB();
                     }
 
                     mapStore.setProgress({ phase: 2, batchCurrent: 1, batchTotal: 1, label: 'Done' });
@@ -484,7 +504,7 @@ export const useMapAI = () => {
             mapStore.setProgress(null);
             drainUpdateQueue();
         }
-    }, [apiKeys, selectedProvider, selectedModel, addToast]);
+    }, [apiKeys, selectedProvider, selectedModel, addToast, drainUpdateQueue]);
 
     // ── reviewMapConnections ────────────────────────────────────────────────────
     const reviewMapConnections = useCallback(async (nodeIds?: string[]) => {
@@ -494,7 +514,7 @@ export const useMapAI = () => {
 
         // By default, provide all nodes so the LLM has context to find new connections across the map.
         // Token warnings will catch it if it's too large.
-        let targetNodes = allNodes;
+        const targetNodes = allNodes;
 
         const estimatedTokens = estimateNodeTokens(targetNodes);
 
@@ -532,6 +552,7 @@ export const useMapAI = () => {
                     const finalNodes = useMapStore.getState().nodes;
                     const finalEdges = useMapStore.getState().edges;
                     useMapStore.setState({ nodes: autoLayout(finalNodes, finalEdges, 'LR') });
+                    useMapStore.getState().persistToDB();
 
                     addToast(`Map review complete: ${response.toolCalls.length} changes applied.`, 'success');
                 } else {
@@ -572,19 +593,7 @@ export const useMapAI = () => {
         } else {
             runReview(targetNodes);
         }
-    }, [apiKeys, selectedProvider, selectedModel, addToast]);
-
-    // ── drainUpdateQueue ────────────────────────────────────────────────────────
-    const drainUpdateQueue = useCallback(async () => {
-        const queue = useMapUpdateQueue.getState();
-        const update = queue.dequeueUpdate();
-        if (!update || update.length === 0) return;
-
-        const summaries = update.map(r => `**${r.title}** (${r.link})\n${r.snippet}`).join('\n---\n');
-        await handleMapInstruction(`Incorporate the following new research findings into the map:\n${summaries}`);
-
-        addToast(`Map updated from search results.`, 'success');
-    }, [handleMapInstruction, addToast]);
+    }, [apiKeys, selectedProvider, selectedModel, addToast, drainUpdateQueue]);
 
     return {
         handleMapInstruction,

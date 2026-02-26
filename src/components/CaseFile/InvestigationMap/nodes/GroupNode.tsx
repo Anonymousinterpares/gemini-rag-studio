@@ -6,7 +6,7 @@ import { FolderOpen, FolderClosed } from 'lucide-react';
 
 export const GroupNode: FC<NodeProps<MapNode>> = memo(({ data, selected }) => {
     // Semantic zoom thresholds
-    const zoom = (data as any).semanticZoom ?? 1;
+    const zoom = data.semanticZoom ?? 1;
     const isMacroView = zoom <= 0.6;
 
     return (

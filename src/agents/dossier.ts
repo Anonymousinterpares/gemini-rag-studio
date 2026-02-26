@@ -54,11 +54,16 @@ export const getDossierTools = (): Tool[] => {
  */
 export const handleDossierToolCall = async (
     name: string,
-    args: any,
+    args: unknown,
     options?: { proposeOnly?: boolean }
 ): Promise<{ result: string }> => {
     if (name === 'update_dossier') {
-        const { dossierId, sectionTitle, content, sources } = args;
+        const { dossierId, sectionTitle, content, sources } = args as { 
+            dossierId: string; 
+            sectionTitle: string; 
+            content: string; 
+            sources?: import('../types').DossierSource[] 
+        };
 
         const store = useDossierStore.getState();
         const dossier = store.dossiers.find(d => d.id === dossierId);

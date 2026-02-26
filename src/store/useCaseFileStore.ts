@@ -27,6 +27,7 @@ interface CaseFileState {
 
     undo: () => void;
     redo: () => void;
+    resetCaseFile: () => void;
     setOverlayOpen: (open: boolean) => void;
     setFileHandle: (handle: FileSystemFileHandle | null) => void;
 }
@@ -203,6 +204,8 @@ export const useCaseFileStore = create<CaseFileState>((set) => ({
                     : state.undoStack,
             };
         }),
+
+    resetCaseFile: () => set({ caseFile: null, undoStack: [], redoStack: [], isOverlayOpen: false, _fileHandle: null }),
 
     setOverlayOpen: (open) => set({ isOverlayOpen: open }),
     setFileHandle: (handle) => set({ _fileHandle: handle }),

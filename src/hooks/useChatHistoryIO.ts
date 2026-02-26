@@ -28,9 +28,6 @@ export const useChatHistoryIO = () => {
     }, [setActiveSessionId, clearHistory, setTokenUsage]);
 
     const initSessions = useCallback(async () => {
-        // Prevent infinite loops by only booting up if there is no active session yet
-        if (useChatStore.getState().activeSessionId) return;
-
         const activeProjectId = useProjectStore.getState().activeProjectId;
         if (!activeProjectId) return;
 

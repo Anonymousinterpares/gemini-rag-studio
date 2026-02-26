@@ -199,7 +199,7 @@ export const useChat = ({
             const caseFileStore = useCaseFileStore.getState();
             let cfContext = '';
             if (caseFileStore.caseFile) {
-                cfContext = `\n\n--- CASE FILE CONTEXT ---\n${caseFileStore.caseFile.sections.map((s: any) => `## ${s.title}\n${s.content}`).join('\n\n')}\n--- END CASE FILE ---`;
+                cfContext = `\n\n--- CASE FILE CONTEXT ---\n${caseFileStore.caseFile.sections.map((s: import('../types').CaseFileSection) => `## ${s.title}\n${s.content}`).join('\n\n')}\n--- END CASE FILE ---`;
             }
 
             const mapStore = useMapStore.getState();
