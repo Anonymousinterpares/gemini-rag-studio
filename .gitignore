@@ -12,6 +12,7 @@ models/
 node_modules/
 dist
 dist-ssr
+dist-electron
 *.local
 
 # Editor directories and files
