@@ -23,9 +23,21 @@ interface UIState {
   activeSource: { file: AppFile; chunks: SearchResult[] } | null;
   docFontSize: number;
   
-  // Chat Editing State
+  // Chat Editing/Commenting State
   editingIndex: number | null;
   editingContent: string;
+  activeCommentInput: { msgIndex: number, sectionId: string } | null;
+  commentText: string;
+  commentDraft: string;
+  selectionPopover: {
+    top: number;
+    left: number;
+    text: string;
+    msgIndex: number;
+    sectionId: string;
+    commentInputOpen: boolean;
+  } | null;
+  hoveredSelectionId: string | null;
 
   // Actions
   setViewMode: (mode: SetStateAction<ViewMode>) => void;
@@ -46,6 +58,18 @@ interface UIState {
   
   setEditingIndex: (index: SetStateAction<number | null>) => void;
   setEditingContent: (content: SetStateAction<string>) => void;
+  setActiveCommentInput: (input: SetStateAction<{ msgIndex: number, sectionId: string } | null>) => void;
+  setCommentText: (text: SetStateAction<string>) => void;
+  setCommentDraft: (draft: SetStateAction<string>) => void;
+  setSelectionPopover: (popover: SetStateAction<{
+    top: number;
+    left: number;
+    text: string;
+    msgIndex: number;
+    sectionId: string;
+    commentInputOpen: boolean;
+  } | null>) => void;
+  setHoveredSelectionId: (id: SetStateAction<string | null>) => void;
   
   // Convenience Actions
   openSummary: (file: AppFile, summary: string) => void;
@@ -76,6 +100,11 @@ export const useUIStore = create<UIState>((set) => ({
   
   editingIndex: null,
   editingContent: '',
+  activeCommentInput: null,
+  commentText: '',
+  commentDraft: '',
+  selectionPopover: null,
+  hoveredSelectionId: null,
 
   setViewMode: (viewMode) => set((s) => ({ viewMode: resolveAction(viewMode, s.viewMode) })),
   setShowSettings: (show) => set((s) => ({ showSettings: resolveAction(show, s.showSettings) })),
@@ -95,6 +124,11 @@ export const useUIStore = create<UIState>((set) => ({
   
   setEditingIndex: (editingIndex) => set((s) => ({ editingIndex: resolveAction(editingIndex, s.editingIndex) })),
   setEditingContent: (editingContent) => set((s) => ({ editingContent: resolveAction(editingContent, s.editingContent) })),
+  setActiveCommentInput: (input) => set((s) => ({ activeCommentInput: resolveAction(input, s.activeCommentInput) })),
+  setCommentText: (text) => set((s) => ({ commentText: resolveAction(text, s.commentText) })),
+  setCommentDraft: (draft) => set((s) => ({ commentDraft: resolveAction(draft, s.commentDraft) })),
+  setSelectionPopover: (popover) => set((s) => ({ selectionPopover: resolveAction(popover, s.selectionPopover) })),
+  setHoveredSelectionId: (id) => set((s) => ({ hoveredSelectionId: resolveAction(id, s.hoveredSelectionId) })),
   
   openSummary: (file, summary) => set({
     summaryFile: file,

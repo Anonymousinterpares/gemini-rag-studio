@@ -60,13 +60,51 @@
       specialized utility files.
 
 
-   * Deliverables:
-       * Refactored useUIStore.ts.
-       * Removal of handlers prop object being passed down from App.tsx to ChatPanel.
-   * Success Criteria: React DevTools "Highlight Updates" should show that typing in the chat input only highlights the
-     input field, not the FilePanel or App container.
-   * Visual Evaluation: Use React Profiler to verify that "Commit Time" for simple actions (like toggling a setting)
-     stays under 5ms.
+  Here is a critical analysis and a "AAA" upgrade to that plan:
+
+
+  1. What makes sense (The "B+" Grade)
+   * Zustand Migration: Moving viewMode, docFontSize, etc., into useUIStore is mandatory. App.tsx should not be a "state
+     bucket."
+   * Selector Optimization: This is the #1 performance win. Currently, if any UI state changes, every component using
+     useUIStore() re-renders. Switching to s => s.viewMode ensures only the affected component updates.
+
+
+  2. Where it can be improved (The "AAA" Upgrade)
+  The current plan ignores the "Prop Monolith" problem. Even though App.tsx is now thin, it still passes a massive "prop
+  object" to FilePanel and ChatPanel.
+
+
+  The Upgrade: We should move from "Top-Down Prop Injection" to "Smart Panel Subscription."
+
+
+   * Improvement A: The "Zero-Prop" Goal. ChatPanel and FilePanel should ideally take zero props. They should be "Smart
+     Containers" that pull exactly what they need from the stores. This completely eliminates the "re-render chain"
+     where App re-renders -> MainLayout re-renders -> ChatPanel re-renders.
+   * Improvement B: Action-State Decoupling. Instead of a handlers object passed from the orchestrator, we should define
+     "Actions" directly inside the Zustand stores. For example, useFileStore shouldn't just hold files; it should have a
+     deleteFile(id) action.
+   * Improvement C: Targeted "Atomic" Components. Currently, ChatPanel is one big block. We should ensure sub-components
+     (like ChatInputForm or MessageList) use their own selectors so that typing in the input never triggers a re-render
+     of the message list.
+
+  ---
+
+  Revised Phase 3 Strategy: "Atomic Data Flow"
+
+
+
+  ┌──────────────────────┬────────────────────────────────────────────────────────────────────────────────────────┐
+  │ Action               │ Why?                                                                                   │
+  ├──────────────────────┼────────────────────────────────────────────────────────────────────────────────────────┤
+  │ **Kill the Handlers  │ Currently, messageHandlers is a giant object. If one function inside it changes,     │
+  │ Object**             │ everything using it re-renders. We'll move these into store actions.                   │
+  │ **Smart Panel        │ Remove 90% of props from ChatPanel and FilePanel. They will use `useChatStore(s => │
+  │ Refactoring**        │ s.chatHistory)` directly.                                                              │
+  │ **Contextual         │ Use useShallow from Zustand to prevent re-renders when object references change but  │
+  │ Selectors**          │ data stays the same.                                                                   │
+  │ Logic Relocation │ Move "Business Logic" (like handleSaveAndRerun) out of the UI hooks and into a       │
+  │                      │ dedicated actions folder or store actions.                                  
 
   ---
 

@@ -1,19 +1,15 @@
-import { useState, useEffect } from 'react';
+import { useEffect } from 'react';
 import { sectionizeMessage } from '../utils/chatUtils';
 import { ChatMessage } from '../types';
+import { useUIStore } from '../store/useUIStore';
 
 export const useChatComments = (chatHistory: ChatMessage[], handleUpdateMessage: (index: number, update: Partial<ChatMessage>) => void) => {
-    const [activeCommentInput, setActiveCommentInput] = useState<{ msgIndex: number, sectionId: string } | null>(null);
-    const [commentText, setCommentText] = useState('');
-    const [commentDraft, setCommentDraft] = useState('');         // for inline selection comment input
-    const [selectionPopover, setSelectionPopover] = useState<{
-        top: number;
-        left: number;
-        text: string;
-        msgIndex: number;
-        sectionId: string;
-        commentInputOpen: boolean;                                // true = show inline textarea
-    } | null>(null);
+    const { 
+        activeCommentInput, setActiveCommentInput,
+        commentText, setCommentText,
+        commentDraft, setCommentDraft,
+        selectionPopover, setSelectionPopover
+    } = useUIStore();
 
     const handleMouseUp = (msgIndex: number) => () => {
         const selection = window.getSelection();

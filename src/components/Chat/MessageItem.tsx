@@ -4,6 +4,9 @@ import { ChatMessage } from '../../types';
 import { sectionizeMessage } from '../../utils/chatUtils';
 import { DownloadReportButton } from '../DownloadReportButton';
 import { useDiffRenderer } from '../../hooks/useDiffRenderer';
+import { useUIStore, useChatStore, useSettingsStore, useComputeStore } from '../../store';
+import { useAppOrchestrator } from '../../hooks/useAppOrchestrator';
+import { useShallow } from 'zustand/shallow';
 
 const MessageSectionDiff: FC<{ originalContent: string; proposedContent: string; }> = ({ originalContent, proposedContent }) => {
     const renderedDiff = useDiffRenderer(originalContent, proposedContent);
@@ -35,11 +38,8 @@ export interface MessageItemHandlers {
     handleRedo: (idx: number) => void;
     handleRemoveMessage: (idx: number) => void;
     handleMouseUp: (idx: number) => () => void;
-    /** Parse the case_file_report message content and open it in the overlay */
     onOpenInCaseFile: (content: string, title?: string) => void;
-    /** Triggers a map update using this message's content as instructions */
     onUpdateMapFromMessage?: (content: string) => void;
-    /** True if a map update is currently running */
     isMapProcessing?: boolean;
 }
 
@@ -47,24 +47,38 @@ interface MessageItemProps {
     msg: ChatMessage;
     i: number;
     isLast: boolean;
-    appSettings: import('../../config').AppSettings;
-    isLoading: boolean;
-    isEmbedding: boolean;
-    editingIndex: number | null;
-    editingContent: string;
-    setEditingContent: (c: string) => void;
-    activeCommentInput: { msgIndex: number, sectionId: string } | null;
-    commentText: string;
-    hoveredSelectionId: string | null;
-    rootDirectoryHandle: FileSystemDirectoryHandle | null;
-    chatHistory: ChatMessage[];
-    handlers: MessageItemHandlers;
 }
 
-export const MessageItem: FC<MessageItemProps> = ({
-    msg, i, isLast, appSettings, isLoading, isEmbedding, editingIndex, editingContent, setEditingContent,
-    activeCommentInput, commentText, hoveredSelectionId, rootDirectoryHandle, chatHistory, handlers
-}) => {
+export const MessageItem: FC<MessageItemProps> = ({ msg, i, isLast }) => {
+    const orchestrator = useAppOrchestrator();
+    const handlers = orchestrator.messageHandlers;
+
+    const { 
+        editingIndex, editingContent, setEditingContent,
+        activeCommentInput, setActiveCommentInput,
+        commentText, setCommentText,
+        hoveredSelectionId, setHoveredSelectionId 
+    } = useUIStore(useShallow(s => ({
+        editingIndex: s.editingIndex,
+        editingContent: s.editingContent,
+        setEditingContent: s.setEditingContent,
+        activeCommentInput: s.activeCommentInput,
+        setActiveCommentInput: s.setActiveCommentInput,
+        commentText: s.commentText,
+        setCommentText: s.setCommentText,
+        hoveredSelectionId: s.hoveredSelectionId,
+        setHoveredSelectionId: s.setHoveredSelectionId
+    })));
+
+    const { chatHistory, isLoading } = useChatStore(useShallow(s => ({
+        chatHistory: s.chatHistory,
+        isLoading: s.isLoading
+    })));
+
+    const isEmbedding = useComputeStore(s => s.isEmbedding);
+    const appSettings = useSettingsStore(s => s.appSettings);
+    const rootDirectoryHandle = orchestrator.rootDirectoryHandle;
+
     // Typewriter effect state
     const [displayLength, setDisplayLength] = useState(() => (isLast && msg.role === 'model') ? 0 : (msg.content?.length || 0));
     const [isTyping, setIsTyping] = useState(false);
@@ -161,8 +175,7 @@ export const MessageItem: FC<MessageItemProps> = ({
                                                     <div key={section.id} className="message-section-row" data-section-id={section.id}>
                                                         <div className="message-main-content">
                                                             <div className="message-section-wrapper">
-                                                                <div className={`message-section ${pendingEdit ? 'highlight-pending' : ''}`}>
-                                                                    <div dangerouslySetInnerHTML={handlers.renderModelMessage(section.content, activeContent, msg.selectionComments?.filter(sc => sc.sectionId === section.id), hoveredSelectionId)} />
+                                                                <div className={`message-section ${pendingEdit ? 'highlight-pending' : ''}`}>                                                                    <div dangerouslySetInnerHTML={handlers.renderModelMessage(section.content, activeContent, msg.selectionComments?.filter(sc => sc.sectionId === section.id), hoveredSelectionId)} />
                                                                     {pendingEdit && (() => {
                                                                         let previewContent: string | null = null;
                                                                         if (pendingEdit.tableEdit) {
@@ -200,8 +213,8 @@ export const MessageItem: FC<MessageItemProps> = ({
                                                                         key={sc.id}
                                                                         className="comment-box"
                                                                         style={{ borderLeft: '3px solid #8e44ad', marginBottom: '0.5rem' }}
-                                                                        onMouseEnter={() => handlers.setHoveredSelectionId(sc.id)}
-                                                                        onMouseLeave={() => handlers.setHoveredSelectionId(null)}
+                                                                        onMouseEnter={() => setHoveredSelectionId(sc.id)}
+                                                                        onMouseLeave={() => setHoveredSelectionId(null)}
                                                                     >
                                                                         <div className="selection-comment-sidebar-text">"{sc.text}"</div>
                                                                         <div className="comment-content">{sc.comment}</div>
@@ -226,7 +239,7 @@ export const MessageItem: FC<MessageItemProps> = ({
                                                                             <textarea
                                                                                 className="comment-textarea"
                                                                                 value={commentText}
-                                                                                onChange={(e) => handlers.setCommentText(e.target.value)}
+                                                                                onChange={(e) => setCommentText(e.target.value)}
                                                                                 placeholder="Type your comment here..."
                                                                                 autoFocus
                                                                             />
@@ -234,7 +247,7 @@ export const MessageItem: FC<MessageItemProps> = ({
                                                                                 <button className="button" onClick={() => handlers.handleAddComment(i, section.id)}>
                                                                                     {section.isEditingComment ? 'Save' : 'Add Comment'}
                                                                                 </button>
-                                                                                <button className="button secondary" onClick={() => handlers.setActiveCommentInput(null)}>Cancel</button>
+                                                                                <button className="button secondary" onClick={() => setActiveCommentInput(null)}>Cancel</button>
                                                                             </div>
                                                                         </div>
                                                                     ) : (

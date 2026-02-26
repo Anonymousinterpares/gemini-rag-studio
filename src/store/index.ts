@@ -8,3 +8,4 @@ export * from './useProjectStore';
 export * from './useDossierStore';
 export * from './useToastStore';
 export * from './useCaseFileStore';
+export * from './useUIStore';

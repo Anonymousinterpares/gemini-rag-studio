@@ -1,35 +1,33 @@
 import { FC, useRef, useEffect } from 'react';
 import { Info, Send, Square, RefreshCw, RotateCcw, RotateCw } from 'lucide-react';
-import { AppFile, ChatMessage, TokenUsage } from '../../types';
+import { useChatStore, useSettingsStore, useComputeStore, useFileStore } from '../../store';
+import { useAppOrchestrator } from '../../hooks/useAppOrchestrator';
+import { useShallow } from 'zustand/shallow';
 
-interface ChatInputFormProps {
-    appSettings: import('../../config').AppSettings;
-    setAppSettings: (updater: (prev: import('../../config').AppSettings) => import('../../config').AppSettings) => void;
-    userInput: string;
-    setUserInput: (input: string) => void;
-    isLoading: boolean;
-    activeJobCount: number;
-    files: AppFile[];
-    chatHistory: ChatMessage[];
-    handleSubmit: (e: React.FormEvent) => void;
-    stopGeneration: () => void;
-    caseFileState: { isAwaitingFeedback: boolean; metadata?: import('../../store/useChatStore').CaseFileMetadata };
-    setCaseFileState: (state: Partial<{ isAwaitingFeedback: boolean; metadata?: import('../../store/useChatStore').CaseFileMetadata; }>) => void;
-    submitQuery: (query: string, history: ChatMessage[], isInternal?: boolean) => void;
-    tokenUsage: TokenUsage;
-    currentContextTokens: number;
-    undo: () => void;
-    redo: () => void;
-    canUndo: boolean;
-    canRedo: boolean;
-}
-
-export const ChatInputForm: FC<ChatInputFormProps> = ({
-    appSettings, setAppSettings, userInput, setUserInput, isLoading, activeJobCount, files, chatHistory,
-    handleSubmit, stopGeneration, caseFileState, setCaseFileState, submitQuery, tokenUsage, currentContextTokens,
-    undo, redo, canUndo, canRedo
-}) => {
+export const ChatInputForm: FC = () => {
     const chatInputRef = useRef<HTMLTextAreaElement>(null);
+    const orchestrator = useAppOrchestrator();
+
+    const { 
+        userInput, setUserInput, isLoading, chatHistory, caseFileState, 
+        tokenUsage, currentContextTokens 
+    } = useChatStore(useShallow(s => ({
+        userInput: s.userInput,
+        setUserInput: s.setUserInput,
+        isLoading: s.isLoading,
+        chatHistory: s.chatHistory,
+        caseFileState: s.caseFileState,
+        tokenUsage: s.tokenUsage,
+        currentContextTokens: s.currentContextTokens
+    })));
+
+    const { appSettings, setAppSettings } = useSettingsStore(useShallow(s => ({
+        appSettings: s.appSettings,
+        setAppSettings: s.setAppSettings
+    })));
+
+    const activeJobCount = useComputeStore(s => s.activeJobCount);
+    const files = useFileStore(s => s.files);
 
     useEffect(() => {
         if (chatInputRef.current) {
@@ -48,7 +46,7 @@ export const ChatInputForm: FC<ChatInputFormProps> = ({
                     </span>
                 </div>
             )}
-            <form className='chat-input-form' onSubmit={handleSubmit}>
+            <form className='chat-input-form' onSubmit={orchestrator.handleSubmit}>
                 <textarea
                     ref={chatInputRef}
                     className='chat-input'
@@ -59,7 +57,7 @@ export const ChatInputForm: FC<ChatInputFormProps> = ({
                         if (e.key === 'Enter' && !e.shiftKey) {
                             e.preventDefault();
                             if (userInput.trim() && !isLoading && activeJobCount === 0) {
-                                handleSubmit(e as unknown as React.FormEvent);
+                                orchestrator.handleSubmit(e as unknown as React.FormEvent);
                             }
                         }
                     }}
@@ -71,11 +69,11 @@ export const ChatInputForm: FC<ChatInputFormProps> = ({
                     }
                 />
                 {isLoading ? (
-                    <button type='button' className='button stop-button' onClick={stopGeneration}><Square size={16} /></button>
+                    <button type='button' className='button stop-button' onClick={orchestrator.stopGeneration}><Square size={16} /></button>
                 ) : (
                     <>
-                        <button type='button' className='button secondary' onClick={undo} disabled={!canUndo || isLoading} title="Undo last action (Ctrl+Z)"><RotateCcw size={16} /></button>
-                        <button type='button' className='button secondary' onClick={redo} disabled={!canRedo || isLoading} title="Redo last undone action (Ctrl+Y)"><RotateCw size={16} /></button>
+                        <button type='button' className='button secondary' onClick={orchestrator.handleUndo} disabled={!orchestrator.canUndo || isLoading} title="Undo last action (Ctrl+Z)"><RotateCcw size={16} /></button>
+                        <button type='button' className='button secondary' onClick={orchestrator.handleRedo} disabled={!orchestrator.canRedo || isLoading} title="Redo last undone action (Ctrl+Y)"><RotateCw size={16} /></button>
                         <button type='submit' className='button' disabled={!userInput.trim() || activeJobCount > 0}><Send size={16} /></button>
                     </>
                 )}
@@ -99,7 +97,7 @@ export const ChatInputForm: FC<ChatInputFormProps> = ({
                 <button onClick={() => setAppSettings((p: import('../../config').AppSettings) => ({ ...p, isDeepAnalysisEnabled: !p.isDeepAnalysisEnabled }))} className={`toggle-button ${appSettings.isDeepAnalysisEnabled ? 'active' : ''}`}>Deep Analysis: {appSettings.isDeepAnalysisEnabled ? 'ON' : 'OFF'}</button>
                 {caseFileState.isAwaitingFeedback ? (
                     <button
-                        onClick={() => setCaseFileState({ isAwaitingFeedback: false, metadata: undefined })}
+                        onClick={() => orchestrator.setCaseFileState({ isAwaitingFeedback: false, metadata: undefined })}
                         className="button secondary"
                         disabled={isLoading}
                         style={{ marginLeft: '10px', backgroundColor: isLoading ? '#440000' : '#8b0000', opacity: isLoading ? 0.6 : 1 }}
@@ -109,7 +107,7 @@ export const ChatInputForm: FC<ChatInputFormProps> = ({
                 ) : (
                     <button
                         onClick={() => {
-                            submitQuery("Generate a comprehensive Case File based on our conversation.", chatHistory, true);
+                            orchestrator.submitQuery("Generate a comprehensive Case File based on our conversation.", chatHistory, true);
                         }}
                         className="button secondary"
                         disabled={isLoading || (files.length === 0 && !appSettings.isChatModeEnabled)}
