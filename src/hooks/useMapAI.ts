@@ -26,7 +26,7 @@ const ADD_NODES_TOOL: Tool = {
                             label: { type: SchemaType.STRING },
                             entityType: { type: SchemaType.STRING, description: 'One of: person, location, event, organization, evidence, group' },
                             description: { type: SchemaType.STRING },
-                            timestamp: { type: SchemaType.STRING, description: 'Precise timestamp in DD.MM.YYYY HH:MM:SS format. LEAVE EMPTY if unknown or unsure. DO NOT GUESS.' },
+                            timestamp: { type: SchemaType.STRING, description: 'Timestamp in DD.MM.YYYY HH:MM:SS format. If only a date is available, use 00:00:00 for the time. LEAVE EMPTY only if no temporal info exists.' },
                             certaintyScore: { type: SchemaType.NUMBER, description: 'AI confidence score from 0 to 100 based on evidence strength.' },
                             sources: {
                                 type: SchemaType.ARRAY,
@@ -61,7 +61,7 @@ const UPDATE_NODE_TOOL: Tool = {
             properties: {
                 id: { type: SchemaType.STRING, description: 'Existing node ID to update' },
                 description: { type: SchemaType.STRING },
-                timestamp: { type: SchemaType.STRING, description: 'Precise timestamp in DD.MM.YYYY HH:MM:SS format. LEAVE EMPTY if unknown or unsure.' },
+                timestamp: { type: SchemaType.STRING, description: 'Timestamp in DD.MM.YYYY HH:MM:SS format. If only a date is available, use 00:00:00 for the time. LEAVE EMPTY only if no temporal info exists.' },
                 certaintyScore: { type: SchemaType.NUMBER, description: 'AI confidence score from 0 to 100.' },
                 tags: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING } },
                 sources: {
@@ -257,7 +257,10 @@ STRICT RULES:
 3. NEVER recreate the full map — only ADD or UPDATE specific items.
 4. Every node/edge you add MUST be grounded in the provided context.
 5. When adding sources, ALWAYS populate the \`url\` field if referencing a specific file path, URL, or chat message ID.
-6. TIMESTAMPS: Extract precise timestamps in DD.MM.YYYY HH:MM:SS format. If a specific time is not explicitly stated or if you are unsure, leave the field EMPTY. Do not guess.
+6. TIMESTAMPS: Extract available dates and times in DD.MM.YYYY HH:MM:SS format. 
+   - If only a date is available (e.g. "Jan 5, 2024"), use "05.01.2024 00:00:00".
+   - If no year is provided but it can be inferred from context, use the inferred year.
+   - If absolutely no temporal data exists for an entity, leave the field EMPTY.
 7. CERTAINTY: Assign a certaintyScore (0-100) based on how explicit and cross-referenced the evidence is.`;
 
 // ─── Hook ──────────────────────────────────────────────────────────────────────

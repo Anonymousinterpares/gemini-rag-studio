@@ -1,4 +1,4 @@
-import { FC, useCallback, useMemo, useState } from 'react';
+import { FC, useCallback, useMemo, useState, useEffect } from 'react';
 import {
     ReactFlow,
     Controls,
@@ -30,14 +30,27 @@ import { useDossierStore } from '../../store/useDossierStore';
 import { useDossierAI } from '../../hooks/useDossierAI';
 import { useAutoLayout } from '../../hooks/useAutoLayout';
 import { useGraphPath } from '../../hooks/useGraphPath';
-import { Search, GitFork, Loader, Eye, EyeOff, Trash2, Globe, FileText, MessageSquare, ExternalLink, Network, Focus, X } from 'lucide-react';
+import { Search, GitFork, Loader, Eye, EyeOff, Trash2, Globe, FileText, MessageSquare, ExternalLink, Network, Focus, X, Clock } from 'lucide-react';
 import { MapNode, MapNodeSource } from '../../types';
 import { ValidatedDateTimeInput } from './ValidatedDateTimeInput';
+import { TimelineSlider } from './TimelineSlider';
 
 /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
 const nodeTypes: any = {
     customEntity: EntityNode,
     customGroup: GroupNode,
+};
+
+// Utility to parse DD.MM.YYYY HH:MM:SS into a Date object
+const parseTimestamp = (ts: string | null | undefined): number | null => {
+    if (!ts) return null;
+    const parts = ts.split(/[.\s:]+/);
+    if (parts.length === 6) {
+        const [day, month, year, hour, min, sec] = parts.map(Number);
+        // month is 0-indexed in JS Date constructor
+        return new Date(year, month - 1, day, hour, min, sec).getTime();
+    }
+    return null;
 };
 
 interface ContextMenuState {
@@ -58,7 +71,7 @@ const InvestigationMapCanvasInner: FC<Props> = ({ onOpenDossierForNode }) => {
     const { nodes, edges, patchNodes, patchEdges, hideDisproven } = useMapStore();
     const { addToast } = useToastStore();
     const { caseFile } = useCaseFileStore();
-    const { dossiers } = useDossierStore();
+    useDossierStore(); // Subscribing to dossiers for re-renders on map node/dossier link updates
     const { generateMapFromDocument, handleMapInstruction, reviewMapConnections, isMapProcessing } = useMapAI();
     const { findMatchingDossierId } = useProjectStore();
     const { generateContextualDossier } = useDossierAI();
@@ -68,6 +81,29 @@ const InvestigationMapCanvasInner: FC<Props> = ({ onOpenDossierForNode }) => {
     const [hideDescriptions, setHideDescriptions] = useState(false);
     const [semanticZoom, setSemanticZoom] = useState(1);
     const [hideEdges, setHideEdges] = useState(false);
+
+    // Timeline State
+    const [isTimelineActive, setIsTimelineActive] = useState(false);
+
+    const timelineRange = useMemo(() => {
+        const timestamps = nodes
+            .map(n => parseTimestamp(n.data.timestamp))
+            .filter((ts): ts is number => ts !== null);
+        
+        if (timestamps.length === 0) return { min: 0, max: 0 };
+        const min = Math.min(...timestamps);
+        const max = Math.max(...timestamps);
+        return { min, max };
+    }, [nodes]);
+
+    const [currentTimelineValue, setCurrentTimelineValue] = useState<number>(0);
+
+    // Synchronize initial value once range is calculated
+    useEffect(() => {
+        if (currentTimelineValue === 0 && timelineRange.max > 0) {
+            setCurrentTimelineValue(timelineRange.max);
+        }
+    }, [timelineRange.max, currentTimelineValue]);
 
     // Focus & Trace State
     const [highlightedNodeId, setHighlightedNodeId] = useState<string | null>(null);
@@ -81,7 +117,7 @@ const InvestigationMapCanvasInner: FC<Props> = ({ onOpenDossierForNode }) => {
     const activeNode = useMemo(() => {
         if (!sourceDrawer) return null;
         return nodes.find(n => n.id === sourceDrawer.node.id) || null;
-    }, [nodes, sourceDrawer, dossiers]); // Added dossiers to reactivity
+    }, [nodes, sourceDrawer]);
 
     const [customInstruction, setCustomInstruction] = useState('');
     const [showInstructionInput, setShowInstructionInput] = useState<string | null>(null);
@@ -101,15 +137,32 @@ const InvestigationMapCanvasInner: FC<Props> = ({ onOpenDossierForNode }) => {
             n.data.description?.toLowerCase().includes(searchQuery.toLowerCase());
 
         const isHighlighted = highlightedNodeId ? networkNodeIds.has(n.id) : true;
-        const opacity = (!isMatch || !isHighlighted) ? 0.15 : 1;
+        
+        // Timeline Ghosting Logic
+        let isFuture = false;
+        if (isTimelineActive) {
+            const nodeTs = parseTimestamp(n.data.timestamp);
+            if (nodeTs !== null && nodeTs > currentTimelineValue) {
+                isFuture = true;
+            }
+        }
+
+        const opacity = (!isMatch || !isHighlighted || isFuture) ? 0.15 : 1;
+        const filter = isFuture ? 'grayscale(100%)' : 'none';
         const pointerEvents = opacity === 1 ? 'auto' : 'none';
 
         return {
             ...n,
-            style: { ...(((n as unknown) as Node).style || {}), opacity, pointerEvents, transition: 'opacity 0.3s ease' },
+            style: { 
+                ...(((n as unknown) as Node).style || {}), 
+                opacity, 
+                filter,
+                pointerEvents, 
+                transition: 'opacity 0.3s ease, filter 0.3s ease' 
+            },
             data: { ...n.data, hideDescription: hideDescriptions, semanticZoom },
         };
-    }), [nodes, searchQuery, hideDescriptions, hideDisproven, semanticZoom, highlightedNodeId, networkNodeIds]);
+    }), [nodes, searchQuery, hideDescriptions, hideDisproven, semanticZoom, highlightedNodeId, networkNodeIds, isTimelineActive, currentTimelineValue]);
 
     const rfEdges: Edge[] = useMemo(() => {
         // If hideDisproven is active, we also must hide any edges connected to disproven nodes
@@ -251,7 +304,7 @@ const InvestigationMapCanvasInner: FC<Props> = ({ onOpenDossierForNode }) => {
     };
 
     return (
-        <div style={{ width: '100%', height: '100%', flex: 1, minHeight: '400px', background: 'var(--bg-primary)', position: 'relative' }}
+        <div style={{ width: '100%', height: '100%', flex: 1, minHeight: 0, background: 'var(--bg-primary)', position: 'relative' }}
             onClick={() => setContextMenu(null)}>
 
             {/* Filtering Toolbar */}
@@ -286,6 +339,26 @@ const InvestigationMapCanvasInner: FC<Props> = ({ onOpenDossierForNode }) => {
                 </button>
                 <button onClick={() => setHideEdges(!hideEdges)} className="map-toolbar-btn" title="Toggle edge visibility">
                     {hideEdges ? <EyeOff size={14} /> : <Eye size={14} />} Edges
+                </button>
+                <div style={{ width: '1px', height: '16px', background: 'var(--border-color)' }}></div>
+                <button 
+                    onClick={() => {
+                        const newActive = !isTimelineActive;
+                        setIsTimelineActive(newActive);
+                        if (newActive && currentTimelineValue === 0) {
+                            setCurrentTimelineValue(timelineRange.min);
+                        }
+                    }} 
+                    className={`map-toolbar-btn ${isTimelineActive ? 'active' : ''}`} 
+                    title="Toggle Timeline Scrubbing"
+                    disabled={timelineRange.min === 0}
+                    style={{ 
+                        opacity: timelineRange.min === 0 ? 0.3 : 1,
+                        color: isTimelineActive ? 'var(--accent-primary)' : 'inherit',
+                        fontWeight: isTimelineActive ? 600 : 400
+                    }}
+                >
+                    <Clock size={14} /> Timeline
                 </button>
             </div>
 
@@ -645,6 +718,15 @@ const InvestigationMapCanvasInner: FC<Props> = ({ onOpenDossierForNode }) => {
                     </button>
                 </div>
             )}
+
+            {/* Phase 3 Timeline Slider */}
+            <TimelineSlider
+                minTimestamp={timelineRange.min}
+                maxTimestamp={timelineRange.max}
+                currentValue={currentTimelineValue}
+                onChange={setCurrentTimelineValue}
+                isVisible={isTimelineActive}
+            />
         </div>
     );
 };

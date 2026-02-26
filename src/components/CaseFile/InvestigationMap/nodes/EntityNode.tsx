@@ -36,7 +36,7 @@ const getColorForEntity = (type: EntityType) => {
     }
 };
 
-export const EntityNode: FC<NodeProps<MapNode>> = memo(({ id, data, selected }) => {
+export const EntityNode: FC<NodeProps<MapNode>> = memo(({ id, data, selected, style }) => {
     const color = getColorForEntity(data.entityType);
     const [menuOpen, setMenuOpen] = useState(false);
     const [instruction, setInstruction] = useState('');
@@ -80,7 +80,8 @@ export const EntityNode: FC<NodeProps<MapNode>> = memo(({ id, data, selected }) 
                 color: 'var(--text-primary)',
                 fontSize: '12px',
                 position: 'relative',
-                opacity: isDisproven ? 0.5 : 1,
+                ...style, // Apply styles from ReactFlow (includes opacity/filter for ghosting)
+                opacity: (style?.opacity as number ?? 1) * (isDisproven ? 0.5 : 1),
             }}
         >
             {/* Target handle connecting to the left/top */}

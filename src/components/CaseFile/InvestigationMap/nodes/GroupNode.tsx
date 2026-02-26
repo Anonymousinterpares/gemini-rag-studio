@@ -5,7 +5,7 @@ import { BeaconOverlay } from '../../../InvestigationMap/BeaconOverlay';
 
 import { FolderOpen, FolderClosed } from 'lucide-react';
 
-export const GroupNode: FC<NodeProps<MapNode>> = memo(({ data, selected }) => {
+export const GroupNode: FC<NodeProps<MapNode>> = memo(({ data, selected, style }) => {
     // Semantic zoom thresholds
     const zoom = data.semanticZoom ?? 1;
     const isMacroView = zoom <= 0.6;
@@ -22,6 +22,7 @@ export const GroupNode: FC<NodeProps<MapNode>> = memo(({ data, selected }) => {
                 minHeight: '150px',
                 color: 'var(--text-primary)',
                 position: 'relative',
+                ...style, // Apply styles from ReactFlow (includes opacity/filter for ghosting)
             }}
         >
             <BeaconOverlay 

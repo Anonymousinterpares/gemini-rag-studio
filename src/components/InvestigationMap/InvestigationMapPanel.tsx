@@ -2,6 +2,7 @@ import { FC, useState } from 'react';
 import { Undo2, Redo2, Network, X, GitMerge, Loader, Maximize2, Minimize2, Trash2 } from 'lucide-react';
 import { useMapStore } from '../../store/useMapStore';
 import { useMapAI } from '../../hooks/useMapAI';
+import { useMeasure } from '../../hooks';
 import { InvestigationMapCanvas } from './InvestigationMapCanvas';
 import './InvestigationMapPanel.css';
 
@@ -43,6 +44,7 @@ export const InvestigationMapPanel: FC<Props> = ({ onClose, onOpenDossierForNode
     const { nodes, edges, undo, redo, undoStack, redoStack, progress, jobLock, clearMap } = useMapStore();
     const { reviewMapConnections, reviewTokenWarning } = useMapAI();
     const [isMaximized, setIsMaximized] = useState(false);
+    const [measureRef, dimensions] = useMeasure<HTMLDivElement>();
 
     const handleClearMap = () => {
         if (window.confirm("Are you sure you want to clear the entire map? This cannot be fully undone.")) {
@@ -124,8 +126,10 @@ export const InvestigationMapPanel: FC<Props> = ({ onClose, onOpenDossierForNode
 
             {/* ── Canvas ────────────────────────────────────────────────────── */}
             <div className="map-panel-body">
-                <div className="map-canvas-container">
-                    <InvestigationMapCanvas onOpenDossierForNode={onOpenDossierForNode} />
+                <div className="map-canvas-container" ref={measureRef}>
+                    {dimensions.width > 0 && dimensions.height > 0 && (
+                        <InvestigationMapCanvas onOpenDossierForNode={onOpenDossierForNode} />
+                    )}
                 </div>
             </div>
 
