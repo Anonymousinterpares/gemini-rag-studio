@@ -100,6 +100,8 @@ export interface MapNodeSource {
   chatSessionId?: string;
   chatMessageIndex?: number;
   snippet?: string;
+  parentChunkIndex?: number;
+  embedding?: number[];
 }
 
 export interface MapNode {
@@ -121,6 +123,7 @@ export interface MapNode {
     timestamp?: string | null; // DD.MM.YYYY | HH:MM:SS
     isTimestampVerified?: boolean;
     mass?: number;
+    citationCount?: number;
     semanticFactId?: string | null;
     semanticZoom?: number;
     hideDescription?: boolean;

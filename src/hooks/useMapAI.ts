@@ -7,6 +7,77 @@ import { generateContent, Tool, SchemaType } from '../api/llm-provider';
 import { ChatMessage, MapNode, MapEdge, MapNodeSource, CaseFileSection } from '../types';
 import { useToastStore } from '../store/useToastStore';
 
+// ─── Semantic Helpers ──────────────────────────────────────────────────────────
+
+function dotProduct(a: number[], b: number[]): number {
+    return a.reduce((sum, val, i) => sum + val * b[i], 0);
+}
+
+function cosineSimilarity(a: number[], b: number[]): number {
+    const magA = Math.sqrt(dotProduct(a, a));
+    const magB = Math.sqrt(dotProduct(b, b));
+    if (magA === 0 || magB === 0) return 0;
+    return dotProduct(a, b) / (magA * magB);
+}
+
+/**
+ * Mass = (Unique_Citations * 2) + Internal_Edges.
+ * Constraint: Only verified certainties/citations contribute to full mass. Unverified = 50% mass penalty.
+ */
+function calculateNodeMass(node: MapNode, edges: MapEdge[]): number {
+    const uniqueCitations = node.data.citationCount || 0;
+    const internalEdges = edges.filter(e => e.source === node.id || e.target === node.id).length;
+    
+    let mass = (uniqueCitations * 2) + internalEdges;
+    
+    // 50% penalty if not verified (either certainty or timestamp)
+    if (!node.data.isCertaintyVerified || !node.data.isTimestampVerified) {
+        mass = mass * 0.5;
+    }
+    
+    return Math.max(1, mass); // Minimum mass of 1
+}
+
+/**
+ * Deduplicates sources based on structural (parentChunkIndex) and conceptual (semantic) similarity.
+ */
+function deduplicateSources(sources: MapNodeSource[]): { deduplicated: MapNodeSource[], uniqueCount: number } {
+    if (!sources || sources.length === 0) return { deduplicated: [], uniqueCount: 0 };
+    
+    const unique: MapNodeSource[] = [];
+    
+    for (const src of sources) {
+        let isDuplicate = false;
+        
+        for (const existing of unique) {
+            // 1. Structural De-duplication: Same document and same paragraph/chunk
+            if (src.fileId && src.fileId === existing.fileId && 
+                src.parentChunkIndex !== undefined && src.parentChunkIndex === existing.parentChunkIndex) {
+                isDuplicate = true;
+                break;
+            }
+            
+            // 2. Conceptual De-duplication: Semantic similarity > 0.92
+            if (src.embedding && existing.embedding && cosineSimilarity(src.embedding, existing.embedding) > 0.92) {
+                isDuplicate = true;
+                break;
+            }
+            
+            // 3. Fallback: Exact snippet match
+            if (src.snippet && existing.snippet && src.snippet.trim() === existing.snippet.trim()) {
+                isDuplicate = true;
+                break;
+            }
+        }
+        
+        if (!isDuplicate) {
+            unique.push(src);
+        }
+    }
+    
+    return { deduplicated: sources, uniqueCount: unique.length };
+}
+
 // ─── Granular Tool Definitions ──────────────────────────────────────────────────
 
 const ADD_NODES_TOOL: Tool = {
@@ -35,10 +106,10 @@ const ADD_NODES_TOOL: Tool = {
                                     properties: {
                                         type: { type: SchemaType.STRING, description: 'One of: web, document, chat_exchange' },
                                         label: { type: SchemaType.STRING },
-                                        snippet: { type: SchemaType.STRING },
-                                        url: { type: SchemaType.STRING, description: 'Optional URL, file path, or reference ID' },
+                                        snippet: { type: SchemaType.STRING, description: 'The exact quote or excerpt from the context.' },
+                                        url: { type: SchemaType.STRING, description: 'The file path or document ID. CRITICAL for deduplication.' },
                                     },
-                                    required: ['type', 'label']
+                                    required: ['type', 'label', 'snippet', 'url']
                                 }
                             }
                         },
@@ -71,10 +142,10 @@ const UPDATE_NODE_TOOL: Tool = {
                         properties: {
                             type: { type: SchemaType.STRING },
                             label: { type: SchemaType.STRING },
-                            snippet: { type: SchemaType.STRING },
-                            url: { type: SchemaType.STRING, description: 'Optional URL, file path, or reference ID' },
+                            snippet: { type: SchemaType.STRING, description: 'Exact quote for semantic de-duplication.' },
+                            url: { type: SchemaType.STRING, description: 'File path or ID. Crucial for structural de-duplication.' },
                         },
-                        required: ['type', 'label']
+                        required: ['type', 'label', 'snippet', 'url']
                     }
                 }
             },
@@ -206,6 +277,14 @@ function applyToolCalls(
         switch (tc.function.name) {
             case 'add_map_nodes': {
                 const newNodes = nodeLayoutFn(args.nodes || []);
+                
+                // For each new node, calculate citation count and mass
+                newNodes.forEach(node => {
+                    const { uniqueCount } = deduplicateSources(node.data.sources || []);
+                    node.data.citationCount = uniqueCount;
+                    node.data.mass = calculateNodeMass(node, mapStore.edges);
+                });
+                
                 mapStore.patchNodes({ add: newNodes });
                 break;
             }
@@ -222,7 +301,23 @@ function applyToolCalls(
                     updatePatch.isCertaintyVerified = false;
                 }
                 if (tags !== undefined) updatePatch.tags = tags;
-                if (sources !== undefined) updatePatch.sources = sources;
+                
+                // Recalculate citation count if sources are updated
+                if (sources !== undefined) {
+                    updatePatch.sources = sources;
+                    const { uniqueCount } = deduplicateSources(sources);
+                    updatePatch.citationCount = uniqueCount;
+                }
+                
+                // Find existing node to recalculate mass based on potentially updated data
+                const existingNode = mapStore.nodes.find(n => n.id === id);
+                if (existingNode) {
+                    const mergedNode = {
+                        ...existingNode,
+                        data: { ...existingNode.data, ...updatePatch }
+                    };
+                    updatePatch.mass = calculateNodeMass(mergedNode, mapStore.edges);
+                }
                 
                 mapStore.patchNodes({ update: [updatePatch] });
                 break;
@@ -239,10 +334,51 @@ function applyToolCalls(
                     },
                 }));
                 mapStore.patchEdges({ add: newEdges });
+                
+                // Mass depends on internal edges, so recalculate mass for source/target nodes
+                const nodeUpdates: (Partial<MapNode['data']> & { id: string })[] = [];
+                const updatedEdges = [...mapStore.edges, ...newEdges];
+                
+                newEdges.forEach(edge => {
+                    [edge.source, edge.target].forEach(nodeId => {
+                        const node = mapStore.nodes.find(n => n.id === nodeId);
+                        if (node && !nodeUpdates.some(u => u.id === nodeId)) {
+                            nodeUpdates.push({
+                                id: nodeId,
+                                mass: calculateNodeMass(node, updatedEdges)
+                            });
+                        }
+                    });
+                });
+                
+                if (nodeUpdates.length > 0) {
+                    mapStore.patchNodes({ update: nodeUpdates });
+                }
                 break;
             }
             case 'remove_map_edge': {
-                mapStore.patchEdges({ remove: args.edgeIds || [] });
+                const edgeIdsToRemove = args.edgeIds || [];
+                const edgesAfterRemoval = mapStore.edges.filter(e => !edgeIdsToRemove.includes(e.id));
+                const nodesToUpdate = new Set<string>();
+                
+                mapStore.edges.forEach(e => {
+                    if (edgeIdsToRemove.includes(e.id)) {
+                        nodesToUpdate.add(e.source);
+                        nodesToUpdate.add(e.target);
+                    }
+                });
+                
+                mapStore.patchEdges({ remove: edgeIdsToRemove });
+                
+                // Recalculate mass for nodes affected by edge removal
+                const nodeUpdates = Array.from(nodesToUpdate).map(nodeId => {
+                    const node = mapStore.nodes.find(n => n.id === nodeId);
+                    return node ? { id: nodeId, mass: calculateNodeMass(node, edgesAfterRemoval) } : null;
+                }).filter((u): u is { id: string, mass: number } => u !== null);
+                
+                if (nodeUpdates.length > 0) {
+                    mapStore.patchNodes({ update: nodeUpdates });
+                }
                 break;
             }
         }

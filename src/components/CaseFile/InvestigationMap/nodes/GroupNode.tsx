@@ -1,11 +1,15 @@
-import { FC, memo } from 'react';
+import { FC, memo, CSSProperties } from 'react';
 import { Handle, Position, NodeProps } from '@xyflow/react';
 import { MapNode } from '../../../../types';
 import { BeaconOverlay } from '../../../InvestigationMap/BeaconOverlay';
 
 import { FolderOpen, FolderClosed } from 'lucide-react';
 
-export const GroupNode: FC<NodeProps<MapNode>> = memo(({ data, selected, style }) => {
+interface CustomNodeProps extends NodeProps<MapNode> {
+    style?: CSSProperties;
+}
+
+export const GroupNode: FC<CustomNodeProps> = memo(({ data, selected, style }) => {
     // Semantic zoom thresholds
     const zoom = data.semanticZoom ?? 1;
     const isMacroView = zoom <= 0.6;

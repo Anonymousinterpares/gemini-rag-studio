@@ -16,6 +16,7 @@ export enum TaskType {
   IndexDocument,
   StreamChunk,
   CompleteStream,
+  EmbedSnippet,
 }
 
 // Task priorities, from highest to lowest
@@ -23,6 +24,16 @@ export enum TaskPriority {
   P0_UserView,      // User is actively waiting for this layout
   P1_Primary,       // High priority background work (embedding, reranking)
   P2_Background,    // Proactive background layout calculation
+}
+
+export interface EmbedSnippetPayload {
+  type: TaskType.EmbedSnippet;
+  snippet: string;
+}
+
+export interface EmbedSnippetResult {
+  snippet: string;
+  embedding: number[];
 }
 
 // Specific payload for a chunk of data from a stream
@@ -170,7 +181,8 @@ export type ComputeTaskPayload =
   | EmbedChildChunkPayload
   | IndexDocumentPayload
   | StreamChunkPayload
-  | CompleteStreamPayload;
+  | CompleteStreamPayload
+  | EmbedSnippetPayload;
 
 export interface IndexDocumentPayload {
   type: TaskType.IndexDocument;
@@ -310,7 +322,8 @@ export type TaskResult =
   | HierarchicalChunkResult
   | EmbedChildChunkResult
   | IndexDocumentResult
-  | StreamChunkResult;
+  | StreamChunkResult
+  | EmbedSnippetResult;
 
 
 // --- Message Contracts ---

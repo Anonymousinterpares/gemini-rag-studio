@@ -297,6 +297,16 @@ async function executeTask(task: ComputeTask) {
         } as HierarchicalChunkResult;
         break;
       }
+      case TaskType.EmbedSnippet: {
+        const payload = taskPayload;
+        const embedder = await EmbeddingPipeline.getInstance();
+        const embeddingResult = await embedder(payload.snippet, { pooling: 'mean', normalize: true });
+        result = {
+          snippet: payload.snippet,
+          embedding: Array.from(embeddingResult.data),
+        };
+        break;
+      }
       default: {
         // This worker should not receive other task types.
         // If the coordinator works correctly, this code is unreachable.

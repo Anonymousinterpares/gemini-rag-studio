@@ -1,4 +1,4 @@
-import { FC, memo, useState, MouseEvent } from 'react';
+import { FC, memo, useState, MouseEvent, CSSProperties } from 'react';
 import { Handle, Position, NodeProps } from '@xyflow/react';
 import { MapNode, EntityType } from '../../../../types';
 import { useMapAI } from '../../../../hooks/useMapAI';
@@ -12,7 +12,12 @@ import {
     Building2,
     FileText,
     HelpCircle,
+    Orbit,
 } from 'lucide-react';
+
+interface CustomNodeProps extends NodeProps<MapNode> {
+    style?: CSSProperties;
+}
 
 const getIconForEntity = (type: EntityType) => {
     switch (type) {
@@ -36,7 +41,7 @@ const getColorForEntity = (type: EntityType) => {
     }
 };
 
-export const EntityNode: FC<NodeProps<MapNode>> = memo(({ id, data, selected, style }) => {
+export const EntityNode: FC<CustomNodeProps> = memo(({ id, data, selected, style }) => {
     const color = getColorForEntity(data.entityType);
     const [menuOpen, setMenuOpen] = useState(false);
     const [instruction, setInstruction] = useState('');
@@ -62,6 +67,9 @@ export const EntityNode: FC<NodeProps<MapNode>> = memo(({ id, data, selected, st
     const isMacroView = zoom <= 0.6;
     const isMicroView = zoom >= 1.0;
     const hideExtra = data.hideDescription;
+
+    const massValue = data.mass || 1;
+    const citationValue = data.citationCount || 0;
 
     return (
         <div
@@ -96,12 +104,35 @@ export const EntityNode: FC<NodeProps<MapNode>> = memo(({ id, data, selected, st
             {!isMacroView && isUpdated && !isAdded && <div className="node-badge node-badge--updated">UPDATED</div>}
             {!isMacroView && isDisproven && <div className="node-badge node-badge--disproven">REMOVED</div>}
 
-            <div style={{ color, display: 'flex' }}>
+            <div style={{ color, display: 'flex', position: 'relative' }}>
                 {getIconForEntity(data.entityType)}
+                {citationValue > 0 && !isMacroView && (
+                    <div style={{
+                        position: 'absolute',
+                        top: '-6px',
+                        right: '-8px',
+                        background: 'var(--accent-primary)',
+                        color: 'white',
+                        fontSize: '8px',
+                        padding: '0 3px',
+                        borderRadius: '4px',
+                        fontWeight: 'bold',
+                        border: '1px solid var(--bg-panel)'
+                    }} title={`${citationValue} unique citations`}>
+                        {citationValue}
+                    </div>
+                )}
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column' }}>
-                <strong style={{ fontSize: '13px', fontWeight: 600, textDecoration: isDisproven ? 'line-through' : 'none' }}>{data.label}</strong>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <strong style={{ fontSize: '13px', fontWeight: 600, textDecoration: isDisproven ? 'line-through' : 'none' }}>{data.label}</strong>
+                    {massValue > 5 && !isMacroView && (
+                        <span style={{ color: 'var(--accent-orange)', display: 'flex', alignItems: 'center' }} title={`Mass: ${massValue.toFixed(1)}`}>
+                            <Orbit size={10} />
+                        </span>
+                    )}
+                </div>
                 {!isMacroView && data.description && !hideExtra && (
                     <span style={{
                         fontSize: '10px',
