@@ -77,6 +77,35 @@ To elevate the map from a basic node-edge viewer to a professional-grade intelli
 *   **Concept:** Use visual depth (parallax/isometric views) to separate data types.
 *   **Application:** Evidence nodes exist on the "bottom layer", People on the "middle layer", and Events on the "top layer". By slightly tilting the view (via CSS transforms on the React Flow pane), users can clearly see the foundational evidence supporting the higher-level entities.
 
+ Comprehensive Implementation Strategy
+
+
+  Phase 3.1: The "Intelligence" Layer (AI Clusters)
+   1. Selection Store: Update useMapStore to track selectedNodeIds.
+   2. Floating Action Toolbar: Create a React component that appears near the cursor when selectedNodeIds.length > 1.
+   3. Synthesis Pipeline: Create an agent/synthesizer.ts that takes the selected nodes, calls the LLM, and returns a
+      GroupDefinition (label, summary, memberIds).
+   4. Refactor Store for Hierarchy: Modify MapState to support parentId and implement a toggleGroupCollapse action.
+
+
+  Phase 3.2: The "Awareness" Layer (Heatmap MiniMap)
+   1. Custom MiniMap Component: Create src/components/InvestigationMap/AnalyticalMiniMap.tsx.
+   2. Density Algorithm: Write a utility that bins node coordinates into a grid to identify "Clusters of Interest."
+   3. Canvas Overlay: Use the canvas API to draw the "Glows" based on node status (Red/Green/Blue) and sync its viewport
+      with the React Flow transform.
+
+
+  Phase 3.3: The "Depth" Layer (Simulated 2.5D)
+   1. Semantic Elevation: Define a mapping of Type -> Elevation.
+       * Evidence: Level 0 (Flat)
+       * Person/Entity: Level 1 (Small Shadow)
+       * Event/Incident: Level 2 (Medium Shadow)
+       * Conclusion/Goal: Level 3 (Large Shadow + Glow)
+   2. CSS Variable Injection: Use a useMemo hook to calculate CSS variables --elevation-shadow and --elevation-scale for
+      each node based on its type.
+
+
+
 ---
 
 ## 3. Recommended Implementation Roadmap
