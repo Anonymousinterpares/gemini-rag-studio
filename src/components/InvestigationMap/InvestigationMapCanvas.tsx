@@ -68,7 +68,7 @@ interface Props {
 }
 
 const InvestigationMapCanvasInner: FC<Props> = ({ onOpenDossierForNode }) => {
-    const { nodes, edges, patchNodes, patchEdges, hideDisproven } = useMapStore();
+    const { nodes, edges, patchNodes, patchEdges, hideDisproven, mapError } = useMapStore();
     const { addToast } = useToastStore();
     const { caseFile } = useCaseFileStore();
     useDossierStore(); // Subscribing to dossiers for re-renders on map node/dossier link updates
@@ -727,6 +727,18 @@ const InvestigationMapCanvasInner: FC<Props> = ({ onOpenDossierForNode }) => {
                 onChange={setCurrentTimelineValue}
                 isVisible={isTimelineActive}
             />
+
+            {/* Map Error Overlay */}
+            {mapError && (
+                <div style={{
+                    position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
+                    zIndex: 1000, background: 'rgba(231, 76, 60, 0.9)', color: 'white',
+                    padding: '12px 24px', borderRadius: '8px', fontWeight: 600,
+                    boxShadow: '0 4px 20px rgba(0,0,0,0.3)', pointerEvents: 'none'
+                }}>
+                    {mapError}
+                </div>
+            )}
         </div>
     );
 };

@@ -26,6 +26,16 @@ interface MapState {
     // Progress indicator for multi-phase generation
     progress: MapProgress | null;
 
+    // RAG Status
+    isRagEnabled: boolean;
+    isRetrieving: boolean;
+    setIsRagEnabled: (enabled: boolean) => void;
+    setIsRetrieving: (retrieving: boolean) => void;
+
+    // Error Overlay
+    mapError: string | null;
+    setMapError: (error: string | null) => void;
+
     // Visual indicators for recent AI map updates
     lastChanges: {
         added: string[];
@@ -85,10 +95,22 @@ export const useMapStore = create<MapState>((set, get) => ({
     redoStack: [],
     jobLock: false,
     progress: null,
+    isRagEnabled: false,
+    isRetrieving: false,
+    mapError: null,
     lastChanges: null,
     hideDisproven: false,
 
     setHideDisproven: (hide) => set({ hideDisproven: hide }),
+
+    setIsRagEnabled: (enabled) => set({ isRagEnabled: enabled }),
+    setIsRetrieving: (retrieving) => set({ isRetrieving: retrieving }),
+    setMapError: (error) => {
+        set({ mapError: error });
+        if (error) {
+            setTimeout(() => set({ mapError: null }), 1000);
+        }
+    },
 
     clearLastChanges: () => set({ lastChanges: null }),
 

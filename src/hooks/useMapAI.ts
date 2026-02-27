@@ -1,11 +1,14 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useState, MutableRefObject } from 'react';
 import dagre from 'dagre';
 import { useMapStore } from '../store/useMapStore';
 import { useMapUpdateQueue } from '../store/useMapUpdateQueue';
-import { useSettingsStore } from '../store';
+import { useSettingsStore, useFileStore } from '../store';
 import { generateContent, Tool, SchemaType } from '../api/llm-provider';
 import { ChatMessage, MapNode, MapEdge, MapNodeSource, CaseFileSection } from '../types';
 import { useToastStore } from '../store/useToastStore';
+import { ComputeCoordinator } from '../compute/coordinator';
+import { VectorStore } from '../rag/pipeline';
+import { TaskPriority, TaskType } from '../compute/types';
 
 // ─── Semantic Helpers ──────────────────────────────────────────────────────────
 
@@ -401,7 +404,11 @@ STRICT RULES:
 
 // ─── Hook ──────────────────────────────────────────────────────────────────────
 
-export const useMapAI = () => {
+export const useMapAI = (config?: {
+    coordinator: MutableRefObject<ComputeCoordinator | null>;
+    vectorStore: MutableRefObject<VectorStore | null>;
+    queryEmbeddingResolver: MutableRefObject<((value: number[]) => void) | null>;
+}) => {
     const [isMapProcessing, setIsMapProcessing] = useState(false);
     const [reviewTokenWarning, setReviewTokenWarning] = useState<{
         estimatedTokens: number;
@@ -410,8 +417,9 @@ export const useMapAI = () => {
         onCancel: () => void;
     } | null>(null);
 
-    const { selectedModel, selectedProvider, apiKeys } = useSettingsStore();
+    const { selectedModel, selectedProvider, apiKeys, appSettings } = useSettingsStore();
     const { addToast } = useToastStore();
+    const { files } = useFileStore();
 
     // ── drainUpdateQueue ────────────────────────────────────────────────────────
     const drainUpdateQueue = useCallback(async () => {
@@ -447,11 +455,44 @@ export const useMapAI = () => {
         const apiKey = apiKeys[selectedProvider];
 
         try {
+            // 1. Instruction Refinement (Cleaning)
+            const cleanInstruction = instruction.replace(/<!--searchResults:[\s\S]*?-->/g, '').trim();
+
+            // 2. RAG Logic (Dedicated Map Retrieval)
+            let retrievedContext = '';
+            if (files.length > 0 && config?.coordinator.current && config?.vectorStore.current && config?.queryEmbeddingResolver) {
+                mapStore.setIsRetrieving(true);
+                try {
+                    const queryEmbeddingPromise = new Promise<number[]>((resolve) => { 
+                        if (config.queryEmbeddingResolver) config.queryEmbeddingResolver.current = resolve; 
+                    });
+                    
+                    config.coordinator.current.addJob('Map RAG Search', [{ 
+                        id: `map-rag-${Date.now()}`, 
+                        priority: TaskPriority.P1_Primary, 
+                        payload: { type: TaskType.EmbedQuery, query: cleanInstruction } 
+                    }]);
+                    
+                    const queryEmbedding = await queryEmbeddingPromise;
+                    const searchResults = config.vectorStore.current.search(queryEmbedding, appSettings.numFinalContextChunks || 5);
+                    
+                    if (searchResults.length > 0) {
+                        retrievedContext = searchResults.map((r, i) => 
+                            `[Evidence ${i + 1}] File: ${files.find(f => f.id === r.id)?.name || r.id}\n${r.chunk}`
+                        ).join('\n\n---\n\n');
+                    }
+                } catch (ragError) {
+                    console.error('[MapAI] RAG search failed:', ragError);
+                } finally {
+                    mapStore.setIsRetrieving(false);
+                }
+            }
+
             const currentNodes = mapStore.nodes;
             const currentEdges = mapStore.edges;
             const existingNodeList = currentNodes.map(n => `${n.id}: ${n.data.label} (${n.data.entityType})`).join('\n');
 
-            let userContent = `Instruction: ${instruction}\n\nExisting Nodes:\n${existingNodeList}\n\nTotal edges: ${currentEdges.length}`;
+            let userContent = `Instruction: ${cleanInstruction}\n\nExisting Nodes:\n${existingNodeList}\n\nTotal edges: ${currentEdges.length}`;
 
             if (contextNodeId) {
                 const targetNode = currentNodes.find(n => n.id === contextNodeId);
@@ -460,8 +501,10 @@ export const useMapAI = () => {
                 }
             }
 
-            if (caseFileText) {
-                userContent += `\n\nContext:\n${caseFileText.substring(0, 12000)}`;
+            // Combine manual context and retrieved context
+            const fullContext = [caseFileText, retrievedContext].filter(Boolean).join('\n\n---\n\n');
+            if (fullContext) {
+                userContent += `\n\nContext:\n${fullContext.substring(0, 15000)}`;
             }
 
             mapStore.setProgress({ phase: 1, batchCurrent: 1, batchTotal: 1, label: 'Updating entities...' });
@@ -473,7 +516,9 @@ export const useMapAI = () => {
 
             const phase1Response = await generateContent(selectedModel, apiKey, phase1Messages, [ADD_NODES_TOOL, UPDATE_NODE_TOOL]);
 
+            let totalToolCalls = 0;
             if (phase1Response.toolCalls?.length) {
+                totalToolCalls += phase1Response.toolCalls.length;
                 applyToolCalls(phase1Response.toolCalls, mapStore, (nodes) => gridLayout(nodes, currentNodes.length));
             }
 
@@ -483,9 +528,9 @@ export const useMapAI = () => {
             const updatedNodes = useMapStore.getState().nodes;
             const updatedNodeList = updatedNodes.map(n => `${n.id}: ${n.data.label} (${n.data.entityType})`).join('\n');
 
-            let phase2UserContent = `Instruction: ${instruction}\n\nExisting Nodes:\n${updatedNodeList}\n\nTotal edges: ${currentEdges.length}`;
-            if (caseFileText) {
-                phase2UserContent += `\n\nContext:\n${caseFileText.substring(0, 12000)}`;
+            let phase2UserContent = `Instruction: ${cleanInstruction}\n\nExisting Nodes:\n${updatedNodeList}\n\nTotal edges: ${currentEdges.length}`;
+            if (fullContext) {
+                phase2UserContent += `\n\nContext:\n${fullContext.substring(0, 15000)}`;
             }
 
             const phase2Messages: ChatMessage[] = [
@@ -496,6 +541,7 @@ export const useMapAI = () => {
             const phase2Response = await generateContent(selectedModel, apiKey, phase2Messages, [ADD_EDGES_TOOL, REMOVE_EDGE_TOOL]);
 
             if (phase2Response.toolCalls?.length) {
+                totalToolCalls += phase2Response.toolCalls.length;
                 applyToolCalls(phase2Response.toolCalls, mapStore, (nodes) => gridLayout(nodes, updatedNodes.length));
 
                 // Auto-layout after edge addition
@@ -505,9 +551,14 @@ export const useMapAI = () => {
                 useMapStore.getState().persistToDB();
             }
 
-            addToast('Map updated successfully.', 'success');
+            if (totalToolCalls > 0) {
+                addToast('Map updated successfully.', 'success');
+            } else {
+                mapStore.setMapError("No new mappable information was found.");
+            }
         } catch (error) {
             console.error('[MapAI] handleMapInstruction error:', error);
+            mapStore.setMapError("Error processing map update.");
         } finally {
             setIsMapProcessing(false);
             mapStore.releaseLock();
@@ -515,7 +566,7 @@ export const useMapAI = () => {
             // Drain one queued update
             drainUpdateQueue();
         }
-    }, [apiKeys, selectedProvider, selectedModel, addToast, drainUpdateQueue]);
+    }, [apiKeys, selectedProvider, selectedModel, addToast, drainUpdateQueue, config, files, appSettings.numFinalContextChunks]);
 
     // ── generateMapFromDocument (Two-Phase) ────────────────────────────────────
     const generateMapFromDocument = useCallback(async (caseFileSections: CaseFileSection[]) => {

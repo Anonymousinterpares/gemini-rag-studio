@@ -41,7 +41,7 @@ const TokenBudgetWarning: FC<TokenWarningProps> = ({ estimatedTokens, onConfirmA
 );
 
 export const InvestigationMapPanel: FC<Props> = ({ onClose, onOpenDossierForNode }) => {
-    const { nodes, edges, undo, redo, undoStack, redoStack, progress, jobLock, clearMap } = useMapStore();
+    const { nodes, edges, undo, redo, undoStack, redoStack, progress, jobLock, clearMap, isRagEnabled, isRetrieving } = useMapStore();
     const { reviewMapConnections, reviewTokenWarning } = useMapAI();
     const [isMaximized, setIsMaximized] = useState(false);
     const [measureRef, dimensions] = useMeasure<HTMLDivElement>();
@@ -61,6 +61,11 @@ export const InvestigationMapPanel: FC<Props> = ({ onClose, onOpenDossierForNode
                     <Network size={18} />
                     <span className="map-panel-title">Investigation Map</span>
                     <span className="map-stat-badge">{nodes.length} nodes · {edges.length} edges</span>
+                    {isRagEnabled && (
+                        <div className="map-rag-badge" title="RAG Mode Enabled: AI performs targeted retrieval for map updates.">
+                            RAG
+                        </div>
+                    )}
                     <button
                         className="map-clear-btn"
                         title="Clear entire map"
@@ -70,6 +75,13 @@ export const InvestigationMapPanel: FC<Props> = ({ onClose, onOpenDossierForNode
                         <Trash2 size={14} />
                     </button>
                 </div>
+
+                {isRetrieving && (
+                    <div className="map-retrieving-indicator">
+                        <Loader size={13} className="animate-spin" />
+                        <span>Searching Knowledge Base...</span>
+                    </div>
+                )}
 
                 {progress && (
                     <div className="map-progress-container">

@@ -5,6 +5,8 @@
   --secondary-color-hover: #4a4a4a;
   --disabled-color: #2a2a2a;
   --error-color: #ff6b6b;
+  --accent-primary: #646cff;
+  --accent-red: #e74c3c;
 
   /* Monster theme colors */
   --monster-primary: #FF6B35;

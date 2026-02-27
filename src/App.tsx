@@ -116,9 +116,6 @@ export const App: FC = () => {
     handleDeleteComment
   } = useChatComments(chatHistory, handleUpdateMessage);
 
-  // ── Map Integration ───────────────────────────────────────────────────────
-  const { handleMapInstruction, isMapProcessing } = useMapAI();
-
   const {
     handleConfirmEdit,
     handleRejectEdit,
@@ -156,6 +153,13 @@ export const App: FC = () => {
   } = useComputeStore();
 
   const { files, setFiles, clearFiles } = useFileStore();
+
+  // ── Map Integration ───────────────────────────────────────────────────────
+  const { handleMapInstruction, isMapProcessing } = useMapAI({ coordinator, vectorStore, queryEmbeddingResolver });
+
+  useEffect(() => {
+    useMapStore.getState().setIsRagEnabled(files.length > 0);
+  }, [files.length]);
 
   const uiConfig = useMemo(() => ({ 
     isLoading, isEmbedding, activeJobCount, files, chatHistory, jobTimers, setJobTimers 
