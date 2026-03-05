@@ -114,10 +114,10 @@ export const useMapStore = create<MapState>((set, get) => ({
 
     setIsRagEnabled: (enabled) => set((state) => ({
         isRagEnabled: enabled,
-        // Sync active state on first availability
-        isRagActive: enabled,
-        // Only auto-set isWebActive if user hasn't set it (effectively preserving it if they enabled it)
-        isWebActive: state.isWebActive
+        // Only auto-activate RAG on the FIRST transition to having files (when isRagActive was never set by user).
+        // After that, isRagActive is exclusively the user's toggle — file events must not overwrite it.
+        isRagActive: !state.isRagEnabled && enabled ? true : state.isRagActive,
+        // NEVER touch isWebActive or isDeepActive — those are user-only preferences.
     })),
     setIsRagActive: (active) => { set({ isRagActive: active }); get().persistToDB(); },
     setIsWebActive: (active) => { set({ isWebActive: active }); get().persistToDB(); },

@@ -493,15 +493,24 @@ JSON Format: { "queries": ["query1", "query2", ...] }`;
     // 2b. Programmatic Gathering (Single Web, Sequential RAG)
 
     // WEB Search: Execute ONLY ONCE with the primary query to bypass DDG rate limits
+    console.log('%c[MapAI] WEB CHECK', 'color:cyan;font-weight:bold', {
+        isWebActive: mapStore.isWebActive,
+        queriesAvailable: searchQueries.length,
+        willSearch: mapStore.isWebActive && searchQueries.length > 0
+    });
     if (mapStore.isWebActive && searchQueries.length > 0) {
         try {
             const q = searchQueries[0].replace(/["']/g, '').trim();
+            console.log('%c[MapAI] Calling searchWeb()...', 'color:cyan', q);
             mapStore.setProgress({ phase: 1, batchCurrent: 1, batchTotal: 1, label: `Web Search: ${q.substring(0, 30)}...` });
             const results = await searchWeb(q);
+            console.log('%c[MapAI] searchWeb() returned:', 'color:cyan', results?.length ?? 'null/undefined', 'results', results);
             if (results) results.slice(0, 5).forEach(r => allRawContexts.push({ label: r.title, chunk: r.snippet, link: r.link }));
         } catch (e) {
             console.error('[MapAI] Web search error:', e);
         }
+    } else {
+        console.warn('[MapAI] WEB SEARCH SKIPPED — isWebActive:', mapStore.isWebActive, '| queries:', searchQueries.length);
     }
 
     for (let i = 0; i < searchQueries.length; i++) {

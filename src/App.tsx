@@ -160,6 +160,8 @@ export const App: FC = () => {
 
   useEffect(() => {
     useMapStore.getState().setIsRagEnabled(files.length > 0);
+    const { isRagActive, isWebActive, isDeepActive } = useMapStore.getState();
+    console.log('[App] setIsRagEnabled fired. files:', files.length, '→ flags:', { isRagActive, isWebActive, isDeepActive });
   }, [files.length]);
 
   const uiConfig = useMemo(() => ({
