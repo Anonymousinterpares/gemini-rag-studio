@@ -410,14 +410,16 @@ function applyToolCalls(
 
 // ─── System prompts ────────────────────────────────────────────────────────────
 const SYSTEM_BASE = `You are a forensic mapping assistant for an investigation analysis tool.
+CRITICAL INSTRUCTION: YOU MUST ONLY RESPOND BY CALLING A FUNCTION TOOL. ANY OTHER TEXT, MARKDOWN, OR EXPLANATION WILL CAUSE A SYSTEM FAILURE. DO NOT OUTPUT CONVERSATIONAL TEXT.
+
 STRICT RULES:
-1. USE ONLY THE PROVIDED TOOLS. No conversational text.
+1. USE ONLY THE PROVIDED TOOLS.
 2. NEVER add a node whose ID already appears in the existing node list.
 3. NEVER recreate the full map — only ADD or UPDATE specific items.
 4. Every node/edge you add MUST be grounded in the provided context.
 5. When adding sources, ALWAYS populate the \`url\` field if referencing a specific file path, URL, or chat message ID.
 6. SOURCES: When citing sources in your tool calls:
-   - For internal document sources (from KB Evidence or Chat Sources), use the HUMAN-READABLE FILE NAME as the \`label\` and the ORIGINAL INTERNAL ID (e.g. "filename.txt_...") as the \`url\`.
+   - For internal document sources (from KB Evidence or Chat Sources), use the HUMAN-READABLE TITLE as the \`label\` and the ORIGINAL INTERNAL ID (e.g. "filename.txt_...") as the \`url\`.
    - For web results, use the \`title\` as the \`label\` and the \`link\` as the \`url\`.
    - DO NOT use generic labels like "Chat Source 1" if a file name is provided in the context header.
 7. TIMESTAMPS: Extract available dates and times in DD.MM.YYYY HH:MM:SS format. 
@@ -612,9 +614,9 @@ JSON Format: { "queries": ["query1", "query2", ...] }`;
             if (d.type === 'web') {
                 return `REF_${i}: { "name": "${d.label}", "type": "web", "url": "${d.url}" }`;
             }
-            return `REF_${i}: { "name": "${d.label}", "type": "document", "fileId": "${d.fileId || ''}", "chunkIndex": ${d.parentChunkIndex ?? 'null'} }`;
+            return `REF_${i}: { "name": "${d.label}", "type": "document", "url": "${d.url}", "fileId": "${d.fileId || ''}", "chunkIndex": ${d.parentChunkIndex ?? 'null'} }`;
         }).join('\n') +
-        "\n\nCRITICAL: When citing a document source use its fileId and chunkIndex. When citing a web source use its url.";
+        "\n\nCRITICAL: When citing sources in tool calls, you MUST copy ALL properties exactly as they appear in the reference JSON above (including url, fileId, and chunkIndex).";
 
     if (mapStore.isDeepActive && uniqueCount > 0) {
         mapStore.setProgress({ phase: 2, batchCurrent: 1, batchTotal: 1, label: 'Evaluating evidence...' });
@@ -717,7 +719,7 @@ export const useMapAI = (config?: {
             // ── Phase 3: Synthesized Mapping ───────────────────────────────────
             const currentNodes = mapStore.nodes;
             const existingNodeList = currentNodes.map(n => `${n.id}: ${n.data.label} (${n.data.entityType})`).join('\n');
-            let userContent = `Instruction: ${cleanInstruction}\n\nExisting Nodes:\n${existingNodeList}\n\nContext:\n${caseFileText ? `Case File: ${caseFileText}\n\n` : ''}${finalSynthesizedContext.substring(0, 25000)}`;
+            let userContent = `=== SOURCE MATERIAL TO MAP ===\n${cleanInstruction}\n==============================\n\nContext & References:\n${caseFileText ? `Case File: ${caseFileText}\n\n` : ''}${finalSynthesizedContext.substring(0, 25000)}\n\n---\n\nExisting Nodes Setup:\n${existingNodeList}\n\nCRITICAL: DO NOT explain your work or write an essay. ONLY return the JSON tool call to add or update nodes found in the SOURCE MATERIAL.`;
 
             if (contextNodeId) {
                 const targetNode = currentNodes.find(n => n.id === contextNodeId);
@@ -742,7 +744,7 @@ export const useMapAI = (config?: {
             const updatedNodeList = updatedNodes.map(n => `${n.id}: ${n.data.label} (${n.data.entityType})`).join('\n');
             const phase2Messages: ChatMessage[] = [
                 { role: 'system', content: `${SYSTEM_BASE}\n\nTask: ONLY wire connections between existing nodes. Use add_map_edges and remove_map_edge.` },
-                { role: 'user', content: `Instruction: ${cleanInstruction}\n\nExisting Nodes:\n${updatedNodeList}\n\nContext:\n${finalSynthesizedContext.substring(0, 25000)}` }
+                { role: 'user', content: `=== SOURCE MATERIAL TO MAP ===\n${cleanInstruction}\n==============================\n\nContext & References:\n${finalSynthesizedContext.substring(0, 25000)}\n\n---\n\nExisting Nodes Setup:\n${updatedNodeList}\n\nCRITICAL: DO NOT explain your work or write an essay. ONLY return the JSON tool call to connect the entities.` }
             ];
             const phase2Response = await generateContent(selectedModel, apiKey, phase2Messages, [ADD_EDGES_TOOL, REMOVE_EDGE_TOOL]);
 
@@ -827,7 +829,7 @@ export const useMapAI = (config?: {
                     },
                     {
                         role: 'user',
-                        content: `Extract entities from sections ${batchIdx * BATCH_SIZE + 1}-${Math.min((batchIdx + 1) * BATCH_SIZE, caseFileSections.length)}:\n\n${batchText.substring(0, 10000)}\n\nResearch Context:\n${finalSynthesizedContext.substring(0, 25000)}`
+                        content: `=== SOURCE MATERIAL TO MAP (sections ${batchIdx * BATCH_SIZE + 1}-${Math.min((batchIdx + 1) * BATCH_SIZE, caseFileSections.length)}) ===\n${batchText.substring(0, 10000)}\n==============================\n\nContext & References:\n${finalSynthesizedContext.substring(0, 25000)}\n\nCRITICAL: DO NOT explain your work or write an essay. ONLY return the JSON tool call to add nodes found in the SOURCE MATERIAL.`
                     }
                 ];
 
@@ -874,7 +876,7 @@ export const useMapAI = (config?: {
                 },
                 {
                     role: 'user',
-                    content: `Existing nodes:\n${nodeList}\n\nCase file:\n${fullText.substring(0, 15000)}\n\nResearch Context:\n${finalSynthesizedContext.substring(0, 25000)}`
+                    content: `=== SOURCE MATERIAL TO CONNECT ===\n${fullText.substring(0, 15000)}\n==============================\n\nContext & References:\n${finalSynthesizedContext.substring(0, 25000)}\n\n---\n\nExisting nodes:\n${nodeList}\n\nCRITICAL: DO NOT explain your work or write an essay. ONLY return the JSON tool call to connect the entities.`
                 }
             ];
 
@@ -886,7 +888,7 @@ export const useMapAI = (config?: {
                         const trimmedList = nodesToKeep.map(n => `${n.id}: ${n.data.label}`).join('\n');
                         modifiedMessages = [
                             phase2Messages[0],
-                            { role: 'user', content: `Existing nodes (TRIMMED to fit context):\n${trimmedList}\n\nCase file:\n${fullText.substring(0, 15000)}` }
+                            { role: 'user', content: `=== SOURCE MATERIAL TO CONNECT ===\n${fullText.substring(0, 15000)}\n==============================\n\n---\n\nExisting nodes (TRIMMED to fit context):\n${trimmedList}\n\nCRITICAL: DO NOT explain your work or write an essay. ONLY return the JSON tool call to connect the entities.` }
                         ];
                     }
 
