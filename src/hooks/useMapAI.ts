@@ -463,8 +463,9 @@ async function buildResearchContext(opts: {
     // ── Phase 1: The Planner (Deep Analysis Only) ──────────────────────
     let searchQueries = [cleanInstruction.split('\n')[0].substring(0, 200)]; // Default
     if (mapStore.isDeepActive) {
+        const maxQ = appSettings.numSubQuestions || 3;
         mapStore.setProgress({ phase: 0, batchCurrent: 1, batchTotal: 1, label: 'Planning research...' });
-        const plannerPrompt = `Analyze this investigation goal and generate 3-5 specific, targeted search queries to find the missing details.
+        const plannerPrompt = `Analyze this investigation goal and generate up to ${maxQ} specific, targeted search queries to find the missing details.
 Goal: ${cleanInstruction}
 JSON Format: { "queries": ["query1", "query2", ...] }`;
         const plannerResponse = await generateContent(selectedModel, apiKey, [{ role: 'user', content: plannerPrompt }], []);
@@ -490,28 +491,71 @@ JSON Format: { "queries": ["query1", "query2", ...] }`;
         parentChunkIndex: sr.parentChunkIndex
     }));
 
-    // 2b. Programmatic Gathering (Single Web, Sequential RAG)
+    // 2b. WEB Search — in DEEP mode run up to 3 targeted planner queries;
+    //     in standard mode run once (primary query only).
+    //     Each query is retried once with backoff on DDG rate-limit errors.
+    const decodeDDGLink = (link: string): string => {
+        try {
+            const url = new URL(link);
+            const uddg = url.searchParams.get('uddg');
+            return uddg ? decodeURIComponent(uddg) : link;
+        } catch {
+            return link;
+        }
+    };
 
-    // WEB Search: Execute ONLY ONCE with the primary query to bypass DDG rate limits
     console.log('%c[MapAI] WEB CHECK', 'color:cyan;font-weight:bold', {
         isWebActive: mapStore.isWebActive,
+        isDeepActive: mapStore.isDeepActive,
         queriesAvailable: searchQueries.length,
         willSearch: mapStore.isWebActive && searchQueries.length > 0
     });
     if (mapStore.isWebActive && searchQueries.length > 0) {
-        try {
-            const q = searchQueries[0].replace(/["']/g, '').trim();
-            console.log('%c[MapAI] Calling searchWeb()...', 'color:cyan', q);
-            mapStore.setProgress({ phase: 1, batchCurrent: 1, batchTotal: 1, label: `Web Search: ${q.substring(0, 30)}...` });
-            const results = await searchWeb(q);
-            console.log('%c[MapAI] searchWeb() returned:', 'color:cyan', results?.length ?? 'null/undefined', 'results', results);
-            if (results) results.slice(0, 5).forEach(r => allRawContexts.push({ label: r.title, chunk: r.snippet, link: r.link }));
-        } catch (e) {
-            console.error('[MapAI] Web search error:', e);
+        // Cap queries based on settings to respect DDG rate limits and user preference.
+        const maxWeb = appSettings.numSubQuestions || 3;
+        const webQueries = mapStore.isDeepActive ? searchQueries.slice(0, maxWeb) : [searchQueries[0]];
+        for (let wi = 0; wi < webQueries.length; wi++) {
+            const q = webQueries[wi].replace(/["']/g, '').trim();
+            // Single-retry helper with configurable delay
+            const trySearch = async (): Promise<void> => {
+                try {
+                    console.log(`%c[MapAI] Web search ${wi + 1}/${webQueries.length}:`, 'color:cyan', q);
+                    mapStore.setProgress({ phase: 1, batchCurrent: wi + 1, batchTotal: webQueries.length, label: `Web (${wi + 1}/${webQueries.length}): ${q.substring(0, 25)}...` });
+                    const results = await searchWeb(q);
+                    console.log(`%c[MapAI] searchWeb() ${wi + 1} returned:`, 'color:cyan', results?.length ?? 0, 'results');
+                    if (results) results.slice(0, 5).forEach(r => allRawContexts.push({
+                        label: r.title,
+                        chunk: r.snippet,
+                        link: decodeDDGLink(r.link)  // decode actual URL from DDG redirect
+                    }));
+                } catch (e: unknown) {
+                    const msg = e instanceof Error ? e.message : String(e);
+                    if (msg.includes('too quickly') || msg.includes('anomaly') || msg.includes('Ratelimit') || msg.includes('429')) {
+                        console.warn(`[MapAI] DDG rate limit on query ${wi + 1}, retrying in 6s...`);
+                        await new Promise(res => setTimeout(res, 6000));
+                        try {
+                            const retryResults = await searchWeb(q);
+                            if (retryResults) retryResults.slice(0, 5).forEach(r => allRawContexts.push({
+                                label: r.title,
+                                chunk: r.snippet,
+                                link: decodeDDGLink(r.link)
+                            }));
+                        } catch (retryErr) {
+                            console.warn(`[MapAI] Web search ${wi + 1} failed after retry — skipping.`, retryErr);
+                        }
+                    } else {
+                        console.error(`[MapAI] Web search ${wi + 1} error:`, e);
+                    }
+                }
+            };
+            await trySearch();
+            // Rate-limit guard between queries (skip after last)
+            if (wi < webQueries.length - 1) await new Promise(res => setTimeout(res, 3500));
         }
     } else {
         console.warn('[MapAI] WEB SEARCH SKIPPED — isWebActive:', mapStore.isWebActive, '| queries:', searchQueries.length);
     }
+
 
     for (let i = 0; i < searchQueries.length; i++) {
         const q = searchQueries[i].replace(/["']/g, '').trim();
@@ -552,37 +596,45 @@ JSON Format: { "queries": ["query1", "query2", ...] }`;
     console.group('DIAGNOSTIC: Source Mapping Table');
     console.table(deduplicated.map((d, i) => ({
         ref: `REF_${i}`,
+        type: d.type,
         file: d.label,
-        id: d.fileId || 'N/A',
+        id: d.fileId || d.url || 'N/A',
         chunk: d.parentChunkIndex ?? 'N/A',
         snippet: d.snippet?.substring(0, 50) + '...'
     })));
     console.groupEnd();
 
     // 2d. LLM Evaluation & Synthesis (Deep Only)
+    //  Build the REF table — document sources include fileId+chunkIndex, web sources include the real URL.
+    const buildRefTable = (sources: typeof deduplicated) =>
+        "--- SOURCE REFERENCE TABLE ---\n" +
+        sources.map((d, i) => {
+            if (d.type === 'web') {
+                return `REF_${i}: { "name": "${d.label}", "type": "web", "url": "${d.url}" }`;
+            }
+            return `REF_${i}: { "name": "${d.label}", "type": "document", "fileId": "${d.fileId || ''}", "chunkIndex": ${d.parentChunkIndex ?? 'null'} }`;
+        }).join('\n') +
+        "\n\nCRITICAL: When citing a document source use its fileId and chunkIndex. When citing a web source use its url.";
+
     if (mapStore.isDeepActive && uniqueCount > 0) {
         mapStore.setProgress({ phase: 2, batchCurrent: 1, batchTotal: 1, label: 'Evaluating evidence...' });
         const synthesisPrompt = `You are a forensic analyst. Evaluate the following research findings for relevance and conflict. Merge overlapping facts into a single unified investigation brief.
 Goal: ${cleanInstruction}
 Findings:
-${deduplicated.map((d, i) => `[REF_${i}] Source: ${d.label}\nContent: ${d.snippet}`).join('\n---\n')}
+${deduplicated.map((d, i) => `[REF_${i}] Source: ${d.label}${d.type === 'web' ? ` (${d.url})` : ''}\nContent: ${d.snippet}`).join('\n---\n')}
 
 Produce a high-signal "Unified Investigation Brief". If sources conflict, note the discrepancy.`;
         const synthResponse = await generateContent(selectedModel, apiKey, [{ role: 'user', content: synthesisPrompt }], []);
         finalSynthesizedContext = synthResponse.text || '';
 
         // Construct mapping lookup table
-        const lookupTable = "--- SOURCE REFERENCE TABLE ---\n" +
-            deduplicated.map((d, i) => `REF_${i}: { "name": "${d.label}", "id": "${d.url}", "fileId": "${d.fileId || ''}", "chunkIndex": ${d.parentChunkIndex ?? 'null'} }`).join('\n') +
-            "\n\nCRITICAL: When calling tools, you MUST include 'fileId' and 'parentChunkIndex' from the corresponding REF_X if the source is a document.";
-
-        finalSynthesizedContext = lookupTable + "\n\n" + finalSynthesizedContext;
+        const lookupTable = buildRefTable(deduplicated) + "\n\n";
+        finalSynthesizedContext = lookupTable + finalSynthesizedContext;
     } else {
         // Fast Mode Synthesis
-        finalSynthesizedContext = "--- SOURCE REFERENCE TABLE ---\n" +
-            deduplicated.map((d, i) => `REF_${i}: { "name": "${d.label}", "id": "${d.url}", "fileId": "${d.fileId || ''}", "chunkIndex": ${d.parentChunkIndex ?? 'null'} }`).join('\n') +
+        finalSynthesizedContext = buildRefTable(deduplicated) +
             "\n\n" +
-            deduplicated.map((d, i) => `[REF_${i}: ${d.label}]\n${d.snippet}`).join('\n\n');
+            deduplicated.map((d, i) => `[REF_${i}: ${d.label}${d.type === 'web' ? ` | ${d.url}` : ''}]\n${d.snippet}`).join('\n\n');
     }
 
     console.groupEnd();
@@ -841,7 +893,12 @@ export const useMapAI = (config?: {
                     const phase2Response = await generateContent(selectedModel, apiKey, modifiedMessages, [ADD_EDGES_TOOL]);
 
                     if (phase2Response.toolCalls?.length) {
-                        applyToolCalls(phase2Response.toolCalls, mapStore, (nodes) => gridLayout(nodes, currentNodes.length));
+                        try {
+                            applyToolCalls(phase2Response.toolCalls, mapStore, (nodes) => gridLayout(nodes, currentNodes.length));
+                        } catch (e) {
+                            console.error('[MapAI] runPhase2 applyToolCalls error (malformed JSON?):', e);
+                            addToast('Some connections could not be mapped due to an AI formatting error.', 'warning');
+                        }
                     }
 
                     const finalNodes = useMapStore.getState().nodes;
