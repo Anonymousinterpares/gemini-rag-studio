@@ -11,7 +11,7 @@ import { useCaseFileStore } from '../store/useCaseFileStore';
 import { useMapStore } from '../store/useMapStore';
 import { useDossierStore } from '../store/useDossierStore';
 import { searchWeb } from '../utils/search';
-import { sectionizeMessage, createFuzzyRegex } from '../utils/chatUtils';
+import { sectionizeMessage, createFuzzyRegex, CITATION_REGEX } from '../utils/chatUtils';
 import { getDossierTools, handleDossierToolCall, DOSSIER_COMPILER_PROMPT } from '../agents/dossier';
 
 
@@ -344,7 +344,8 @@ export const useChat = ({
                     content: `${da.finalText}<!--searchResults:${JSON.stringify(da.usedResults)}-->`,
                     type: 'case_file_report',
                     tokenUsage: perRequestTokenUsage,
-                    elapsedTime: Date.now() - startTime
+                    elapsedTime: Date.now() - startTime,
+                    isStreaming: false
                 }]);
                 setIsLoading(false);
                 return;
@@ -441,9 +442,9 @@ export const useChat = ({
                             role: 'model',
                             content: cleanResponseText,
                             tokenUsage: perRequestTokenUsage,
-                            elapsedTime: Date.now() - startTime
-                        };
-                        if (updateIndex !== undefined) {
+                            elapsedTime: Date.now() - startTime,
+                            isStreaming: false
+                        };                        if (updateIndex !== undefined) {
                             updateMessage(updateIndex, finalMsg);
                         } else {
                             setChatHistory([...currentHistory, finalMsg]);
@@ -535,7 +536,8 @@ export const useChat = ({
                     role: 'model',
                     content: finalResponse.text || "I reached my search limit without a final answer.",
                     tokenUsage: perRequestTokenUsage,
-                    elapsedTime: Date.now() - startTime
+                    elapsedTime: Date.now() - startTime,
+                    isStreaming: true
                 };
                 if (updateIndex !== undefined) {
                     updateMessage(updateIndex, finalMsg);
@@ -689,7 +691,13 @@ Or just tell me what specific aspects you'd like me to focus on.`;
 
             if (decision === 'GENERAL_CONVERSATION') {
                 const llmResponse = await callGenerateContent(selectedModel, apiKey, [{ role: 'system', content: getSystemPrompt() }, ...newHistory]);
-                const finalMsg: ChatMessage = { role: 'model', content: llmResponse.text || '', tokenUsage: perRequestTokenUsage, elapsedTime: Date.now() - startTime };
+                const finalMsg: ChatMessage = {
+                    role: 'model',
+                    content: llmResponse.text || '',
+                    tokenUsage: perRequestTokenUsage,
+                    elapsedTime: Date.now() - startTime,
+                    isStreaming: true
+                };
                 if (updateIndex !== undefined) {
                     updateMessage(updateIndex, finalMsg);
                 } else {
@@ -745,7 +753,13 @@ Or just tell me what specific aspects you'd like me to focus on.`;
             const messages: ChatMessage[] = [{ role: 'system', content: getSystemPrompt(requiredDocIds) }, ...history, { role: 'user', content: `CONTEXT:\n---\n${context}\n---\n\nUSER QUESTION: ${query}` }];
 
             const llmResponse = await callGenerateContent(selectedModel, apiKey, messages);
-            const finalMsg: ChatMessage = { role: 'model', content: `${llmResponse.text || ''}<!--searchResults:${JSON.stringify(searchResults)}-->`, tokenUsage: perRequestTokenUsage, elapsedTime: Date.now() - startTime };
+            const finalMsg: ChatMessage = {
+                role: 'model',
+                content: `${llmResponse.text || ''}<!--searchResults:${JSON.stringify(searchResults)}-->`,
+                tokenUsage: perRequestTokenUsage,
+                elapsedTime: Date.now() - startTime,
+                isStreaming: true
+            };
             if (updateIndex !== undefined) {
                 updateMessage(updateIndex, finalMsg);
             } else {
@@ -807,10 +821,7 @@ Or just tell me what specific aspects you'd like me to focus on.`;
         const docNumbers = new Map<string, number>();
         let nextDocNumber = 1;
 
-        // Robust regex to handle variations: [Source: ID], [ID], 【Source: ID】, 【ID】, and unbracketed Source: ID
-        const citationRegex = /\[Source:\s*([^\]]+)\]|\[(\d+)\]|【Source:\s*([^】]+)】|【(\d+)】|\bSource:\s*([\w.-]+_\d+_\d+)\b/gi;
-
-        let finalHtml = rawHtml.replace(citationRegex, (match, g1, g2, g3, g4, g5) => {
+        let finalHtml = rawHtml.replace(CITATION_REGEX, (match, g1, g2, g3, g4, g5) => {
             const inside = (g1 || g2 || g3 || g4 || g5) as string;
             if (!inside) return match;
 

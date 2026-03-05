@@ -12,7 +12,7 @@ import { ComputeCoordinator } from '../compute/coordinator';
 import { TaskPriority, TaskType } from '../compute/types';
 import { chunkDocument } from '../rag/pipeline';
 import { createFileTasks } from '../utils/taskFactory';
-import { useFileStore, useSettingsStore, useChatStore, useComputeStore } from '../store';
+import { useFileStore, useSettingsStore, useChatStore, useComputeStore, useToastStore } from '../store';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.mjs`;
 
@@ -164,7 +164,7 @@ export const useFileState = ({
     }
 
     if (filesToLoadFromCache.length > 0) {
-      setChatHistory((prev: ChatMessage[]) => [...prev, { role: 'model', content: `Loading ${filesToLoadFromCache.length} file(s) from cache...` }]);
+      useToastStore.getState().addToast(`Loading ${filesToLoadFromCache.length} file(s) from cache...`, 'system-alert', 1000);
       for (const { file, cachedEmbedding } of filesToLoadFromCache) {
         if (cachedEmbedding.parentChunks && cachedEmbedding.childChunks) {
           vectorStore?.current?.addParentChunks(file.id, cachedEmbedding.parentChunks);
@@ -224,7 +224,7 @@ export const useFileState = ({
 
     if (filesToProcess.length > 0) {
       setIsEmbedding(true);
-      setChatHistory((prev: ChatMessage[]) => [...prev, { role: 'model', content: `Adding ${filesToProcess.length} new file(s)...` }]);
+      useToastStore.getState().addToast(`Adding ${filesToProcess.length} new file(s)...`, 'system-alert', 1000);
 
       for (const file of filesToProcess) {
         if (!file.content && file.file && !file.name.endsWith('.docx') && !file.name.endsWith('.pdf')) {
@@ -241,7 +241,7 @@ export const useFileState = ({
         }
       }
     }
-  }, [files, docFontSize, appSettings, selectedModel, selectedProvider, apiKeys, setIsEmbedding, setChatHistory, coordinator, setJobTimers, setFiles, vectorStore, streamFileToCoordinator]);
+  }, [files, docFontSize, appSettings, selectedModel, selectedProvider, apiKeys, setIsEmbedding, coordinator, setJobTimers, setFiles, vectorStore, streamFileToCoordinator]);
 
   const handleFolderReviewModalClose = useCallback(async (selectedFilePaths: string[] | null) => {
     setShowFolderReviewModal(false);
@@ -249,10 +249,10 @@ export const useFileState = ({
       const filteredFiles = filesToProcessAfterReview.filter(file => selectedFilePaths.includes(file.path));
       await addFilesAndEmbed(filteredFiles);
     } else {
-      setChatHistory((prev: ChatMessage[]) => [...prev, { role: 'model', content: 'File ingestion cancelled by user.' }]);
+      useToastStore.getState().addToast('File ingestion cancelled by user.', 'system-alert', 1000);
     }
     setFilesToProcessAfterReview([]);
-  }, [addFilesAndEmbed, filesToProcessAfterReview, setChatHistory, setShowFolderReviewModal, setFilesToProcessAfterReview]);
+  }, [addFilesAndEmbed, filesToProcessAfterReview, setShowFolderReviewModal, setFilesToProcessAfterReview]);
 
   const processDroppedItems = useCallback(async (items: DataTransferItemList): Promise<AppFile[]> => {
     const collectedFiles: AppFile[] = [];

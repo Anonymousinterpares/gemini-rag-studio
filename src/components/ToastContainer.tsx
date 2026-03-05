@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useToastStore, ToastMessage } from '../store/useToastStore';
 import { Info, CheckCircle, AlertCircle } from 'lucide-react';
 import './ToastContainer.css';
@@ -21,7 +21,7 @@ const Toast: React.FC<{ toast: ToastMessage }> = ({ toast }) => {
             clearTimeout(fadeTimer);
             clearTimeout(removeTimer);
         };
-    }, [toast, removeToast]);
+    }, [toast.id, toast.duration, removeToast]);
 
     let Icon = Info;
     let colorClass = 'toast-info';
@@ -38,7 +38,11 @@ const Toast: React.FC<{ toast: ToastMessage }> = ({ toast }) => {
 };
 
 export const ToastContainer: React.FC = () => {
-    const toasts = useToastStore(state => state.toasts);
+    const allToasts = useToastStore(state => state.toasts);
+    const toasts = useMemo(() => 
+        allToasts.filter(t => t.type !== 'system-alert'),
+        [allToasts]
+    );
 
     if (toasts.length === 0) return null;
 

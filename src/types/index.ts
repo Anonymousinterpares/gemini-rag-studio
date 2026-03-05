@@ -171,6 +171,7 @@ export interface ChatMessage {
   tool_call_id?: string;
   name?: string;
   isInternal?: boolean;
+  isStreaming?: boolean; // True only when content is being actively generated/typed
   sections?: MessageSection[];
   selectionComments?: SelectionComment[];
   pendingEdits?: {

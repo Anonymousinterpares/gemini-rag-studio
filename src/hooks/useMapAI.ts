@@ -9,6 +9,7 @@ import { useToastStore } from '../store/useToastStore';
 import { ComputeCoordinator } from '../compute/coordinator';
 import { VectorStore } from '../rag/pipeline';
 import { TaskPriority, TaskType } from '../compute/types';
+import { searchWeb } from '../utils/search';
 
 // ─── Semantic Helpers ──────────────────────────────────────────────────────────
 
@@ -30,14 +31,14 @@ function cosineSimilarity(a: number[], b: number[]): number {
 function calculateNodeMass(node: MapNode, edges: MapEdge[]): number {
     const uniqueCitations = node.data.citationCount || 0;
     const internalEdges = edges.filter(e => e.source === node.id || e.target === node.id).length;
-    
+
     let mass = (uniqueCitations * 2) + internalEdges;
-    
+
     // 50% penalty if not verified (either certainty or timestamp)
     if (!node.data.isCertaintyVerified || !node.data.isTimestampVerified) {
         mass = mass * 0.5;
     }
-    
+
     return Math.max(1, mass); // Minimum mass of 1
 }
 
@@ -46,38 +47,38 @@ function calculateNodeMass(node: MapNode, edges: MapEdge[]): number {
  */
 function deduplicateSources(sources: MapNodeSource[]): { deduplicated: MapNodeSource[], uniqueCount: number } {
     if (!sources || sources.length === 0) return { deduplicated: [], uniqueCount: 0 };
-    
+
     const unique: MapNodeSource[] = [];
-    
+
     for (const src of sources) {
         let isDuplicate = false;
-        
+
         for (const existing of unique) {
             // 1. Structural De-duplication: Same document and same paragraph/chunk
-            if (src.fileId && src.fileId === existing.fileId && 
+            if (src.fileId && src.fileId === existing.fileId &&
                 src.parentChunkIndex !== undefined && src.parentChunkIndex === existing.parentChunkIndex) {
                 isDuplicate = true;
                 break;
             }
-            
+
             // 2. Conceptual De-duplication: Semantic similarity > 0.92
             if (src.embedding && existing.embedding && cosineSimilarity(src.embedding, existing.embedding) > 0.92) {
                 isDuplicate = true;
                 break;
             }
-            
+
             // 3. Fallback: Exact snippet match
             if (src.snippet && existing.snippet && src.snippet.trim() === existing.snippet.trim()) {
                 isDuplicate = true;
                 break;
             }
         }
-        
+
         if (!isDuplicate) {
             unique.push(src);
         }
     }
-    
+
     return { deduplicated: sources, uniqueCount: unique.length };
 }
 
@@ -100,8 +101,8 @@ const ADD_NODES_TOOL: Tool = {
                             label: { type: SchemaType.STRING },
                             entityType: { type: SchemaType.STRING, description: 'One of: person, location, event, organization, evidence, group' },
                             description: { type: SchemaType.STRING },
-                            timestamp: { type: SchemaType.STRING, description: 'Timestamp in DD.MM.YYYY HH:MM:SS format. If only a date is available, use 00:00:00 for the time. LEAVE EMPTY only if no temporal info exists.' },
-                            certaintyScore: { type: SchemaType.NUMBER, description: 'AI confidence score from 0 to 100 based on evidence strength.' },
+                            timestamp: { type: SchemaType.STRING, description: 'Timestamp in DD.MM.YYYY HH:MM:SS format. If only a date is available, use 00:00:00 for the time.' },
+                            certaintyScore: { type: SchemaType.NUMBER, description: 'AI confidence score from 0 to 100.' },
                             sources: {
                                 type: SchemaType.ARRAY,
                                 items: {
@@ -109,8 +110,10 @@ const ADD_NODES_TOOL: Tool = {
                                     properties: {
                                         type: { type: SchemaType.STRING, description: 'One of: web, document, chat_exchange' },
                                         label: { type: SchemaType.STRING },
-                                        snippet: { type: SchemaType.STRING, description: 'The exact quote or excerpt from the context.' },
-                                        url: { type: SchemaType.STRING, description: 'The file path or document ID. CRITICAL for deduplication.' },
+                                        snippet: { type: SchemaType.STRING },
+                                        url: { type: SchemaType.STRING },
+                                        fileId: { type: SchemaType.STRING },
+                                        parentChunkIndex: { type: SchemaType.NUMBER }
                                     },
                                     required: ['type', 'label', 'snippet', 'url']
                                 }
@@ -147,6 +150,8 @@ const UPDATE_NODE_TOOL: Tool = {
                             label: { type: SchemaType.STRING },
                             snippet: { type: SchemaType.STRING, description: 'Exact quote for semantic de-duplication.' },
                             url: { type: SchemaType.STRING, description: 'File path or ID. Crucial for structural de-duplication.' },
+                            fileId: { type: SchemaType.STRING, description: 'Technical ID of the file.' },
+                            parentChunkIndex: { type: SchemaType.NUMBER, description: 'Technical index of the chunk.' }
                         },
                         required: ['type', 'label', 'snippet', 'url']
                     }
@@ -174,7 +179,22 @@ const ADD_EDGES_TOOL: Tool = {
                             target: { type: SchemaType.STRING },
                             label: { type: SchemaType.STRING },
                             connectionType: { type: SchemaType.STRING, description: 'One of: knows, involved_in, owns, located_at, conflicts_with, related_to' },
-                            certainty: { type: SchemaType.STRING, description: 'One of: confirmed, suspected, disproven' }
+                            certainty: { type: SchemaType.STRING, description: 'One of: confirmed, suspected, disproven' },
+                            sources: {
+                                type: SchemaType.ARRAY,
+                                items: {
+                                    type: SchemaType.OBJECT,
+                                    properties: {
+                                        type: { type: SchemaType.STRING, description: 'One of: web, document, message' },
+                                        label: { type: SchemaType.STRING, description: 'The human-readable title of the source.' },
+                                        snippet: { type: SchemaType.STRING, description: 'A brief quote or excerpt from the source.' },
+                                        url: { type: SchemaType.STRING, description: 'The original internal ID or web URL.' },
+                                        fileId: { type: SchemaType.STRING, description: 'Technical ID of the file.' },
+                                        parentChunkIndex: { type: SchemaType.NUMBER, description: 'Technical index of the chunk.' }
+                                    },
+                                    required: ['type', 'label']
+                                }
+                            }
                         },
                         required: ['source', 'target', 'connectionType']
                     }
@@ -280,14 +300,14 @@ function applyToolCalls(
         switch (tc.function.name) {
             case 'add_map_nodes': {
                 const newNodes = nodeLayoutFn(args.nodes || []);
-                
+
                 // For each new node, calculate citation count and mass
                 newNodes.forEach(node => {
                     const { uniqueCount } = deduplicateSources(node.data.sources || []);
                     node.data.citationCount = uniqueCount;
                     node.data.mass = calculateNodeMass(node, mapStore.edges);
                 });
-                
+
                 mapStore.patchNodes({ add: newNodes });
                 break;
             }
@@ -304,14 +324,14 @@ function applyToolCalls(
                     updatePatch.isCertaintyVerified = false;
                 }
                 if (tags !== undefined) updatePatch.tags = tags;
-                
+
                 // Recalculate citation count if sources are updated
                 if (sources !== undefined) {
                     updatePatch.sources = sources;
                     const { uniqueCount } = deduplicateSources(sources);
                     updatePatch.citationCount = uniqueCount;
                 }
-                
+
                 // Find existing node to recalculate mass based on potentially updated data
                 const existingNode = mapStore.nodes.find(n => n.id === id);
                 if (existingNode) {
@@ -321,7 +341,7 @@ function applyToolCalls(
                     };
                     updatePatch.mass = calculateNodeMass(mergedNode, mapStore.edges);
                 }
-                
+
                 mapStore.patchNodes({ update: [updatePatch] });
                 break;
             }
@@ -337,11 +357,11 @@ function applyToolCalls(
                     },
                 }));
                 mapStore.patchEdges({ add: newEdges });
-                
+
                 // Mass depends on internal edges, so recalculate mass for source/target nodes
                 const nodeUpdates: (Partial<MapNode['data']> & { id: string })[] = [];
                 const updatedEdges = [...mapStore.edges, ...newEdges];
-                
+
                 newEdges.forEach(edge => {
                     [edge.source, edge.target].forEach(nodeId => {
                         const node = mapStore.nodes.find(n => n.id === nodeId);
@@ -353,7 +373,7 @@ function applyToolCalls(
                         }
                     });
                 });
-                
+
                 if (nodeUpdates.length > 0) {
                     mapStore.patchNodes({ update: nodeUpdates });
                 }
@@ -363,22 +383,22 @@ function applyToolCalls(
                 const edgeIdsToRemove = args.edgeIds || [];
                 const edgesAfterRemoval = mapStore.edges.filter(e => !edgeIdsToRemove.includes(e.id));
                 const nodesToUpdate = new Set<string>();
-                
+
                 mapStore.edges.forEach(e => {
                     if (edgeIdsToRemove.includes(e.id)) {
                         nodesToUpdate.add(e.source);
                         nodesToUpdate.add(e.target);
                     }
                 });
-                
+
                 mapStore.patchEdges({ remove: edgeIdsToRemove });
-                
+
                 // Recalculate mass for nodes affected by edge removal
                 const nodeUpdates = Array.from(nodesToUpdate).map(nodeId => {
                     const node = mapStore.nodes.find(n => n.id === nodeId);
                     return node ? { id: nodeId, mass: calculateNodeMass(node, edgesAfterRemoval) } : null;
                 }).filter((u): u is { id: string, mass: number } => u !== null);
-                
+
                 if (nodeUpdates.length > 0) {
                     mapStore.patchNodes({ update: nodeUpdates });
                 }
@@ -396,11 +416,169 @@ STRICT RULES:
 3. NEVER recreate the full map — only ADD or UPDATE specific items.
 4. Every node/edge you add MUST be grounded in the provided context.
 5. When adding sources, ALWAYS populate the \`url\` field if referencing a specific file path, URL, or chat message ID.
-6. TIMESTAMPS: Extract available dates and times in DD.MM.YYYY HH:MM:SS format. 
+6. SOURCES: When citing sources in your tool calls:
+   - For internal document sources (from KB Evidence or Chat Sources), use the HUMAN-READABLE FILE NAME as the \`label\` and the ORIGINAL INTERNAL ID (e.g. "filename.txt_...") as the \`url\`.
+   - For web results, use the \`title\` as the \`label\` and the \`link\` as the \`url\`.
+   - DO NOT use generic labels like "Chat Source 1" if a file name is provided in the context header.
+7. TIMESTAMPS: Extract available dates and times in DD.MM.YYYY HH:MM:SS format. 
    - If only a date is available (e.g. "Jan 5, 2024"), use "05.01.2024 00:00:00".
    - If no year is provided but it can be inferred from context, use the inferred year.
    - If absolutely no temporal data exists for an entity, leave the field EMPTY.
-7. CERTAINTY: Assign a certaintyScore (0-100) based on how explicit and cross-referenced the evidence is.`;
+8. CERTAINTY: Assign a certaintyScore (0-100) based on how explicit and cross-referenced the evidence is.`;
+
+interface InternalSearchResult {
+    id?: string;
+    title?: string;
+    link?: string;
+    snippet?: string;
+    chunk?: string;
+    embedding?: number[];
+    parentChunkIndex?: number;
+}
+
+// ─── Shared Research Pipeline ──────────────────────────────────────────────────
+async function buildResearchContext(opts: {
+    cleanInstruction: string;
+    bubbleSearchResults: InternalSearchResult[];
+    mapStore: ReturnType<typeof useMapStore.getState>;
+    apiKey: string | undefined;
+    selectedModel: import('../types').Model;
+    files: import('../types').AppFile[];
+    appSettings: import('../config').AppSettings;
+    config?: {
+        coordinator: MutableRefObject<ComputeCoordinator | null>;
+        vectorStore: MutableRefObject<VectorStore | null>;
+        queryEmbeddingResolver: MutableRefObject<((value: number[]) => void) | null>;
+    };
+}) {
+    const { cleanInstruction, bubbleSearchResults, mapStore, apiKey, selectedModel, files, appSettings, config } = opts;
+
+    console.group('DEBUG: Map Update Context Retrieval');
+    console.log('Cleaned Instruction:', cleanInstruction);
+    console.log('Settings:', { RAG: mapStore.isRagActive, WEB: mapStore.isWebActive, DEEP: mapStore.isDeepActive });
+
+    let finalSynthesizedContext = '';
+    const allRawContexts: { label: string, chunk: string, id?: string, link?: string, similarity?: number, embedding?: number[], parentChunkIndex?: number }[] = [];
+
+    // ── Phase 1: The Planner (Deep Analysis Only) ──────────────────────
+    let searchQueries = [cleanInstruction.split('\n')[0].substring(0, 200)]; // Default
+    if (mapStore.isDeepActive) {
+        mapStore.setProgress({ phase: 0, batchCurrent: 1, batchTotal: 1, label: 'Planning research...' });
+        const plannerPrompt = `Analyze this investigation goal and generate 3-5 specific, targeted search queries to find the missing details.
+Goal: ${cleanInstruction}
+JSON Format: { "queries": ["query1", "query2", ...] }`;
+        const plannerResponse = await generateContent(selectedModel, apiKey, [{ role: 'user', content: plannerPrompt }], []);
+        try {
+            const parsed = JSON.parse(plannerResponse.text || '{}');
+            if (parsed.queries && parsed.queries.length > 0) {
+                searchQueries = parsed.queries;
+                console.log('Deep Planner queries:', searchQueries);
+            }
+        } catch { console.warn('[MapAI] Planner failed, using default query.'); }
+    }
+
+    // ── Phase 2: Hybrid Research & Evaluation ─────────────────────────
+    mapStore.setProgress({ phase: 1, batchCurrent: 0, batchTotal: searchQueries.length, label: 'Researching...' });
+
+    // 2a. Smart Ingestion (Instant)
+    bubbleSearchResults.forEach(sr => allRawContexts.push({
+        label: sr.title || sr.id || 'Chat Source',
+        chunk: sr.chunk || sr.snippet || '',
+        id: sr.id,
+        link: sr.link,
+        embedding: sr.embedding,
+        parentChunkIndex: sr.parentChunkIndex
+    }));
+
+    // 2b. Programmatic Gathering (Single Web, Sequential RAG)
+
+    // WEB Search: Execute ONLY ONCE with the primary query to bypass DDG rate limits
+    if (mapStore.isWebActive && searchQueries.length > 0) {
+        try {
+            const q = searchQueries[0].replace(/["']/g, '').trim();
+            mapStore.setProgress({ phase: 1, batchCurrent: 1, batchTotal: 1, label: `Web Search: ${q.substring(0, 30)}...` });
+            const results = await searchWeb(q);
+            if (results) results.slice(0, 5).forEach(r => allRawContexts.push({ label: r.title, chunk: r.snippet, link: r.link }));
+        } catch (e) {
+            console.error('[MapAI] Web search error:', e);
+        }
+    }
+
+    for (let i = 0; i < searchQueries.length; i++) {
+        const q = searchQueries[i].replace(/["']/g, '').trim();
+        mapStore.setProgress({ phase: 1, batchCurrent: i + 1, batchTotal: searchQueries.length, label: `RAG Search: ${q.substring(0, 30)}...` });
+
+        // RAG Search
+        if (mapStore.isRagActive && files.length > 0 && config?.coordinator.current && config?.vectorStore.current && config?.queryEmbeddingResolver) {
+            try {
+                const queryEmbeddingPromise = new Promise<number[]>((resolve) => { if (config.queryEmbeddingResolver) config.queryEmbeddingResolver.current = resolve; });
+                config.coordinator.current.addJob('Map RAG Search', [{ id: `map-rag-${Date.now()}`, priority: TaskPriority.P1_Primary, payload: { type: TaskType.EmbedQuery, query: q } }]);
+                const queryEmbedding = await queryEmbeddingPromise;
+                const results = config.vectorStore.current.search(queryEmbedding, appSettings.numFinalContextChunks || 10);
+                results.forEach(r => allRawContexts.push({
+                    label: files.find(f => f.id === r.id)?.name || r.id,
+                    chunk: r.chunk,
+                    id: r.id,
+                    similarity: r.similarity,
+                    embedding: queryEmbedding,
+                    parentChunkIndex: r.parentChunkIndex
+                }));
+            } catch (e) { console.error('[MapAI] RAG search error:', e); }
+        }
+    }
+
+    // 2c. Programmatic Deduplication
+    const dedupSources: MapNodeSource[] = allRawContexts.map(c => ({
+        type: c.id ? 'document' : 'web',
+        label: c.label,
+        snippet: c.chunk,
+        url: c.id || c.link || '',
+        fileId: c.id,
+        embedding: c.embedding,
+        parentChunkIndex: c.parentChunkIndex
+    }));
+    const { deduplicated, uniqueCount } = deduplicateSources(dedupSources);
+
+    // DIAGNOSTIC LOG: Source Mapping Table
+    console.group('DIAGNOSTIC: Source Mapping Table');
+    console.table(deduplicated.map((d, i) => ({
+        ref: `REF_${i}`,
+        file: d.label,
+        id: d.fileId || 'N/A',
+        chunk: d.parentChunkIndex ?? 'N/A',
+        snippet: d.snippet?.substring(0, 50) + '...'
+    })));
+    console.groupEnd();
+
+    // 2d. LLM Evaluation & Synthesis (Deep Only)
+    if (mapStore.isDeepActive && uniqueCount > 0) {
+        mapStore.setProgress({ phase: 2, batchCurrent: 1, batchTotal: 1, label: 'Evaluating evidence...' });
+        const synthesisPrompt = `You are a forensic analyst. Evaluate the following research findings for relevance and conflict. Merge overlapping facts into a single unified investigation brief.
+Goal: ${cleanInstruction}
+Findings:
+${deduplicated.map((d, i) => `[REF_${i}] Source: ${d.label}\nContent: ${d.snippet}`).join('\n---\n')}
+
+Produce a high-signal "Unified Investigation Brief". If sources conflict, note the discrepancy.`;
+        const synthResponse = await generateContent(selectedModel, apiKey, [{ role: 'user', content: synthesisPrompt }], []);
+        finalSynthesizedContext = synthResponse.text || '';
+
+        // Construct mapping lookup table
+        const lookupTable = "--- SOURCE REFERENCE TABLE ---\n" +
+            deduplicated.map((d, i) => `REF_${i}: { "name": "${d.label}", "id": "${d.url}", "fileId": "${d.fileId || ''}", "chunkIndex": ${d.parentChunkIndex ?? 'null'} }`).join('\n') +
+            "\n\nCRITICAL: When calling tools, you MUST include 'fileId' and 'parentChunkIndex' from the corresponding REF_X if the source is a document.";
+
+        finalSynthesizedContext = lookupTable + "\n\n" + finalSynthesizedContext;
+    } else {
+        // Fast Mode Synthesis
+        finalSynthesizedContext = "--- SOURCE REFERENCE TABLE ---\n" +
+            deduplicated.map((d, i) => `REF_${i}: { "name": "${d.label}", "id": "${d.url}", "fileId": "${d.fileId || ''}", "chunkIndex": ${d.parentChunkIndex ?? 'null'} }`).join('\n') +
+            "\n\n" +
+            deduplicated.map((d, i) => `[REF_${i}: ${d.label}]\n${d.snippet}`).join('\n\n');
+    }
+
+    console.groupEnd();
+    return finalSynthesizedContext;
+}
 
 // ─── Hook ──────────────────────────────────────────────────────────────────────
 
@@ -455,65 +633,41 @@ export const useMapAI = (config?: {
         const apiKey = apiKeys[selectedProvider];
 
         try {
-            // 1. Instruction Refinement (Cleaning)
+            // ── Phase 0: Bubble Context & Cleanup ──────────────────────────────
             const cleanInstruction = instruction.replace(/<!--searchResults:[\s\S]*?-->/g, '').trim();
+            let bubbleSearchResults: InternalSearchResult[] = [];
+            instruction.replace(/<!--searchResults:([\s\S]*?)-->/, (_, resultsJson) => {
+                try { bubbleSearchResults = JSON.parse(resultsJson); } catch { /* ignore */ }
+                return '';
+            });
 
-            // 2. RAG Logic (Dedicated Map Retrieval)
-            let retrievedContext = '';
-            if (files.length > 0 && config?.coordinator.current && config?.vectorStore.current && config?.queryEmbeddingResolver) {
-                mapStore.setIsRetrieving(true);
-                try {
-                    const queryEmbeddingPromise = new Promise<number[]>((resolve) => { 
-                        if (config.queryEmbeddingResolver) config.queryEmbeddingResolver.current = resolve; 
-                    });
-                    
-                    config.coordinator.current.addJob('Map RAG Search', [{ 
-                        id: `map-rag-${Date.now()}`, 
-                        priority: TaskPriority.P1_Primary, 
-                        payload: { type: TaskType.EmbedQuery, query: cleanInstruction } 
-                    }]);
-                    
-                    const queryEmbedding = await queryEmbeddingPromise;
-                    const searchResults = config.vectorStore.current.search(queryEmbedding, appSettings.numFinalContextChunks || 5);
-                    
-                    if (searchResults.length > 0) {
-                        retrievedContext = searchResults.map((r, i) => 
-                            `[Evidence ${i + 1}] File: ${files.find(f => f.id === r.id)?.name || r.id}\n${r.chunk}`
-                        ).join('\n\n---\n\n');
-                    }
-                } catch (ragError) {
-                    console.error('[MapAI] RAG search failed:', ragError);
-                } finally {
-                    mapStore.setIsRetrieving(false);
-                }
-            }
+            // ── Phases 0-2: Research Pipeline ──────────────────────────────────
+            const finalSynthesizedContext = await buildResearchContext({
+                cleanInstruction,
+                bubbleSearchResults,
+                mapStore,
+                apiKey,
+                selectedModel,
+                files,
+                appSettings,
+                config
+            });
 
+            // ── Phase 3: Synthesized Mapping ───────────────────────────────────
             const currentNodes = mapStore.nodes;
-            const currentEdges = mapStore.edges;
             const existingNodeList = currentNodes.map(n => `${n.id}: ${n.data.label} (${n.data.entityType})`).join('\n');
-
-            let userContent = `Instruction: ${cleanInstruction}\n\nExisting Nodes:\n${existingNodeList}\n\nTotal edges: ${currentEdges.length}`;
+            let userContent = `Instruction: ${cleanInstruction}\n\nExisting Nodes:\n${existingNodeList}\n\nContext:\n${caseFileText ? `Case File: ${caseFileText}\n\n` : ''}${finalSynthesizedContext.substring(0, 25000)}`;
 
             if (contextNodeId) {
                 const targetNode = currentNodes.find(n => n.id === contextNodeId);
-                if (targetNode) {
-                    userContent += `\n\nFocus on node: ${JSON.stringify({ id: targetNode.id, label: targetNode.data.label, description: targetNode.data.description })}`;
-                }
+                if (targetNode) userContent += `\n\nFocus on node: ${JSON.stringify({ id: targetNode.id, label: targetNode.data.label, description: targetNode.data.description })}`;
             }
 
-            // Combine manual context and retrieved context
-            const fullContext = [caseFileText, retrievedContext].filter(Boolean).join('\n\n---\n\n');
-            if (fullContext) {
-                userContent += `\n\nContext:\n${fullContext.substring(0, 15000)}`;
-            }
-
-            mapStore.setProgress({ phase: 1, batchCurrent: 1, batchTotal: 1, label: 'Updating entities...' });
-
+            mapStore.setProgress({ phase: 3, batchCurrent: 1, batchTotal: 2, label: 'Mapping entities...' });
             const phase1Messages: ChatMessage[] = [
-                { role: 'system', content: `${SYSTEM_BASE}\n\nTask: Extract or update entities based on the instruction. Use add_map_nodes and update_map_node. Do NOT add edges yet.` },
+                { role: 'system', content: `${SYSTEM_BASE}\n\nTask: Extract or update entities. Use REF_X IDs for source URLs and Names for labels.` },
                 { role: 'user', content: userContent }
             ];
-
             const phase1Response = await generateContent(selectedModel, apiKey, phase1Messages, [ADD_NODES_TOOL, UPDATE_NODE_TOOL]);
 
             let totalToolCalls = 0;
@@ -522,30 +676,32 @@ export const useMapAI = (config?: {
                 applyToolCalls(phase1Response.toolCalls, mapStore, (nodes) => gridLayout(nodes, currentNodes.length));
             }
 
-            // Phase 2: Connections
-            mapStore.setProgress({ phase: 2, batchCurrent: 1, batchTotal: 1, label: 'Connecting entities...' });
-
+            mapStore.setProgress({ phase: 3, batchCurrent: 2, batchTotal: 2, label: 'Mapping connections...' });
             const updatedNodes = useMapStore.getState().nodes;
             const updatedNodeList = updatedNodes.map(n => `${n.id}: ${n.data.label} (${n.data.entityType})`).join('\n');
-
-            let phase2UserContent = `Instruction: ${cleanInstruction}\n\nExisting Nodes:\n${updatedNodeList}\n\nTotal edges: ${currentEdges.length}`;
-            if (fullContext) {
-                phase2UserContent += `\n\nContext:\n${fullContext.substring(0, 15000)}`;
-            }
-
             const phase2Messages: ChatMessage[] = [
-                { role: 'system', content: `${SYSTEM_BASE}\n\nTask: ONLY wire connections between the existing nodes based on the instruction. Use add_map_edges and remove_map_edge only. Do NOT add new nodes.` },
-                { role: 'user', content: phase2UserContent }
+                { role: 'system', content: `${SYSTEM_BASE}\n\nTask: ONLY wire connections between existing nodes. Use add_map_edges and remove_map_edge.` },
+                { role: 'user', content: `Instruction: ${cleanInstruction}\n\nExisting Nodes:\n${updatedNodeList}\n\nContext:\n${finalSynthesizedContext.substring(0, 25000)}` }
             ];
-
             const phase2Response = await generateContent(selectedModel, apiKey, phase2Messages, [ADD_EDGES_TOOL, REMOVE_EDGE_TOOL]);
 
             if (phase2Response.toolCalls?.length) {
                 totalToolCalls += phase2Response.toolCalls.length;
                 applyToolCalls(phase2Response.toolCalls, mapStore, (nodes) => gridLayout(nodes, updatedNodes.length));
 
-                // Auto-layout after edge addition
-                const finalNodes = useMapStore.getState().nodes;
+                // ── Phase 4: Final Polish (Mass & Layout) ───────────────────────
+                const finalNodes = useMapStore.getState().nodes.map(n => ({
+                    ...n,
+                    data: {
+                        ...n.data,
+                        // Re-calculate mass based on unique citations and new edges
+                        mass: calculateNodeMass(n, useMapStore.getState().edges),
+                        // Clean labels from ID-leaking AI
+                        label: n.data.label.replace(/^[node-]+/i, '').replace(/_/g, ' '),
+                        // Restore sources lost in map step
+                        sources: n.data.sources
+                    }
+                }));
                 const finalEdges = useMapStore.getState().edges;
                 useMapStore.setState({ nodes: autoLayout(finalNodes, finalEdges, 'LR') });
                 useMapStore.getState().persistToDB();
@@ -563,10 +719,9 @@ export const useMapAI = (config?: {
             setIsMapProcessing(false);
             mapStore.releaseLock();
             mapStore.setProgress(null);
-            // Drain one queued update
             drainUpdateQueue();
         }
-    }, [apiKeys, selectedProvider, selectedModel, addToast, drainUpdateQueue, config, files, appSettings.numFinalContextChunks]);
+    }, [apiKeys, selectedProvider, selectedModel, addToast, drainUpdateQueue, config, files, appSettings]);
 
     // ── generateMapFromDocument (Two-Phase) ────────────────────────────────────
     const generateMapFromDocument = useCallback(async (caseFileSections: CaseFileSection[]) => {
@@ -580,14 +735,27 @@ export const useMapAI = (config?: {
         const apiKey = apiKeys[selectedProvider];
 
         try {
-            // ── Phase 1: Parallel entity extraction (batches of 3 sections) ──────
+            // ── Phase 0-1: Research (Planner, Web, RAG, Synthesis) ──────
+            const cleanInstruction = `Analyze and map the following case: ${caseFileSections.map(s => s.title).join(', ')}`;
+            const finalSynthesizedContext = await buildResearchContext({
+                cleanInstruction,
+                bubbleSearchResults: [],
+                mapStore,
+                apiKey,
+                selectedModel,
+                files,
+                appSettings,
+                config
+            });
+
+            // ── Phase 2: Parallel entity extraction (batches of 3 sections) ──────
             const BATCH_SIZE = 3;
             const batches: CaseFileSection[][] = [];
             for (let i = 0; i < caseFileSections.length; i += BATCH_SIZE) {
                 batches.push(caseFileSections.slice(i, i + BATCH_SIZE));
             }
 
-            mapStore.setProgress({ phase: 1, batchCurrent: 0, batchTotal: batches.length, label: 'Extracting entities…' });
+            mapStore.setProgress({ phase: 2, batchCurrent: 0, batchTotal: batches.length, label: 'Extracting entities…' });
 
             const phase1Results = await Promise.all(batches.map(async (batch, batchIdx) => {
                 const batchText = batch.map(s => s.content).join('\n\n');
@@ -598,12 +766,12 @@ export const useMapAI = (config?: {
                     },
                     {
                         role: 'user',
-                        content: `Extract entities from sections ${batchIdx * BATCH_SIZE + 1}-${Math.min((batchIdx + 1) * BATCH_SIZE, caseFileSections.length)}:\n\n${batchText.substring(0, 10000)}`
+                        content: `Extract entities from sections ${batchIdx * BATCH_SIZE + 1}-${Math.min((batchIdx + 1) * BATCH_SIZE, caseFileSections.length)}:\n\n${batchText.substring(0, 10000)}\n\nResearch Context:\n${finalSynthesizedContext.substring(0, 25000)}`
                     }
                 ];
 
                 const response = await generateContent(selectedModel, apiKey, messages, [ADD_NODES_TOOL]);
-                mapStore.setProgress({ phase: 1, batchCurrent: batchIdx + 1, batchTotal: batches.length, label: 'Extracting entities…' });
+                mapStore.setProgress({ phase: 2, batchCurrent: batchIdx + 1, batchTotal: batches.length, label: 'Extracting entities…' });
                 return response.toolCalls || [];
             }));
 
@@ -631,8 +799,8 @@ export const useMapAI = (config?: {
 
             mapStore.patchNodes({ add: allProposedNodes });
 
-            // ── Phase 2: Single connection pass ──────────────────────────────────
-            mapStore.setProgress({ phase: 2, batchCurrent: 0, batchTotal: 1, label: 'Connecting entities…' });
+            // ── Phase 3: Single connection pass ──────────────────────────────────
+            mapStore.setProgress({ phase: 3, batchCurrent: 0, batchTotal: 1, label: 'Connecting entities…' });
 
             const currentNodes = mapStore.nodes;
             const nodeList = currentNodes.map(n => `${n.id}: ${n.data.label} (${n.data.entityType})`).join('\n');
@@ -645,7 +813,7 @@ export const useMapAI = (config?: {
                 },
                 {
                     role: 'user',
-                    content: `Existing nodes:\n${nodeList}\n\nCase file:\n${fullText.substring(0, 15000)}`
+                    content: `Existing nodes:\n${nodeList}\n\nCase file:\n${fullText.substring(0, 15000)}\n\nResearch Context:\n${finalSynthesizedContext.substring(0, 25000)}`
                 }
             ];
 
@@ -674,7 +842,7 @@ export const useMapAI = (config?: {
                         useMapStore.getState().persistToDB();
                     }
 
-                    mapStore.setProgress({ phase: 2, batchCurrent: 1, batchTotal: 1, label: 'Done' });
+                    mapStore.setProgress({ phase: 3, batchCurrent: 1, batchTotal: 1, label: 'Done' });
                 } catch (error) {
                     console.error('[MapAI] Phase 2 error:', error);
                 } finally {
@@ -717,7 +885,7 @@ export const useMapAI = (config?: {
             mapStore.setProgress(null);
             drainUpdateQueue();
         }
-    }, [apiKeys, selectedProvider, selectedModel, addToast, drainUpdateQueue]);
+    }, [apiKeys, selectedProvider, selectedModel, addToast, drainUpdateQueue, appSettings, files, config]);
 
     // ── reviewMapConnections ────────────────────────────────────────────────────
     const reviewMapConnections = useCallback(async (nodeIds?: string[]) => {

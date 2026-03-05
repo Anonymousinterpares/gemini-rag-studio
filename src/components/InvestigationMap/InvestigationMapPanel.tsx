@@ -1,14 +1,21 @@
 import { FC, useState } from 'react';
-import { Undo2, Redo2, Network, X, GitMerge, Loader, Maximize2, Minimize2, Trash2 } from 'lucide-react';
+import { Undo2, Redo2, Network, X, GitMerge, Loader, Maximize2, Minimize2, Trash2, Power } from 'lucide-react';
 import { useMapStore } from '../../store/useMapStore';
 import { useMapAI } from '../../hooks/useMapAI';
 import { useMeasure } from '../../hooks';
 import { InvestigationMapCanvas } from './InvestigationMapCanvas';
+import { ComputeCoordinator } from '../../compute/coordinator';
+import { VectorStore } from '../../rag/pipeline';
+import { MutableRefObject } from 'react';
 import './InvestigationMapPanel.css';
 
 interface Props {
     onClose: () => void;
     onOpenDossierForNode?: (nodeId: string) => void;
+    onOpenFileChunk?: (fileId: string, chunkIndex: number) => void;
+    coordinator?: MutableRefObject<ComputeCoordinator | null>;
+    vectorStore?: MutableRefObject<VectorStore | null>;
+    queryEmbeddingResolver?: MutableRefObject<((value: number[]) => void) | null>;
 }
 
 // ── Token Budget Warning Modal ───────────────────────────────────────────────
@@ -40,8 +47,12 @@ const TokenBudgetWarning: FC<TokenWarningProps> = ({ estimatedTokens, onConfirmA
     </div>
 );
 
-export const InvestigationMapPanel: FC<Props> = ({ onClose, onOpenDossierForNode }) => {
-    const { nodes, edges, undo, redo, undoStack, redoStack, progress, jobLock, clearMap, isRagEnabled, isRetrieving } = useMapStore();
+export const InvestigationMapPanel: FC<Props> = ({ onClose, onOpenDossierForNode, onOpenFileChunk, coordinator, vectorStore, queryEmbeddingResolver }) => {
+    const {
+        nodes, edges, undo, redo, undoStack, redoStack, progress, jobLock, clearMap,
+        isRagEnabled, isRagActive, isWebActive, isDeepActive, isRetrieving,
+        setIsRagActive, setIsWebActive, setIsDeepActive
+    } = useMapStore();
     const { reviewMapConnections, reviewTokenWarning } = useMapAI();
     const [isMaximized, setIsMaximized] = useState(false);
     const [measureRef, dimensions] = useMeasure<HTMLDivElement>();
@@ -61,11 +72,42 @@ export const InvestigationMapPanel: FC<Props> = ({ onClose, onOpenDossierForNode
                     <Network size={18} />
                     <span className="map-panel-title">Investigation Map</span>
                     <span className="map-stat-badge">{nodes.length} nodes · {edges.length} edges</span>
-                    {isRagEnabled && (
-                        <div className="map-rag-badge" title="RAG Mode Enabled: AI performs targeted retrieval for map updates.">
-                            RAG
+
+                    {/* Source Orchestration */}
+                    <div className="map-source-controls">
+                        <div className={`map-source-indicator rag ${isRagEnabled ? 'available' : 'disabled'} ${isRagActive ? 'active' : 'inactive'}`}>
+                            <span className="badge">RAG</span>
+                            <button
+                                className="source-toggle"
+                                onClick={() => isRagEnabled && setIsRagActive(!isRagActive)}
+                                title={isRagEnabled ? (isRagActive ? "Deactivate RAG Search" : "Activate RAG Search") : "Knowledge Base Empty"}
+                                disabled={!isRagEnabled}
+                            >
+                                <Power size={10} />
+                            </button>
                         </div>
-                    )}
+                        <div className={`map-source-indicator web ${isWebActive ? 'active' : 'inactive'}`}>
+                            <span className="badge">WEB</span>
+                            <button
+                                className="source-toggle"
+                                onClick={() => setIsWebActive(!isWebActive)}
+                                title={isWebActive ? "Deactivate Web Research" : "Activate Web Research"}
+                            >
+                                <Power size={10} />
+                            </button>
+                        </div>
+                        <div className={`map-source-indicator deep ${isDeepActive ? 'active' : 'inactive'}`}>
+                            <span className="badge">DEEP</span>
+                            <button
+                                className="source-toggle"
+                                onClick={() => setIsDeepActive(!isDeepActive)}
+                                title={isDeepActive ? "Deactivate Deep Analysis" : "Activate Deep Analysis Map Update"}
+                            >
+                                <Power size={10} />
+                            </button>
+                        </div>
+                    </div>
+
                     <button
                         className="map-clear-btn"
                         title="Clear entire map"
@@ -140,7 +182,13 @@ export const InvestigationMapPanel: FC<Props> = ({ onClose, onOpenDossierForNode
             <div className="map-panel-body">
                 <div className="map-canvas-container" ref={measureRef}>
                     {dimensions.width > 0 && dimensions.height > 0 && (
-                        <InvestigationMapCanvas onOpenDossierForNode={onOpenDossierForNode} />
+                        <InvestigationMapCanvas
+                            onOpenDossierForNode={onOpenDossierForNode}
+                            onOpenFileChunk={onOpenFileChunk}
+                            coordinator={coordinator}
+                            vectorStore={vectorStore}
+                            queryEmbeddingResolver={queryEmbeddingResolver}
+                        />
                     )}
                 </div>
             </div>

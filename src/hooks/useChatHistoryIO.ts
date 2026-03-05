@@ -40,7 +40,7 @@ export const useChatHistoryIO = () => {
                 // Auto-load the most recent session
                 const mostRecent = sessions[0];
                 setActiveSessionId(mostRecent.id);
-                clearHistory(mostRecent.chatHistory);
+                clearHistory(mostRecent.chatHistory.map(m => ({ ...m, isStreaming: false })));
                 setTokenUsage(mostRecent.tokenUsage);
             } else {
                 createNewSession();
@@ -103,7 +103,7 @@ export const useChatHistoryIO = () => {
                 setActiveSessionId(id);
 
                 // Rehydrate the store completely
-                clearHistory(session.chatHistory);
+                clearHistory(session.chatHistory.map(m => ({ ...m, isStreaming: false })));
                 setTokenUsage(session.tokenUsage);
             }
         } catch (e) {

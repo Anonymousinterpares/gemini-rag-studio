@@ -6,7 +6,7 @@ import { saveMap, loadMap } from '../utils/db';
 const MAX_UNDO_STACK = 50;
 
 export interface MapProgress {
-    phase: 1 | 2;
+    phase: number;
     batchCurrent: number;
     batchTotal: number;
     label: string;
@@ -28,8 +28,14 @@ interface MapState {
 
     // RAG Status
     isRagEnabled: boolean;
+    isRagActive: boolean;
+    isWebActive: boolean;
+    isDeepActive: boolean;
     isRetrieving: boolean;
     setIsRagEnabled: (enabled: boolean) => void;
+    setIsRagActive: (active: boolean) => void;
+    setIsWebActive: (active: boolean) => void;
+    setIsDeepActive: (active: boolean) => void;
     setIsRetrieving: (retrieving: boolean) => void;
 
     // Error Overlay
@@ -96,14 +102,26 @@ export const useMapStore = create<MapState>((set, get) => ({
     jobLock: false,
     progress: null,
     isRagEnabled: false,
+    isRagActive: false,
+    isWebActive: false,
     isRetrieving: false,
+    isDeepActive: false,
     mapError: null,
     lastChanges: null,
     hideDisproven: false,
 
     setHideDisproven: (hide) => set({ hideDisproven: hide }),
 
-    setIsRagEnabled: (enabled) => set({ isRagEnabled: enabled }),
+    setIsRagEnabled: (enabled) => set((state) => ({
+        isRagEnabled: enabled,
+        // Sync active state on first availability
+        isRagActive: enabled,
+        // Only auto-set isWebActive if user hasn't set it (effectively preserving it if they enabled it)
+        isWebActive: state.isWebActive
+    })),
+    setIsRagActive: (active) => { set({ isRagActive: active }); get().persistToDB(); },
+    setIsWebActive: (active) => { set({ isWebActive: active }); get().persistToDB(); },
+    setIsDeepActive: (active) => { set({ isDeepActive: active }); get().persistToDB(); },
     setIsRetrieving: (retrieving) => set({ isRetrieving: retrieving }),
     setMapError: (error) => {
         set({ mapError: error });
@@ -283,9 +301,9 @@ export const useMapStore = create<MapState>((set, get) => ({
         const activeProjectId = useProjectStore.getState().activeProjectId;
         if (!activeProjectId) return;
 
-        const { nodes, edges } = get();
+        const { nodes, edges, isRagActive, isWebActive, isDeepActive } = get();
         try {
-            await saveMap(activeProjectId, { nodes, edges });
+            await saveMap(activeProjectId, { nodes, edges, isRagActive, isWebActive, isDeepActive });
         } catch (e) {
             console.error('[MapStore] Failed to persist map to IndexedDB:', e);
         }
@@ -298,18 +316,21 @@ export const useMapStore = create<MapState>((set, get) => ({
         try {
             const data = await loadMap(activeProjectId);
             if (data) {
-                set({ 
-                    nodes: data.nodes, 
+                set({
+                    nodes: data.nodes,
                     edges: data.edges,
                     undoStack: [],
                     redoStack: [],
                     lastChanges: null,
                     progress: null,
-                    jobLock: false
+                    jobLock: false,
+                    isRagActive: data.isRagActive ?? true,
+                    isWebActive: data.isWebActive ?? false,
+                    isDeepActive: data.isDeepActive ?? false,
                 });
             } else {
-                set({ 
-                    nodes: [], 
+                set({
+                    nodes: [],
                     edges: [],
                     undoStack: [],
                     redoStack: [],

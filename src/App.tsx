@@ -18,6 +18,7 @@ import { useChatStore } from './store/useChatStore';
 import { useProjectStore } from './store/useProjectStore';
 import { useDossierStore } from './store/useDossierStore';
 import { useMapStore } from './store/useMapStore';
+import { useToastStore } from './store/useToastStore';
 import { useCaseFileIO } from './hooks/useCaseFileIO';
 import { Edit2, FileText } from 'lucide-react';
 
@@ -64,7 +65,7 @@ export const App: FC = () => {
   const { coordinator, vectorStore, queryEmbeddingResolver, rerankPromiseResolver } = useCompute(docFontSize);
 
   const chatConfig = useMemo(() => ({
-    coordinator, vectorStore, queryEmbeddingResolver, rerankPromiseResolver, 
+    coordinator, vectorStore, queryEmbeddingResolver, rerankPromiseResolver,
     setRerankProgress: () => { }, setActiveSource, setIsModalOpen
   }), [coordinator, vectorStore, queryEmbeddingResolver, rerankPromiseResolver, setActiveSource, setIsModalOpen]);
 
@@ -161,8 +162,8 @@ export const App: FC = () => {
     useMapStore.getState().setIsRagEnabled(files.length > 0);
   }, [files.length]);
 
-  const uiConfig = useMemo(() => ({ 
-    isLoading, isEmbedding, activeJobCount, files, chatHistory, jobTimers, setJobTimers 
+  const uiConfig = useMemo(() => ({
+    isLoading, isEmbedding, activeJobCount, files, chatHistory, jobTimers, setJobTimers
   }), [isLoading, isEmbedding, activeJobCount, files, chatHistory, jobTimers, setJobTimers]);
 
   const {
@@ -174,7 +175,7 @@ export const App: FC = () => {
   } = useAppUI(uiConfig);
 
   const fileConfig = useMemo(() => ({
-    vectorStore, docFontSize, coordinator, 
+    vectorStore, docFontSize, coordinator,
     resetLLMResponseState: () => setHasLLMResponded(false)
   }), [vectorStore, docFontSize, coordinator, setHasLLMResponded]);
 
@@ -318,7 +319,7 @@ export const App: FC = () => {
     if (activeJobCount > 0) setIsEmbedding(true);
     else if (isEmbedding) {
       setIsEmbedding(false);
-      setChatHistory((prev) => (prev[prev.length - 1]?.content?.startsWith('Knowledge base updated') ?? false) ? prev : [...prev, { role: 'model', content: `Knowledge base updated.` }]);
+      useToastStore.getState().addToast('Knowledge base updated.', 'system-alert', 1000);
     }
   }, [activeJobCount, isEmbedding, setChatHistory, setIsEmbedding]);
 
@@ -326,7 +327,8 @@ export const App: FC = () => {
     if (window.confirm('Clear?')) {
       embeddingCache.clear(); summaryCache.clear();
       setFiles(prev => prev.map(f => ({ ...f, summaryStatus: 'missing', language: 'unknown' })));
-      setChatHistory([...initialChatHistory, { role: 'model', content: 'Cleared.' }]);
+      setChatHistory(initialChatHistory);
+      useToastStore.getState().addToast('Cleared.', 'system-alert', 1000);
     }
   };
 
@@ -474,6 +476,19 @@ export const App: FC = () => {
               useDossierStore.getState().setActiveDossier(dossierId);
               setIsDossierOpen(true);
             }}
+            onOpenFileChunk={(fileId, chunkIndex) => {
+              const file = files.find(f => f.id === fileId);
+              if (file) {
+                const docViewerChunk = { id: fileId, parentChunkIndex: chunkIndex, start: 0, end: 0, chunk: '', similarity: 0 };
+                setActiveSource({ file, chunks: [docViewerChunk] });
+                setIsModalOpen(true);
+              } else {
+                useToastStore.getState().addToast('Source file not found in current knowledge base.', 'warning');
+              }
+            }}
+            coordinator={coordinator}
+            vectorStore={vectorStore}
+            queryEmbeddingResolver={queryEmbeddingResolver}
           />
         </div>
       )}

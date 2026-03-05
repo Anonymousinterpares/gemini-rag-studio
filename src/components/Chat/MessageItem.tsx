@@ -1,7 +1,7 @@
 import { FC, useState, useEffect } from 'react';
 import { Bot, User, Check, XCircle, Trash2, RefreshCw, Edit2, Copy, Download, FolderOpen, Plus, Network, Loader } from 'lucide-react';
 import { ChatMessage } from '../../types';
-import { sectionizeMessage } from '../../utils/chatUtils';
+import { sectionizeMessage, CITATION_REGEX } from '../../utils/chatUtils';
 import { DownloadReportButton } from '../DownloadReportButton';
 import { useDiffRenderer } from '../../hooks/useDiffRenderer';
 
@@ -66,46 +66,76 @@ export const MessageItem: FC<MessageItemProps> = ({
     activeCommentInput, commentText, hoveredSelectionId, rootDirectoryHandle, chatHistory, handlers
 }) => {
     // Typewriter effect state
-    const [displayLength, setDisplayLength] = useState(() => (isLast && msg.role === 'model') ? 0 : (msg.content?.length || 0));
-    const [isTyping, setIsTyping] = useState(false);
+    const [displayLength, setDisplayLength] = useState(() => (msg.isStreaming && msg.role === 'model') ? 0 : (msg.content?.length || 0));
+    const [isTyping, setIsTyping] = useState(!!msg.isStreaming);
 
     useEffect(() => {
-        if (isLast && msg.role === 'model' && msg.content && displayLength < msg.content.length) {
+        if (msg.isStreaming && msg.role === 'model' && msg.content && displayLength < msg.content.length) {
             setIsTyping(true);
-        } else if (!isLast || msg.role !== 'model') {
+        } else if (!msg.isStreaming) {
             setDisplayLength(msg.content?.length || 0);
             setIsTyping(false);
         }
-    }, [msg.content, isLast, msg.role, displayLength]);
+    }, [msg.isStreaming, msg.content, msg.role, displayLength]);
 
     useEffect(() => {
-        if (isTyping && msg.content) {
+        if (isTyping && msg.content && msg.isStreaming) {
             const interval = setInterval(() => {
                 setDisplayLength(prev => {
-                    if (prev >= msg.content!.length) {
+                    const content = msg.content!;
+                    if (prev >= content.length) {
                         setIsTyping(false);
                         clearInterval(interval);
-                        return msg.content!.length;
+                        // Once finished typing, we should signal that we are no longer streaming
+                        if (msg.isStreaming && handlers.handleUpdateMessage) {
+                            handlers.handleUpdateMessage(i, { isStreaming: false });
+                        }
+                        return content.length;
                     }
-                    // Advance by one "word" (up to the next space/newline)
-                    const nextSpace = msg.content!.indexOf(' ', prev + 1);
-                    const nextNewline = msg.content!.indexOf('\n', prev + 1);
 
-                    let nextIdx = msg.content!.length;
-                    if (nextSpace !== -1 && nextSpace < nextIdx) nextIdx = nextSpace;
-                    if (nextNewline !== -1 && nextNewline < nextIdx) nextIdx = nextNewline;
+                    // Look ahead for "Atomic Blocks": Citations, Markdown Links, Bold/Italic
+                    // We want to jump over these entirely so they never appear "broken" to the parser.
+                    const ATOMIC_BLOCK_REGEX = new RegExp(`${CITATION_REGEX.source}|(\\[.*?\\]\\(.*?\\))|(\\*{1,3}.*?\\*{1,3})|(\`{1,3}.*?\`{1,3})`, 'gi');
+                    
+                    let nextIdx = prev;
+                    
+                    // 1. Determine base jump (standard word)
+                    const nextSpace = content.indexOf(' ', prev + 1);
+                    const nextNewline = content.indexOf('\n', prev + 1);
+                    let baseNext = content.length;
+                    if (nextSpace !== -1 && nextSpace < baseNext) baseNext = nextSpace;
+                    if (nextNewline !== -1 && nextNewline < baseNext) baseNext = nextNewline;
+                    if (baseNext < content.length) baseNext++; // Include the space/newline
 
-                    // Add the space/newline character itself
-                    if (nextIdx < msg.content!.length) nextIdx++;
+                    nextIdx = baseNext;
+
+                    // 2. Atomic Look-ahead: If baseNext lands US INSIDE or JUMPS OVER the start of an atomic block,
+                    // we must jump to the END of that block instead.
+                    ATOMIC_BLOCK_REGEX.lastIndex = 0;
+                    let match;
+                    while ((match = ATOMIC_BLOCK_REGEX.exec(content)) !== null) {
+                        const start = match.index;
+                        const end = start + match[0].length;
+
+                        // If current position is at or inside a block, jump to end
+                        if (prev >= start && prev < end) {
+                            return end;
+                        }
+                        // If our intended jump would land inside or cross the start of a block, 
+                        // we clip to the end of that block to ensure it pops in as one unit.
+                        if (start >= prev && start < nextIdx) {
+                            return end; 
+                        }
+                    }
 
                     return nextIdx;
                 });
-            }, 10);
+            }, 15); // Slightly slower for better readability but still fast
             return () => clearInterval(interval);
         }
-    }, [isTyping, msg.content]);
+    }, [isTyping, msg.content, msg.isStreaming, i, handlers]);
 
-    const activeContent = (isLast && msg.role === 'model' && isTyping)
+    const activeContent = (msg.isStreaming && isTyping)
         ? (msg.content || '').substring(0, displayLength)
         : msg.content;
 

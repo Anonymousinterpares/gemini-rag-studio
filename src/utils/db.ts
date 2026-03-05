@@ -179,6 +179,9 @@ import { MapNode, MapEdge } from '../types';
 export interface PersistedMap {
   nodes: MapNode[];
   edges: MapEdge[];
+  isRagActive?: boolean;
+  isWebActive?: boolean;
+  isDeepActive?: boolean;
 }
 
 export async function saveMap(projectId: string, data: PersistedMap): Promise<void> {

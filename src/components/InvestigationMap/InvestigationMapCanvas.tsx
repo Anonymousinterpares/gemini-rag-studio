@@ -34,6 +34,9 @@ import { Search, GitFork, Loader, Eye, EyeOff, Trash2, Globe, FileText, MessageS
 import { MapNode, MapNodeSource } from '../../types';
 import { ValidatedDateTimeInput } from './ValidatedDateTimeInput';
 import { TimelineSlider } from './TimelineSlider';
+import { ComputeCoordinator } from '../../compute/coordinator';
+import { VectorStore } from '../../rag/pipeline';
+import { MutableRefObject } from 'react';
 
 /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
 const nodeTypes: any = {
@@ -65,14 +68,23 @@ interface SourceDrawerState {
 
 interface Props {
     onOpenDossierForNode?: (nodeId: string) => void;
+    onOpenFileChunk?: (fileId: string, chunkIndex: number) => void;
+    coordinator?: MutableRefObject<ComputeCoordinator | null>;
+    vectorStore?: MutableRefObject<VectorStore | null>;
+    queryEmbeddingResolver?: MutableRefObject<((value: number[]) => void) | null>;
 }
 
-const InvestigationMapCanvasInner: FC<Props> = ({ onOpenDossierForNode }) => {
+const InvestigationMapCanvasInner: FC<Props> = ({ onOpenDossierForNode, onOpenFileChunk, coordinator, vectorStore, queryEmbeddingResolver }) => {
     const { nodes, edges, patchNodes, patchEdges, hideDisproven, mapError } = useMapStore();
     const { addToast } = useToastStore();
     const { caseFile } = useCaseFileStore();
     useDossierStore(); // Subscribing to dossiers for re-renders on map node/dossier link updates
-    const { generateMapFromDocument, handleMapInstruction, reviewMapConnections, isMapProcessing } = useMapAI();
+
+    const mapAIConfig = coordinator && vectorStore && queryEmbeddingResolver
+        ? { coordinator, vectorStore, queryEmbeddingResolver }
+        : undefined;
+    const { generateMapFromDocument, handleMapInstruction, reviewMapConnections, isMapProcessing } = useMapAI(mapAIConfig);
+
     const { findMatchingDossierId } = useProjectStore();
     const { generateContextualDossier } = useDossierAI();
     const { runLayout, isLayingOut } = useAutoLayout();
@@ -89,7 +101,7 @@ const InvestigationMapCanvasInner: FC<Props> = ({ onOpenDossierForNode }) => {
         const timestamps = nodes
             .map(n => parseTimestamp(n.data.timestamp))
             .filter((ts): ts is number => ts !== null);
-        
+
         if (timestamps.length === 0) return { min: 0, max: 0 };
         const min = Math.min(...timestamps);
         const max = Math.max(...timestamps);
@@ -137,7 +149,7 @@ const InvestigationMapCanvasInner: FC<Props> = ({ onOpenDossierForNode }) => {
             n.data.description?.toLowerCase().includes(searchQuery.toLowerCase());
 
         const isHighlighted = highlightedNodeId ? networkNodeIds.has(n.id) : true;
-        
+
         // Timeline Ghosting Logic
         let isFuture = false;
         if (isTimelineActive) {
@@ -153,12 +165,12 @@ const InvestigationMapCanvasInner: FC<Props> = ({ onOpenDossierForNode }) => {
 
         return {
             ...n,
-            style: { 
-                ...(((n as unknown) as Node).style || {}), 
-                opacity, 
+            style: {
+                ...(((n as unknown) as Node).style || {}),
+                opacity,
                 filter,
-                pointerEvents, 
-                transition: 'opacity 0.3s ease, filter 0.3s ease' 
+                pointerEvents,
+                transition: 'opacity 0.3s ease, filter 0.3s ease'
             },
             data: { ...n.data, hideDescription: hideDescriptions, semanticZoom },
         };
@@ -341,18 +353,18 @@ const InvestigationMapCanvasInner: FC<Props> = ({ onOpenDossierForNode }) => {
                     {hideEdges ? <EyeOff size={14} /> : <Eye size={14} />} Edges
                 </button>
                 <div style={{ width: '1px', height: '16px', background: 'var(--border-color)' }}></div>
-                <button 
+                <button
                     onClick={() => {
                         const newActive = !isTimelineActive;
                         setIsTimelineActive(newActive);
                         if (newActive && currentTimelineValue === 0) {
                             setCurrentTimelineValue(timelineRange.min);
                         }
-                    }} 
-                    className={`map-toolbar-btn ${isTimelineActive ? 'active' : ''}`} 
+                    }}
+                    className={`map-toolbar-btn ${isTimelineActive ? 'active' : ''}`}
                     title="Toggle Timeline Scrubbing"
                     disabled={timelineRange.min === 0}
-                    style={{ 
+                    style={{
                         opacity: timelineRange.min === 0 ? 0.3 : 1,
                         color: isTimelineActive ? 'var(--accent-primary)' : 'inherit',
                         fontWeight: isTimelineActive ? 600 : 400
@@ -502,12 +514,12 @@ const InvestigationMapCanvasInner: FC<Props> = ({ onOpenDossierForNode }) => {
                             <div className="map-source-section-title" style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
                                 <Network size={14} /> Analytical Verification
                             </div>
-                            
+
                             {/* Timestamp Verification */}
                             <div style={{ marginBottom: '12px' }}>
                                 <div style={{ fontSize: '11px', color: 'var(--text-color-secondary)', marginBottom: '4px' }}>Timestamp (DD.MM.YYYY HH:MM:SS)</div>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                    <ValidatedDateTimeInput 
+                                    <ValidatedDateTimeInput
                                         value={activeNode.data.timestamp || null}
                                         onChange={(newTimestamp) => {
                                             patchNodes({ update: [{ id: activeNode.id, timestamp: newTimestamp, isTimestampVerified: false }] });
@@ -523,16 +535,16 @@ const InvestigationMapCanvasInner: FC<Props> = ({ onOpenDossierForNode }) => {
                                             }
                                         }}
                                     />
-                                    <button 
-                                        className="icon-btn" 
+                                    <button
+                                        className="icon-btn"
                                         style={{ color: activeNode.data.isTimestampVerified ? 'var(--accent-green)' : 'var(--text-color-secondary)' }}
                                         onClick={() => patchNodes({ update: [{ id: activeNode.id, isTimestampVerified: true }] })}
                                         title="Verify Timestamp"
                                     >
                                         ✓
                                     </button>
-                                    <button 
-                                        className="icon-btn" 
+                                    <button
+                                        className="icon-btn"
                                         onClick={() => patchNodes({ update: [{ id: activeNode.id, timestamp: null, isTimestampVerified: false }] })}
                                         title="Clear Timestamp"
                                     >
@@ -545,9 +557,9 @@ const InvestigationMapCanvasInner: FC<Props> = ({ onOpenDossierForNode }) => {
                             <div>
                                 <div style={{ fontSize: '11px', color: 'var(--text-color-secondary)', marginBottom: '4px' }}>AI Certainty Score (0-100)</div>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                    <input 
-                                        type="range" 
-                                        min="0" max="100" 
+                                    <input
+                                        type="range"
+                                        min="0" max="100"
                                         style={{ flex: 1, accentColor: 'var(--accent-primary)' }}
                                         value={activeNode.data.certaintyScore || 50}
                                         onChange={(e) => {
@@ -555,8 +567,8 @@ const InvestigationMapCanvasInner: FC<Props> = ({ onOpenDossierForNode }) => {
                                         }}
                                     />
                                     <span style={{ fontSize: '12px', minWidth: '25px' }}>{activeNode.data.certaintyScore || 0}%</span>
-                                    <button 
-                                        className="icon-btn" 
+                                    <button
+                                        className="icon-btn"
                                         style={{ color: activeNode.data.isCertaintyVerified ? 'var(--accent-green)' : 'var(--text-color-secondary)' }}
                                         onClick={() => patchNodes({ update: [{ id: activeNode.id, isCertaintyVerified: true }] })}
                                         title="Verify Certainty"
@@ -586,11 +598,53 @@ const InvestigationMapCanvasInner: FC<Props> = ({ onOpenDossierForNode }) => {
                                         <div key={i} className="map-source-card">
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
                                                 <SourceIcon type={src.type} />
-                                                <span style={{ fontSize: '12px', fontWeight: 600 }}>{src.label}</span>
+                                                <span
+                                                    style={{
+                                                        fontSize: '12px',
+                                                        fontWeight: 600,
+                                                        color: (src.type === 'document' || src.url?.startsWith('http')) ? 'var(--accent-primary)' : 'inherit',
+                                                        cursor: (src.type === 'document' || src.url?.startsWith('http')) ? 'pointer' : 'default',
+                                                        textDecoration: (src.type === 'document' || src.url?.startsWith('http')) ? 'underline' : 'none'
+                                                    }}
+                                                    onClick={() => {
+                                                        const isWeb = src.url?.startsWith('http');
+                                                        if (isWeb) {
+                                                            window.open(src.url, '_blank', 'noopener,noreferrer');
+                                                        } else if (src.type === 'document') {
+                                                            // DEEP LINKING: Use fileId and chunkIndex if available
+                                                            if (src.fileId && src.parentChunkIndex !== undefined) {
+                                                                onOpenFileChunk?.(src.fileId, src.parentChunkIndex);
+                                                            } else {
+                                                                // Fallback to label or url match
+                                                                const matchId = findMatchingDossierId(src.label, src.url || '');
+                                                                onOpenDossierForNode?.(matchId || src.url || '');
+                                                            }
+                                                        }
+                                                    }}
+                                                >
+                                                    {src.label}
+                                                </span>
                                                 {src.url && (
-                                                    <a href={src.url} target="_blank" rel="noopener noreferrer" style={{ marginLeft: 'auto' }}>
+                                                    <button
+                                                        className="icon-btn"
+                                                        style={{ marginLeft: 'auto' }}
+                                                        onClick={() => {
+                                                            const isWeb = src.url?.startsWith('http');
+                                                            if (isWeb) {
+                                                                window.open(src.url, '_blank', 'noopener,noreferrer');
+                                                            } else {
+                                                                if (src.fileId && src.parentChunkIndex !== undefined) {
+                                                                    onOpenFileChunk?.(src.fileId, src.parentChunkIndex);
+                                                                } else {
+                                                                    const matchId = findMatchingDossierId(src.label, src.url || '');
+                                                                    onOpenDossierForNode?.(matchId || src.url || '');
+                                                                }
+                                                            }
+                                                        }}
+                                                        title={src.url?.startsWith('http') ? "Open external link" : "Open internal source"}
+                                                    >
                                                         <ExternalLink size={12} />
-                                                    </a>
+                                                    </button>
                                                 )}
                                             </div>
                                             {src.snippet && (

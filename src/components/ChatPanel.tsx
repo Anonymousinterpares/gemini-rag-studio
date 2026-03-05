@@ -5,6 +5,7 @@ import { MessageList } from './Chat/MessageList';
 import { ChatInputForm } from './Chat/ChatInputForm';
 import { MessageItemHandlers } from './Chat/MessageItem';
 import { ChatHistoryDropdown } from './Chat/ChatHistoryDropdown';
+import { ChatSystemAlerts } from './Chat/ChatSystemAlerts';
 
 interface ChatPanelProps {
     appSettings: import('../config').AppSettings;
@@ -135,6 +136,7 @@ export const ChatPanel: FC<ChatPanelProps> = ({
                 </div>
             </div>
             <div className='panel-content' ref={scrollRef} onScroll={handleScroll} onClick={handleSourceClick} style={{ backgroundImage: backgroundImages[appSettings.backgroundIndex - 1] ? `url('${backgroundImages[appSettings.backgroundIndex - 1]}')` : 'none', backgroundSize: 'cover' }}>
+                <ChatSystemAlerts />
                 <MessageList
                     chatHistory={chatHistory}
                     appSettings={appSettings}
