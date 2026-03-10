@@ -269,7 +269,8 @@ export const App: FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeProjectId]);
 
-  const { generateContextualDossier } = useDossierAI();
+  const dossierAIRefs = { vectorStore, coordinator, queryEmbeddingResolver, chatHistory };
+  const { generateContextualDossier } = useDossierAI(dossierAIRefs);
 
   // ── Combined undo / redo ────────────────────────────────
   const handleUndo = () => { undo(); undoCaseFile(); };
@@ -521,7 +522,14 @@ export const App: FC = () => {
         }}
       />
 
-      <DossierPanel isOpen={isDossierOpen} onClose={() => setIsDossierOpen(false)} />
+      <DossierPanel
+        isOpen={isDossierOpen}
+        onClose={() => setIsDossierOpen(false)}
+        vectorStore={vectorStore}
+        coordinator={coordinator}
+        queryEmbeddingResolver={queryEmbeddingResolver}
+        chatHistory={chatHistory}
+      />
 
       {selectionPopover && (
         <div className="selection-popover" style={{ top: selectionPopover.top, left: selectionPopover.left }}>

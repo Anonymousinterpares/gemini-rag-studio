@@ -447,9 +447,10 @@ export async function runDeepAnalysis(opts: {
     let context = picked.map((r, i) => `[#${i + 1}] id:${r.id} start:${r.start} end:${r.end}\n${r.chunk}`).join('\n\n');
     
     if (picked.length === 0) {
-        // Fallback: extract from history for this dimension
-        const visibleHistory = opts.history.filter(m => !m.isInternal && m.role !== 'tool');
-        context = visibleHistory.slice(-10).map(m => `${m.role.toUpperCase()}: ${m.content}`).join('\n\n');
+        // Fallback: extract from paged chat history for this dimension
+        const { getPagedChatContext } = await import('../utils/chatContext');
+        const visibleHistory = getPagedChatContext(opts.history, 20, 0);
+        context = visibleHistory.map(m => `${m.role.toUpperCase()}: ${m.content}`).join('\n\n');
         if (!context) return [] as Claim[];
     }
 

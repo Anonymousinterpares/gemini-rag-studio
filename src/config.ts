@@ -18,6 +18,9 @@ export interface AppSettings {
   maxSearchLoops: number;
   // Enforcement: when true, answers must be based on the user's documents only
   docOnlyMode: boolean;
+  // KB web search: when true, dossier updates may use web search as follow-up.
+  // When false (default), KB updates are strictly local (chat context + embedded docs).
+  kbWebSearchEnabled: boolean;
   // Feature flags
   enableRouterV2?: boolean;
   enableDeepAnalysisV1?: boolean;
@@ -46,6 +49,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   isChatModeEnabled: false,
   maxSearchLoops: 10,
   docOnlyMode: true,
+  kbWebSearchEnabled: false,
   // Enable new features by default for testing; can be toggled in Settings later
   enableRouterV2: true,
   enableDeepAnalysisV1: true,

@@ -1,11 +1,14 @@
 import React, { useState } from 'react';
 import { useDossierStore } from '../../store/useDossierStore';
 import { useProjectStore } from '../../store/useProjectStore';
-import { Plus, Trash2, RefreshCw, FileText, User, Users, MapPin, Calendar, Hash, ExternalLink, X, Search, SortDesc, SortAsc, CaseSensitive, Loader2 } from 'lucide-react';
+import { useSettingsStore } from '../../store';
+import { Plus, Trash2, RefreshCw, FileText, User, Users, MapPin, Calendar, Hash, ExternalLink, X, Search, SortDesc, SortAsc, CaseSensitive, Loader2, Globe } from 'lucide-react';
 import { marked } from 'marked';
-import { DossierType, DossierSection } from '../../types';
+import { DossierType, DossierSection, ChatMessage } from '../../types';
 import { useDiffRenderer } from '../../hooks/useDiffRenderer';
 import { useDossierAI } from '../../hooks/useDossierAI';
+import { VectorStore } from '../../rag/pipeline';
+import { ComputeCoordinator } from '../../compute/coordinator';
 import './DossierPanel.css';
 
 const TypeIcon = ({ type, size = 16 }: { type: DossierType, size?: number }) => {
@@ -140,11 +143,16 @@ const DossierSectionView: React.FC<{
 interface DossierPanelProps {
     isOpen: boolean;
     onClose: () => void;
+    vectorStore?: React.MutableRefObject<VectorStore | null> | null;
+    coordinator?: React.MutableRefObject<ComputeCoordinator | null> | null;
+    queryEmbeddingResolver?: React.MutableRefObject<((value: number[]) => void) | null>;
+    chatHistory?: ChatMessage[];
 }
 
-export const DossierPanel: React.FC<DossierPanelProps> = ({ isOpen, onClose }) => {
+export const DossierPanel: React.FC<DossierPanelProps> = ({ isOpen, onClose, vectorStore, coordinator, queryEmbeddingResolver, chatHistory }) => {
     const { dossiers, activeDossierId, createDossier, setActiveDossier, deleteDossier } = useDossierStore();
     const { activeProjectId } = useProjectStore();
+    const { appSettings, setAppSettings } = useSettingsStore();
     const [isCreating, setIsCreating] = useState(false);
     const [newTitle, setNewTitle] = useState('');
     const [newType, setNewType] = useState<DossierType>('person');
@@ -152,7 +160,15 @@ export const DossierPanel: React.FC<DossierPanelProps> = ({ isOpen, onClose }) =
 
     const [localChatState, setLocalChatState] = useState<'idle' | 'processing' | 'clarification'>('idle');
     const [localChatResponse, setLocalChatResponse] = useState('');
-    const { generateContextualDossier, chatWithDossier } = useDossierAI();
+
+    // Build refs object for useDossierAI — stable during render
+    const dossierAIRefs = {
+        vectorStore: vectorStore ?? null,
+        coordinator: coordinator ?? null,
+        queryEmbeddingResolver: queryEmbeddingResolver ?? { current: null },
+        chatHistory: chatHistory ?? [],
+    };
+    const { generateContextualDossier, chatWithDossier } = useDossierAI(dossierAIRefs);
 
     const handleLocalQuerySubmit = async (query: string) => {
         if (!query.trim() || !activeDossierId) return;
@@ -492,6 +508,27 @@ export const DossierPanel: React.FC<DossierPanelProps> = ({ isOpen, onClose }) =
                             </div>
 
                             <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-end', padding: '16px' }}>
+                                {/* KB Web Search toggle — only shown when Chat Mode is OFF */}
+                                {!appSettings.isChatModeEnabled && (
+                                    <button
+                                        className={`button secondary ${appSettings.kbWebSearchEnabled ? 'active' : ''}`}
+                                        title={appSettings.kbWebSearchEnabled
+                                            ? 'KB Web Search: ON (follow-up only after embedded docs & chat context)'
+                                            : 'KB Web Search: OFF (local context only — embedded docs & chat)'}
+                                        onClick={() => setAppSettings(p => ({ ...p, kbWebSearchEnabled: !p.kbWebSearchEnabled }))}
+                                        style={{
+                                            padding: '10px',
+                                            height: 'fit-content',
+                                            borderRadius: '12px',
+                                            backgroundColor: appSettings.kbWebSearchEnabled ? 'rgba(52, 152, 219, 0.25)' : undefined,
+                                            borderColor: appSettings.kbWebSearchEnabled ? '#3498db' : undefined,
+                                            color: appSettings.kbWebSearchEnabled ? '#3498db' : undefined,
+                                            flexShrink: 0
+                                        }}
+                                    >
+                                        <Globe size={16} />
+                                    </button>
+                                )}
                                 <textarea
                                     value={dossierChatInput}
                                     onChange={e => {
