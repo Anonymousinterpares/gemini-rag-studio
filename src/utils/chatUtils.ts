@@ -9,6 +9,12 @@ import { ChatMessage, MessageSection } from '../types';
  */
 export const CITATION_REGEX = /\[Source:\s*([^\]]+)\]|\[(\d+(?:\s*,\s*\d+)*)\]|【Source:\s*([^】]+)】|【(\d+(?:\s*,\s*\d+)*)】|\bSource:\s*([\w.-]+_\d+_\d+)\b/gi;
 
+/**
+ * Regex for extracting/stripping search results from message content.
+ * Uses [\s\S] to match across newlines.
+ */
+export const SEARCH_RESULTS_REGEX = /<!--searchResults:([\s\S]*?)-->/gi;
+
 // ─── Chat History Utilities ───────────────────────────────────────────────────
 
 export function filterVisibleHistory(history: ChatMessage[]): ChatMessage[] {

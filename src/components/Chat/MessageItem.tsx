@@ -19,7 +19,14 @@ export interface MessageItemHandlers {
     handleConfirmAllEdits: (idx: number) => void;
     handleConfirmEdit: (idx: number, sectionId: string) => void;
     handleRejectEdit: (idx: number, sectionId: string) => void;
-    renderModelMessage: (content: string, fullContent?: string | null, selectionComments?: import('../../types').SelectionComment[], hoveredSelectionId?: string | null) => { __html: string };
+    renderModelMessage: (
+        content: string,
+        fullContent?: string | null,
+        selectionComments?: import('../../types').SelectionComment[],
+        hoveredSelectionId?: string | null,
+        sharedDocNumbers?: Map<string, number>,
+        sharedNextDocNumber?: { current: number }
+    ) => { __html: string };
     setHoveredSelectionId: (id: string | null) => void;
     resendWithComments: (idx: number) => void;
     handleStartComment: (idx: number, sectionId: string) => void;
@@ -164,6 +171,10 @@ export const MessageItem: FC<MessageItemProps> = ({
                                     const sections = (isLast && msg.role === 'model' && isTyping)
                                         ? sectionizeMessage(activeContent || '')
                                         : (msg.sections || sectionizeMessage(msg.content || ''));
+
+                                    const docNumbers = new Map<string, number>();
+                                    const nextDocNumber = { current: 1 };
+
                                     return (
                                         <div className='message-markup'>
                                             {msg.pendingEdits?.some(e => e.sectionId === 'REWRITE') ? (
@@ -192,7 +203,14 @@ export const MessageItem: FC<MessageItemProps> = ({
                                                         <div className="message-main-content">
                                                             <div className="message-section-wrapper">
                                                                 <div className={`message-section ${pendingEdit ? 'highlight-pending' : ''}`}>
-                                                                    <div dangerouslySetInnerHTML={handlers.renderModelMessage(section.content, activeContent, msg.selectionComments?.filter(sc => sc.sectionId === section.id), hoveredSelectionId)} />
+                                                                    <div dangerouslySetInnerHTML={handlers.renderModelMessage(
+                                                                        section.content,
+                                                                        msg.content,
+                                                                        msg.selectionComments?.filter(sc => sc.sectionId === section.id),
+                                                                        hoveredSelectionId,
+                                                                        docNumbers,
+                                                                        nextDocNumber
+                                                                    )} />
                                                                     {pendingEdit && (() => {
                                                                         let previewContent: string | null = null;
                                                                         if (pendingEdit.tableEdit) {

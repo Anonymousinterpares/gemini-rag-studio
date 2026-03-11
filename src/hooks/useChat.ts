@@ -11,7 +11,7 @@ import { useCaseFileStore } from '../store/useCaseFileStore';
 import { useMapStore } from '../store/useMapStore';
 import { useDossierStore } from '../store/useDossierStore';
 import { searchWeb } from '../utils/search';
-import { sectionizeMessage, createFuzzyRegex, CITATION_REGEX } from '../utils/chatUtils';
+import { sectionizeMessage, createFuzzyRegex, CITATION_REGEX, SEARCH_RESULTS_REGEX } from '../utils/chatUtils';
 import { getDossierTools, handleDossierToolCall, DOSSIER_COMPILER_PROMPT } from '../agents/dossier';
 
 
@@ -794,21 +794,32 @@ Or just tell me what specific aspects you'd like me to focus on.`;
         setUserInput('');
     }, [userInput, chatHistory, submitQuery, setUserInput]);
 
-    const renderModelMessage = useCallback((content: string | null, fullContent?: string | null, selectionComments?: SelectionComment[], hoveredSelectionId?: string | null) => {
+    const renderModelMessage = useCallback((
+        content: string | null,
+        fullContent?: string | null,
+        selectionComments?: SelectionComment[],
+        hoveredSelectionId?: string | null,
+        sharedDocNumbers?: Map<string, number>,
+        sharedNextDocNumber?: { current: number }
+    ) => {
         if (!content) return { __html: '' };
         let searchResults: SearchResult[] = [];
 
         // Use full content to extract search results if available
         const contextForResults = fullContent || content;
-        contextForResults.replace(/<!--searchResults:(.*?)-->/, (_, resultsJson) => {
-            try { searchResults = JSON.parse(resultsJson); } catch {
-                // ignore
+
+        // Use SEARCH_RESULTS_REGEX (which handles multi-line) to find the metadata
+        const metadataMatch = [...contextForResults.matchAll(SEARCH_RESULTS_REGEX)].pop();
+        if (metadataMatch) {
+            try {
+                searchResults = JSON.parse(metadataMatch[1]);
+            } catch (e) {
+                console.warn('[renderModelMessage] Failed to parse searchResults JSON', e);
             }
-            return '';
-        });
+        }
 
         // Strip results from current content if they are there
-        const contentWithoutResults = content.replace(/<!--searchResults:(.*?)-->/, '');
+        const contentWithoutResults = content.replace(SEARCH_RESULTS_REGEX, '');
 
         const renderer = new marked.Renderer();
         const originalLink = renderer.link.bind(renderer);
@@ -818,8 +829,10 @@ Or just tell me what specific aspects you'd like me to focus on.`;
         };
 
         const rawHtml = marked.parse(contentWithoutResults, { renderer, gfm: true, breaks: true }) as string;
-        const docNumbers = new Map<string, number>();
-        let nextDocNumber = 1;
+
+        // Use shared state if provided, otherwise local state for single-section rendering
+        const docNumbers = sharedDocNumbers || new Map<string, number>();
+        const nextDocNumberObj = sharedNextDocNumber || { current: 1 };
 
         let finalHtml = rawHtml.replace(CITATION_REGEX, (match, g1, g2, g3, g4, g5) => {
             const inside = (g1 || g2 || g3 || g4 || g5) as string;
@@ -837,7 +850,9 @@ Or just tell me what specific aspects you'd like me to focus on.`;
                 }
 
                 if (!sr) return `[${tid}]`; // Return original bracketed text if no match found
-                if (!docNumbers.has(sr.id)) docNumbers.set(sr.id, nextDocNumber++);
+                if (!docNumbers.has(sr.id)) {
+                    docNumbers.set(sr.id, nextDocNumberObj.current++);
+                }
                 const docNo = docNumbers.get(sr.id);
                 // Store chunk text (escaped) in data-chunk attribute for quick view
                 const chunkEscaped = sr.chunk.replace(/"/g, '&quot;');
