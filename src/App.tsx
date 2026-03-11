@@ -58,6 +58,7 @@ export const App: FC = () => {
   const [showSettings, setShowSettings] = useState(true);
   const [isExplorerOpen, setIsExplorerOpen] = useState(false);
   const [isDossierOpen, setIsDossierOpen] = useState(false);
+  const [isSplitView, setIsSplitView] = useState(false);
   const [isPinned, setIsPinned] = useState(false);
   const [isMapPanelOpen, setIsMapPanelOpen] = useState(false);
   const [rootDirectoryHandle, setRootDirectoryHandle] = useState<FileSystemDirectoryHandle | null>(null);
@@ -430,6 +431,15 @@ export const App: FC = () => {
     );
   }
 
+  const wrappedHandleSourceClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    const target = e.target as HTMLElement;
+    const isSourceLink = !!target.closest('.source-link');
+    if (isDossierOpen && isSourceLink) {
+      setIsSplitView(true);
+    }
+    handleSourceClick(e);
+  }, [handleSourceClick, isDossierOpen]);
+
   return (
     <div className='app-container'>
       <FilePanel
@@ -497,7 +507,7 @@ export const App: FC = () => {
         </div>
       )}
 
-      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)}>
+      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} isSplitView={isSplitView}>
         <MemoizedDocViewer
           coordinator={coordinator.current}
           selectedFile={activeSource?.file ?? selectedFile}
@@ -522,15 +532,24 @@ export const App: FC = () => {
           });
         }}
       />
+      {isDossierOpen && (
+        <DossierPanel
+          isOpen={isDossierOpen}
+          onClose={() => {
+            setIsDossierOpen(false);
+            setIsSplitView(false);
+          }}
+          isSplitView={isSplitView}
+          onToggleSplitView={() => setIsSplitView(!isSplitView)}
+          vectorStore={vectorStore}
+          coordinator={coordinator}
+          queryEmbeddingResolver={queryEmbeddingResolver}
+          chatHistory={chatHistory}
+          renderModelMessage={renderModelMessage}
+          handleSourceClick={wrappedHandleSourceClick}
+        />
+      )}
 
-      <DossierPanel
-        isOpen={isDossierOpen}
-        onClose={() => setIsDossierOpen(false)}
-        vectorStore={vectorStore}
-        coordinator={coordinator}
-        queryEmbeddingResolver={queryEmbeddingResolver}
-        chatHistory={chatHistory}
-      />
 
       {selectionPopover && (
         <div className="selection-popover" style={{ top: selectionPopover.top, left: selectionPopover.left }}>

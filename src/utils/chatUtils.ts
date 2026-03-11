@@ -7,7 +7,7 @@ import { ChatMessage, MessageSection } from '../types';
  * Robust regex to handle variations: [Source: ID], [ID], 【Source: ID】, 【ID】, and unbracketed Source: ID
  * Also captures variations like [1, 2, 3] or [Source: ID1, ID2]
  */
-export const CITATION_REGEX = /\[Source:\s*([^\]]+)\]|\[(\d+(?:\s*,\s*\d+)*)\]|【Source:\s*([^】]+)】|【(\d+(?:\s*,\s*\d+)*)】|\bSource:\s*([\w.-]+_\d+_\d+)\b/gi;
+export const CITATION_REGEX = /\[Source:\s*([^\]]+)\]|\[(\d+(?:\s*,\s*\d+)*)\]|【Source:\s*([^】]+)】|【(\d+(?:\s*,\s*\d+)*)】|\bSource:\s*([^\s\]]+)\b/gi;
 
 /**
  * Regex for extracting/stripping search results from message content.

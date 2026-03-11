@@ -800,10 +800,11 @@ Or just tell me what specific aspects you'd like me to focus on.`;
         selectionComments?: SelectionComment[],
         hoveredSelectionId?: string | null,
         sharedDocNumbers?: Map<string, number>,
-        sharedNextDocNumber?: { current: number }
+        sharedNextDocNumber?: { current: number },
+        extraSearchResults?: SearchResult[]
     ) => {
         if (!content) return { __html: '' };
-        let searchResults: SearchResult[] = [];
+        let searchResults: SearchResult[] = extraSearchResults || [];
 
         // Use full content to extract search results if available
         const contextForResults = fullContent || content;
@@ -812,13 +813,16 @@ Or just tell me what specific aspects you'd like me to focus on.`;
         const metadataMatch = [...contextForResults.matchAll(SEARCH_RESULTS_REGEX)].pop();
         if (metadataMatch) {
             try {
-                searchResults = JSON.parse(metadataMatch[1]);
+                const parsed = JSON.parse(metadataMatch[1]);
+                // Merge with extra results, prioritizing parsed ones if IDs collide? 
+                // Actually, just append them for now.
+                searchResults = [...searchResults, ...parsed];
             } catch (e) {
                 console.warn('[renderModelMessage] Failed to parse searchResults JSON', e);
             }
         }
 
-        // Strip results from current content if they are there
+        // Strip results from current content if they are there for the final Markdown rendering
         const contentWithoutResults = content.replace(SEARCH_RESULTS_REGEX, '');
 
         const renderer = new marked.Renderer();
@@ -856,7 +860,7 @@ Or just tell me what specific aspects you'd like me to focus on.`;
                 const docNo = docNumbers.get(sr.id);
                 // Store chunk text (escaped) in data-chunk attribute for quick view
                 const chunkEscaped = sr.chunk.replace(/"/g, '&quot;');
-                return `<button class="source-link citation-bubble" data-file-id="${sr.id}" data-start="${sr.start}" data-end="${sr.end}" data-parent-index="${sr.parentChunkIndex}" data-chunk="${chunkEscaped}" title="Doc #${docNo}"><span>${docNo}</span></button>`;
+                return `<button class="source-link citation-bubble" data-file-id="${sr.id}" data-start="${sr.start}" data-end="${sr.end}" data-parent-chunk-index="${sr.parentChunkIndex}" data-chunk="${chunkEscaped}" title="Doc #${docNo}"><span>${docNo}</span></button>`;
             }).join('');
             return items ? `<span class="citation-group">${items}</span>` : match;
         });
@@ -893,30 +897,42 @@ Or just tell me what specific aspects you'd like me to focus on.`;
         const target = e.target as HTMLElement;
         const btn = target.closest('button.source-link');
         if (btn) {
+            e.preventDefault();
+            e.stopPropagation();
+
             const fileId = btn.getAttribute('data-file-id');
             const start = parseInt(btn.getAttribute('data-start') || '0');
             const end = parseInt(btn.getAttribute('data-end') || '0');
-            const parentIndex = parseInt(btn.getAttribute('data-parent-index') || '-1');
+            const parentIndex = parseInt(btn.getAttribute('data-parent-chunk-index') || btn.getAttribute('data-parent-index') || '-1');
             const chunkText = btn.getAttribute('data-chunk') || '';
+
+            if (!fileId) return;
 
             const file = files.find(f => f.id === fileId);
             if (file) {
                 // By default use the clicked chunk
-                let allRelevantChunks: SearchResult[] = [{ id: fileId!, start, end, parentChunkIndex: parentIndex, chunk: chunkText, similarity: 1 }];
+                let allRelevantChunks: SearchResult[] = [{ 
+                    id: fileId, 
+                    start, 
+                    end, 
+                    parentChunkIndex: parentIndex, 
+                    chunk: chunkText, 
+                    similarity: 1 
+                }];
 
-                // Find all chunks from the same file in the same message
-                const messageContainer = btn.closest('.message-container');
-                if (messageContainer) {
-                    const messageDocLinks = messageContainer.querySelectorAll(`.source-link[data-file-id="${fileId}"]`);
+                // Find all chunks from the same file in the same container (message or dossier section)
+                const container = btn.closest('.message-container') || btn.closest('.dossier-section-content') || btn.closest('.message-markup');
+                if (container) {
+                    const docLinks = container.querySelectorAll(`.source-link[data-file-id="${fileId}"]`);
                     const otherChunks: SearchResult[] = [];
-                    messageDocLinks.forEach(link => {
+                    docLinks.forEach(link => {
                         const lStart = parseInt(link.getAttribute('data-start') || '0');
                         const lEnd = parseInt(link.getAttribute('data-end') || '0');
-                        const lParentIndex = parseInt(link.getAttribute('data-parent-index') || '-1');
+                        const lParentIndex = parseInt(link.getAttribute('data-parent-chunk-index') || link.getAttribute('data-parent-index') || '-1');
                         const lChunk = link.getAttribute('data-chunk') || '';
                         // Avoid duplication of the clicked chunk
                         if (lStart !== start) {
-                            otherChunks.push({ id: fileId!, start: lStart, end: lEnd, parentChunkIndex: lParentIndex, chunk: lChunk, similarity: 1 });
+                            otherChunks.push({ id: fileId, start: lStart, end: lEnd, parentChunkIndex: lParentIndex, chunk: lChunk, similarity: 1 });
                         }
                     });
 
@@ -926,6 +942,8 @@ Or just tell me what specific aspects you'd like me to focus on.`;
 
                 setActiveSource({ file, chunks: allRelevantChunks });
                 setIsModalOpen(true);
+            } else {
+                console.warn(`[handleSourceClick] File not found in store: ${fileId}`);
             }
         }
     }, [files, setActiveSource, setIsModalOpen]);

@@ -38,9 +38,16 @@
   line-height: 1;
 }
 
-.modal-close:hover {
-  color: var(--text-color);
+.modal-overlay.split-view {
+  justify-content: flex-start;
+  padding-right: 50vw; /* Keep modal in the left 50% */
+  background-color: transparent; /* Overlay should be clear since KB is on right */
+  pointer-events: none; /* Let clicks pass through to things behind (if any) or KB */
 }
-.summary-modal-content {
-  padding: 20px;
+
+.modal-overlay.split-view .modal-content {
+  width: 48vw; /* Slightly less than 50% for padding */
+  pointer-events: auto; /* Re-enable pointer events for the modal itself */
+  margin-left: 1vw;
+  box-shadow: 0 0 30px rgba(0,0,0,0.5);
 }

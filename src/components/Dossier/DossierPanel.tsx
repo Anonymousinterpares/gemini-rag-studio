@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useDossierStore } from '../../store/useDossierStore';
 import { useProjectStore } from '../../store/useProjectStore';
 import { useSettingsStore } from '../../store';
-import { Plus, Trash2, RefreshCw, FileText, User, Users, MapPin, Calendar, Hash, ExternalLink, X, Search, SortDesc, SortAsc, CaseSensitive, Loader2, Globe } from 'lucide-react';
+import { Plus, Trash2, RefreshCw, FileText, User, Users, MapPin, Calendar, Hash, ExternalLink, X, Search, SortDesc, SortAsc, CaseSensitive, Loader2, Globe, Maximize2, Minimize2 } from 'lucide-react';
 import { marked } from 'marked';
 import { DossierType, DossierSection, ChatMessage } from '../../types';
 import { useDiffRenderer } from '../../hooks/useDiffRenderer';
@@ -26,7 +26,17 @@ const DossierSectionView: React.FC<{
     section: DossierSection;
     dossierId: string;
     onSectionUpdate: (instruction: string) => void;
-}> = ({ section, dossierId, onSectionUpdate }) => {
+    renderModelMessage: (
+        content: string | null,
+        fullContent?: string | null,
+        selectionComments?: import('../../types').SelectionComment[],
+        hoveredSelectionId?: string | null,
+        sharedDocNumbers?: Map<string, number>,
+        sharedNextDocNumber?: { current: number },
+        extraSearchResults?: import('../../types').SearchResult[]
+    ) => { __html: string };
+    handleSourceClick: (e: React.MouseEvent<HTMLDivElement>) => void;
+}> = ({ section, dossierId, onSectionUpdate, renderModelMessage, handleSourceClick }) => {
     const { acceptDossierSectionUpdate, rejectDossierSectionUpdate } = useDossierStore();
     const renderedDiff = useDiffRenderer(section.content || '', section.proposedContent || '');
     const [isHovered, setIsHovered] = useState(false);
@@ -39,6 +49,18 @@ const DossierSectionView: React.FC<{
             hour: '2-digit', minute: '2-digit'
         });
     };
+
+    // Convert DossierSource to partial SearchResult for renderModelMessage
+    const extraSearchResults = (section.sources || [])
+        .filter(s => !!s.fileId)
+        .map(s => ({
+            id: s.fileId!,
+            start: 0,
+            end: 0,
+            chunk: s.snippet || '',
+            similarity: 1,
+            parentChunkIndex: -1 // High-level marker for dossier-attached sources
+        }));
 
     return (
         <div
@@ -89,6 +111,10 @@ const DossierSectionView: React.FC<{
                 ) : (
                     <div
                         onClick={(e) => {
+                            // First try handleSourceClick (for our citation buttons)
+                            handleSourceClick(e);
+                            if (e.defaultPrevented) return;
+
                             const target = e.target as HTMLElement;
                             const a = target.closest('a');
                             if (a && a.href && !a.href.startsWith(window.location.origin)) {
@@ -96,7 +122,15 @@ const DossierSectionView: React.FC<{
                                 window.open(a.href, '_blank', 'noopener,noreferrer');
                             }
                         }}
-                        dangerouslySetInnerHTML={{ __html: marked.parse(section.content || '*No content generated yet.*') as string }}
+                        dangerouslySetInnerHTML={renderModelMessage(
+                            section.content || '*No content generated yet.*',
+                            null,
+                            [],
+                            null,
+                            undefined,
+                            undefined,
+                            extraSearchResults
+                        )}
                     />
                 )}
 
@@ -127,12 +161,43 @@ const DossierSectionView: React.FC<{
                 {section.sources && section.sources.length > 0 && (
                     <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid var(--border-color)' }}>
                         <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-color-secondary)' }}>Sources:</span>
-                        {section.sources.map((source, idx) => (
-                            <a key={idx} href={source.url || '#'} target="_blank" rel="noopener noreferrer" className="dossier-source-tag" title={source.snippet}>
-                                {source.type === 'web' ? <ExternalLink size={12} /> : <FileText size={12} />}
-                                {source.label}
-                            </a>
-                        ))}
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '8px' }}>
+                            {section.sources.map((source, idx) => {
+                                if (source.type === 'web') {
+                                    return (
+                                        <a key={idx} href={source.url || '#'} target="_blank" rel="noopener noreferrer" className="dossier-source-tag" title={source.snippet}>
+                                            <ExternalLink size={12} />
+                                            {source.label}
+                                        </a>
+                                    );
+                                } else if (source.type === 'document') {
+                                    // Use a button for documents to trigger DocViewer
+                                    return (
+                                        <button
+                                            key={idx}
+                                            className="dossier-source-tag source-link"
+                                            data-file-id={source.fileId}
+                                            data-start="0"
+                                            data-end="0"
+                                            data-parent-chunk-index="-1"
+                                            data-chunk={source.snippet || ''}
+                                            onClick={(e) => handleSourceClick(e as any)}
+                                            style={{ background: 'var(--panel-bg-color)', border: '1px solid var(--border-color)', color: 'var(--text-color)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', padding: '2px 8px', borderRadius: '4px', fontSize: '0.75rem' }}
+                                            title={source.snippet}
+                                        >
+                                            <FileText size={12} />
+                                            {source.label}
+                                        </button>
+                                    );
+                                } else {
+                                    return (
+                                        <span key={idx} className="dossier-source-tag" title={source.snippet}>
+                                            {source.label}
+                                        </span>
+                                    );
+                                }
+                            })}
+                        </div>
                     </div>
                 )}
             </div>
@@ -143,13 +208,25 @@ const DossierSectionView: React.FC<{
 interface DossierPanelProps {
     isOpen: boolean;
     onClose: () => void;
+    isSplitView: boolean;
+    onToggleSplitView: () => void;
     vectorStore?: React.MutableRefObject<VectorStore | null> | null;
     coordinator?: React.MutableRefObject<ComputeCoordinator | null> | null;
     queryEmbeddingResolver?: React.MutableRefObject<((value: number[]) => void) | null>;
     chatHistory?: ChatMessage[];
+    renderModelMessage: (
+        content: string | null,
+        fullContent?: string | null,
+        selectionComments?: import('../../types').SelectionComment[],
+        hoveredSelectionId?: string | null,
+        sharedDocNumbers?: Map<string, number>,
+        sharedNextDocNumber?: { current: number },
+        extraSearchResults?: import('../../types').SearchResult[]
+    ) => { __html: string };
+    handleSourceClick: (e: React.MouseEvent<HTMLDivElement>) => void;
 }
 
-export const DossierPanel: React.FC<DossierPanelProps> = ({ isOpen, onClose, vectorStore, coordinator, queryEmbeddingResolver, chatHistory }) => {
+export const DossierPanel: React.FC<DossierPanelProps> = ({ isOpen, onClose, isSplitView, onToggleSplitView, vectorStore, coordinator, queryEmbeddingResolver, chatHistory, renderModelMessage, handleSourceClick }) => {
     const { dossiers, activeDossierId, createDossier, setActiveDossier, deleteDossier } = useDossierStore();
     const { activeProjectId } = useProjectStore();
     const { appSettings, setAppSettings } = useSettingsStore();
@@ -264,14 +341,28 @@ export const DossierPanel: React.FC<DossierPanelProps> = ({ isOpen, onClose, vec
 
     return (
         <div className="dossier-panel-overlay" onClick={onClose} style={{
-            position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(2px)'
+            position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', justifyContent: 'flex-end', 
+            backgroundColor: isSplitView ? 'transparent' : 'rgba(0,0,0,0.5)', 
+            backdropFilter: isSplitView ? 'none' : 'blur(2px)',
+            pointerEvents: isSplitView ? 'none' : 'auto'
         }}>
             <div className="dossier-panel-container" onClick={e => e.stopPropagation()} style={{
-                width: '100%', maxWidth: '1200px', height: '100%', backgroundColor: 'var(--bg-color)', display: 'flex', borderLeft: '1px solid var(--border-color)', boxShadow: '-5px 0 25px rgba(0,0,0,0.5)'
+                width: isSplitView ? '50%' : '100%', 
+                maxWidth: isSplitView ? 'none' : '1200px', 
+                height: '100%', backgroundColor: 'var(--bg-color)', display: 'flex', 
+                borderLeft: '1px solid var(--border-color)', 
+                boxShadow: '-5px 0 25px rgba(0,0,0,0.5)',
+                transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
+                pointerEvents: 'auto'
             }}>
-                <button className="icon-btn" onClick={onClose} style={{ position: 'absolute', top: '1rem', right: '1.5rem', zIndex: 10 }} title="Close">
-                    <X size={24} />
-                </button>
+                <div style={{ position: 'absolute', top: '1rem', right: '1.5rem', zIndex: 10, display: 'flex', gap: '8px' }}>
+                    <button className="icon-btn" onClick={(e) => { e.stopPropagation(); onToggleSplitView(); }} title={isSplitView ? "Full View" : "Split View"}>
+                        {isSplitView ? <Maximize2 size={20} /> : <Minimize2 size={20} />}
+                    </button>
+                    <button className="icon-btn" onClick={onClose} title="Close">
+                        <X size={24} />
+                    </button>
+                </div>
                 {/* Sidebar List */}
                 <div className="dossier-sidebar">
                     <div className="dossier-sidebar-header">
@@ -458,6 +549,8 @@ export const DossierPanel: React.FC<DossierPanelProps> = ({ isOpen, onClose, vec
                                     onSectionUpdate={(inst) => {
                                         handleLocalQuerySubmit(`[Section: ${section.title}] ${inst}`);
                                     }}
+                                    renderModelMessage={renderModelMessage}
+                                    handleSourceClick={handleSourceClick}
                                 />
                             ))}
                             {activeDossier.sections.length === 0 && (

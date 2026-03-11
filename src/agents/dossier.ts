@@ -29,14 +29,31 @@ export const getDossierTools = (): Tool[] => {
                         },
                         sources: {
                             type: SchemaType.ARRAY,
-                            description: 'A list of sources used to compile this section.',
+                            description: 'A list of sources used to compile this section. IMPORTANT: Citations in the "content" field should use numeric markers like [1], [2] matching the provided context IDs. These markers will be linked to the sources provided here.',
                             items: {
                                 type: SchemaType.OBJECT,
                                 properties: {
-                                    type: { type: SchemaType.STRING, description: '"document", "web", or "chat_exchange"' },
-                                    label: { type: SchemaType.STRING, description: 'Display name for the source' },
-                                    fileId: { type: SchemaType.STRING, description: 'If a document, the ID of the file' },
-                                    url: { type: SchemaType.STRING, description: 'Absolute URL to the source if type is "web"' }
+                                    type: { 
+                                        type: SchemaType.STRING, 
+                                        description: 'The nature of the source: "document" for uploaded files, "web" for internet search, or "chat_exchange" for conversation history.',
+                                        enum: ['document', 'web', 'chat_exchange']
+                                    },
+                                    label: { 
+                                        type: SchemaType.STRING, 
+                                        description: 'A concise display name for the source (e.g. filename or website title).' 
+                                    },
+                                    fileId: { 
+                                        type: SchemaType.STRING, 
+                                        description: 'The unique ID of the document (matching the "id:" field in the context block).' 
+                                    },
+                                    url: { 
+                                        type: SchemaType.STRING, 
+                                        description: 'The full URL if the source type is "web".' 
+                                    },
+                                    snippet: {
+                                        type: SchemaType.STRING,
+                                        description: 'A short relevant excerpt from the source.'
+                                    }
                                 },
                                 required: ['type', 'label']
                             }
@@ -50,6 +67,39 @@ export const getDossierTools = (): Tool[] => {
 };
 
 /**
+ * Normalizes sources provided by the LLM. It handles both raw strings (which often happen
+ * despite schema instructions) and partial objects, ensuring they follow the DossierSource type.
+ */
+function normalizeSources(rawSources: any[]): import('../types').DossierSource[] {
+    if (!rawSources || !Array.isArray(rawSources)) return [];
+    
+    return rawSources.map(s => {
+        // Case 1: Raw string (usually a document ID or filename)
+        if (typeof s === 'string') {
+            return {
+                type: 'document',
+                label: s,
+                fileId: s
+            };
+        }
+
+        // Case 2: Already typed object
+        if (typeof s === 'object' && s !== null) {
+            const type = s.type || (s.url ? 'web' : 'document');
+            return {
+                type: type as any,
+                label: s.label || s.fileId || s.url || 'Unknown Source',
+                fileId: s.fileId,
+                url: s.url,
+                snippet: s.snippet
+            };
+        }
+
+        return { type: 'document', label: 'Unparsed Source' };
+    }) as import('../types').DossierSource[];
+}
+
+/**
  * Execution logic for the dossier tool calls returned by the LLM.
  */
 export const handleDossierToolCall = async (
@@ -58,12 +108,9 @@ export const handleDossierToolCall = async (
     options?: { proposeOnly?: boolean }
 ): Promise<{ result: string }> => {
     if (name === 'update_dossier') {
-        const { dossierId, sectionTitle, content, sources } = args as { 
-            dossierId: string; 
-            sectionTitle: string; 
-            content: string; 
-            sources?: import('../types').DossierSource[] 
-        };
+        const { dossierId, sectionTitle, content, sources: rawSources } = args as any;
+
+        const sources = normalizeSources(rawSources);
 
         const store = useDossierStore.getState();
         const dossier = store.dossiers.find(d => d.id === dossierId);
@@ -115,8 +162,8 @@ You are an expert Intelligence Analyst. Your task is to compile structured, comp
 You have access to the 'update_dossier' tool. You should use this tool to write markdown content directly into the structured sections of the active dossier.
 
 CRITICAL SOURCING RULES — follow these in strict priority order:
-1. **Embedded Document Context FIRST**: All claims must be grounded in the provided EMBEDDED DOC CONTEXT (retrieved from the user's knowledge base). Cite using [Source: documentId] for each piece of information drawn from a document.
-2. **Recent Chat Context SECOND**: Use the provided RECENT CHAT CONTEXT as additional evidence. This includes case file reports and conversation turns. Cite as [Source: chatContext] when drawing from this.
+1. **Embedded Document Context FIRST**: All claims must be grounded in the provided EMBEDDED DOC CONTEXT (retrieved from the user's knowledge base). Cite using numeric markers [1], [2], [3] matching the context IDs (e.g., [#1] corresponds to [1]).
+2. **Recent Chat Context SECOND**: Use the provided RECENT CHAT CONTEXT as additional evidence. This includes case file reports and conversation turns. Cite as [Source: chatContext] or [Chat] when drawing from this.
 3. **Web Search LAST (only if explicitly enabled)**: Web search, if available, is a FOLLOW-UP VERIFICATION tool only — not a primary source. Use it exclusively to check for supplementary corroboration or to resolve explicit gaps. NEVER use web search as the main research method.
 
 ANTI-HALLUCINATION RULES — strictly enforce:
@@ -128,7 +175,10 @@ Guidelines for Dossier Compilation:
 1. **Structure over Chat**: Instead of giving long chat responses, use 'update_dossier' to build the document. Once done, tell the user "I have updated the dossier sections."
 2. **Sections**: Break information down logically (e.g., "Overview", "Timeline", "Key Relationships", "Evidence Summary"). Call 'update_dossier' separately for each distinct section.
 3. **Format**: Use rich Markdown. Use bullet points, bold text for emphasis, and nested lists.
-4. **Citations**: Cite every claim — [Source: documentId] for embedded docs, [Source: chatContext] for chat, [Title](URL) for web sources.
+4. **Citations**: Cite every claim. 
+   - For embedded docs, always use numeric markers: [1], [2, 3].
+   - For web sources, use [Title](URL).
+   - For chat context, use [Source: chatContext].
 5. **Objectivity**: Maintain a professional, neutral, and analytical tone.
 6. **Contradictions**: If embedded documents and chat context contradict each other, flag the discrepancy explicitly rather than silently choosing one.
 `;

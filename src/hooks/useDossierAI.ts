@@ -82,19 +82,19 @@ async function buildRagContext(
     vectorStore: VectorStore,
     coordinator: ComputeCoordinator,
     queryEmbeddingResolver: React.MutableRefObject<((value: number[]) => void) | null>
-): Promise<{ contextBlock: string; docIds: string[] }> {
+): Promise<{ contextBlock: string; docIds: string[]; results: import('../types').SearchResult[] }> {
     const embedding = await embedQuery(subject, coordinator, queryEmbeddingResolver);
-    if (!embedding) return { contextBlock: '', docIds: [] };
+    if (!embedding) return { contextBlock: '', docIds: [], results: [] };
 
     const results = vectorStore.search(embedding, KB_RAG_K);
-    if (results.length === 0) return { contextBlock: '', docIds: [] };
+    if (results.length === 0) return { contextBlock: '', docIds: [], results: [] };
 
     const docIds = Array.from(new Set(results.map(r => r.id)));
     const contextBlock = results
         .map((r, i) => `[#${i + 1}] id:${r.id}\n${r.chunk}`)
         .join('\n\n---\n\n');
 
-    return { contextBlock, docIds };
+    return { contextBlock, docIds, results };
 }
 
 /**
@@ -229,10 +229,12 @@ export const useDossierAI = (refs?: DossierAIRefs) => {
             // ── Phase 1: Build RAG context from embedded documents ────────────
             let ragContextBlock = '';
             let docIds: string[] = [];
+            let ragResults: import('../types').SearchResult[] = [];
             if (refs?.vectorStore?.current && refs.coordinator?.current && refs.queryEmbeddingResolver) {
                 const rag = await buildRagContext(subject, refs.vectorStore.current, refs.coordinator.current, refs.queryEmbeddingResolver);
                 ragContextBlock = rag.contextBlock;
                 docIds = rag.docIds;
+                ragResults = rag.results;
                 if (appSettings.isLoggingEnabled) {
                     console.log(`[DossierAI] RAG retrieved ${docIds.length} unique docs for "${subject}"`);
                 }
@@ -292,6 +294,28 @@ export const useDossierAI = (refs?: DossierAIRefs) => {
                 for (const tc of toolCalls) {
                     if (tc.function.name === 'update_dossier') {
                         const args = JSON.parse(tc.function.arguments);
+
+                        // ── Auto-Attach Missing Sources ───────────────────────
+                        // If the LLM uses [1], [2] in content but misses sources, auto-fill them.
+                        const citedIndices = Array.from(args.content.matchAll(/\[(\d+)\]/g))
+                            .map(m => parseInt((m as any)[1], 10))
+                            .filter(idx => idx > 0 && idx <= ragResults.length);
+                        
+                        const normalizedSources: import('../types').DossierSource[] = args.sources ? args.sources : [];
+                        for (const idx of citedIndices) {
+                            const res = ragResults[idx - 1];
+                            const alreadyExists = normalizedSources.some(s => s.fileId === res.id);
+                            if (!alreadyExists) {
+                                normalizedSources.push({
+                                    type: 'document',
+                                    label: res.id.split('/').pop() || res.id,
+                                    fileId: res.id,
+                                    snippet: res.chunk
+                                });
+                            }
+                        }
+                        args.sources = normalizedSources;
+
                         await handleDossierToolCall(tc.function.name, args);
                         toolCallsMade = true;
                         currentHistory.push({
@@ -357,6 +381,7 @@ export const useDossierAI = (refs?: DossierAIRefs) => {
 
         // ── Build RAG context for the instruction ───────────────────────────────
         let ragContextBlock = '';
+        let ragResults: import('../types').SearchResult[] = [];
         if (refs?.vectorStore?.current && refs.coordinator?.current && refs.queryEmbeddingResolver) {
             const rag = await buildRagContext(
                 `${dossier.title} ${instruction}`,
@@ -365,6 +390,7 @@ export const useDossierAI = (refs?: DossierAIRefs) => {
                 refs.queryEmbeddingResolver
             );
             ragContextBlock = rag.contextBlock;
+            ragResults = rag.results;
         }
 
         // ── Build paged chat context ─────────────────────────────────────────────
@@ -416,6 +442,27 @@ export const useDossierAI = (refs?: DossierAIRefs) => {
                 for (const tc of toolCalls) {
                     if (tc.function.name === 'update_dossier') {
                         const args = JSON.parse(tc.function.arguments);
+
+                        // ── Auto-Attach Missing Sources (Edit Mode) ───────────
+                        const citedIndices = Array.from(args.content.matchAll(/\[(\d+)\]/g))
+                            .map(m => parseInt((m as any)[1], 10))
+                            .filter(idx => idx > 0 && idx <= ragResults.length);
+                        
+                        const normalizedSources: import('../types').DossierSource[] = args.sources ? args.sources : [];
+                        for (const idx of citedIndices) {
+                            const res = ragResults[idx - 1];
+                            const alreadyExists = normalizedSources.some(s => s.fileId === res.id);
+                            if (!alreadyExists) {
+                                normalizedSources.push({
+                                    type: 'document',
+                                    label: res.id.split('/').pop() || res.id,
+                                    fileId: res.id,
+                                    snippet: res.chunk
+                                });
+                            }
+                        }
+                        args.sources = normalizedSources;
+
                         await handleDossierToolCall(tc.function.name, args, { proposeOnly: true });
                         didEdit = true;
                         currentHistory.push({

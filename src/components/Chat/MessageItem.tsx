@@ -42,6 +42,7 @@ export interface MessageItemHandlers {
     handleRedo: (idx: number) => void;
     handleRemoveMessage: (idx: number) => void;
     handleMouseUp: (idx: number) => () => void;
+    handleSourceClick: (e: React.MouseEvent<HTMLDivElement>) => void;
     /** Parse the case_file_report message content and open it in the overlay */
     onOpenInCaseFile: (content: string, title?: string) => void;
     /** Triggers a map update using this message's content as instructions */
@@ -85,24 +86,34 @@ export const MessageItem: FC<MessageItemProps> = ({
         }
     }, [msg.isStreaming, msg.content, msg.role, displayLength]);
 
+    // SEPARATE EFFECT: Handle the "Finished Streaming" state change to avoid React warnings
+    useEffect(() => {
+        if (msg.isStreaming && displayLength >= (msg.content?.length || 0)) {
+            // Wait for next tick to ensure we're not in middle of a render
+            const t = setTimeout(() => {
+                if (handlers.handleUpdateMessage) {
+                    handlers.handleUpdateMessage(i, { isStreaming: false });
+                    setIsTyping(false);
+                }
+            }, 0);
+            return () => clearTimeout(t);
+        }
+    }, [displayLength, msg.content, msg.isStreaming, i, handlers]);
+
     useEffect(() => {
         if (isTyping && msg.content && msg.isStreaming) {
             const interval = setInterval(() => {
                 setDisplayLength(prev => {
                     const content = msg.content!;
                     if (prev >= content.length) {
-                        setIsTyping(false);
                         clearInterval(interval);
-                        // Once finished typing, we should signal that we are no longer streaming
-                        if (msg.isStreaming && handlers.handleUpdateMessage) {
-                            handlers.handleUpdateMessage(i, { isStreaming: false });
-                        }
                         return content.length;
                     }
 
-                    // Look ahead for "Atomic Blocks": Citations, Markdown Links, Bold/Italic
-                    // We want to jump over these entirely so they never appear "broken" to the parser.
-                    const ATOMIC_BLOCK_REGEX = new RegExp(`${CITATION_REGEX.source}|(\\[.*?\\]\\(.*?\\))|(\\*{1,3}.*?\\*{1,3})|(\`{1,3}.*?\`{1,3})`, 'gi');
+                    // Look ahead for "Atomic Blocks": Citations, Metadata, Markdown Links, Bold/Italic
+                    // We specifically include the search results metadata comment here.
+                    const SEARCH_METADATA_PATTERN = '<!--searchResults:[\\s\\S]*?-->';
+                    const ATOMIC_BLOCK_REGEX = new RegExp(`${SEARCH_METADATA_PATTERN}|${CITATION_REGEX.source}|(\\[.*?\\]\\(.*?\\))|(\\*+.*?\\*+)|(\`+.*?\`+)`, 'gi');
                     
                     let nextIdx = prev;
                     
@@ -116,20 +127,16 @@ export const MessageItem: FC<MessageItemProps> = ({
 
                     nextIdx = baseNext;
 
-                    // 2. Atomic Look-ahead: If baseNext lands US INSIDE or JUMPS OVER the start of an atomic block,
-                    // we must jump to the END of that block instead.
+                    // 2. Atomic Look-ahead
                     ATOMIC_BLOCK_REGEX.lastIndex = 0;
                     let match;
                     while ((match = ATOMIC_BLOCK_REGEX.exec(content)) !== null) {
                         const start = match.index;
                         const end = start + match[0].length;
 
-                        // If current position is at or inside a block, jump to end
                         if (prev >= start && prev < end) {
                             return end;
                         }
-                        // If our intended jump would land inside or cross the start of a block, 
-                        // we clip to the end of that block to ensure it pops in as one unit.
                         if (start >= prev && start < nextIdx) {
                             return end; 
                         }
@@ -137,10 +144,10 @@ export const MessageItem: FC<MessageItemProps> = ({
 
                     return nextIdx;
                 });
-            }, 15); // Slightly slower for better readability but still fast
+            }, 15);
             return () => clearInterval(interval);
         }
-    }, [isTyping, msg.content, msg.isStreaming, i, handlers]);
+    }, [isTyping, msg.content, msg.isStreaming, i]);
 
     const activeContent = (msg.isStreaming && isTyping)
         ? (msg.content || '').substring(0, displayLength)
@@ -176,7 +183,7 @@ export const MessageItem: FC<MessageItemProps> = ({
                                     const nextDocNumber = { current: 1 };
 
                                     return (
-                                        <div className='message-markup'>
+                                        <div className='message-markup' onClick={handlers.handleSourceClick}>
                                             {msg.pendingEdits?.some(e => e.sectionId === 'REWRITE') ? (
                                                 <div className="message-section-row">
                                                     <div className="message-main-content">
