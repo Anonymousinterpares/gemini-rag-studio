@@ -1,4 +1,4 @@
-import { cos_sim } from "@xenova/transformers";
+import { cos_sim } from "@huggingface/transformers";
 import { RecursiveCharacterTextSplitter } from "langchain/text_splitter";
 import { SearchResult } from "../types";
 

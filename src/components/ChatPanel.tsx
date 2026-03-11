@@ -47,6 +47,7 @@ interface ChatPanelProps {
     setIsDossierOpen: React.Dispatch<React.SetStateAction<boolean>>;
     isMapPanelOpen: boolean;
     setIsMapPanelOpen: React.Dispatch<React.SetStateAction<boolean>>;
+    computeDevice: 'gpu' | 'cpu' | 'unknown';
 }
 
 export const ChatPanel: FC<ChatPanelProps> = ({
@@ -59,6 +60,7 @@ export const ChatPanel: FC<ChatPanelProps> = ({
     onLoadCaseFile, onOpenCaseFile, hasCaseFile,
     isDossierOpen, setIsDossierOpen,
     isMapPanelOpen, setIsMapPanelOpen,
+    computeDevice,
 }) => {
     const scrollRef = useRef<HTMLDivElement>(null);
     const [showScrollDown, setShowScrollDown] = useState(false);
@@ -119,15 +121,32 @@ export const ChatPanel: FC<ChatPanelProps> = ({
                         <FolderTree size={16} />
                     </button>
                     <button
-                        className={`button secondary ${isMapPanelOpen ? 'active' : ''}`}
-                        title='Toggle Investigation Map panel'
-                        onClick={() => setIsMapPanelOpen(!isMapPanelOpen)}
-                        style={{ padding: '0.4rem', display: 'flex', alignItems: 'center', backgroundColor: isMapPanelOpen ? 'rgba(52, 152, 219, 0.2)' : undefined, borderColor: isMapPanelOpen ? '#3498db' : undefined }}
+                       className={`button secondary ${isMapPanelOpen ? 'active' : ''}`}
+                       title='Toggle Investigation Map panel'
+                       onClick={() => setIsMapPanelOpen(!isMapPanelOpen)}
+                       style={{ padding: '0.4rem', display: 'flex', alignItems: 'center', backgroundColor: isMapPanelOpen ? 'rgba(52, 152, 219, 0.2)' : undefined, borderColor: isMapPanelOpen ? '#3498db' : undefined }}
                     >
-                        <Network size={16} />
+                       <Network size={16} />
                     </button>
-                </div>
-                <div style={{ display: 'flex', gap: '8px', flex: 1, justifyContent: 'center' }}>
+                    {computeDevice === 'gpu' && (
+                       <div style={{ 
+                           display: 'flex', 
+                           alignItems: 'center', 
+                           fontSize: '11px', 
+                           color: '#2ecc71', 
+                           fontWeight: '600',
+                           textTransform: 'uppercase',
+                           letterSpacing: '0.5px',
+                           marginLeft: '4px',
+                           background: 'rgba(46, 204, 113, 0.1)',
+                           padding: '2px 8px',
+                           borderRadius: '4px',
+                           border: '1px solid rgba(46, 204, 113, 0.2)'
+                       }}>
+                           GPU mode enabled
+                       </div>
+                    )}
+                    </div>                <div style={{ display: 'flex', gap: '8px', flex: 1, justifyContent: 'center' }}>
                     <ChatHistoryDropdown />
                 </div>
                 <div className='background-changer'>

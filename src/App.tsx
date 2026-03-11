@@ -469,6 +469,7 @@ export const App: FC = () => {
         setIsDossierOpen={setIsDossierOpen}
         isMapPanelOpen={isMapPanelOpen}
         setIsMapPanelOpen={setIsMapPanelOpen}
+        computeDevice={computeDevice}
       />
 
       {isMapPanelOpen && (

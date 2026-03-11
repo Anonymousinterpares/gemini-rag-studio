@@ -1,5 +1,10 @@
 /// <reference types="@webgpu/types" />
-import { pipeline, FeatureExtractionPipeline, AutoTokenizer, AutoModelForSequenceClassification } from '@xenova/transformers';
+import { pipeline, FeatureExtractionPipeline, AutoTokenizer, AutoModelForSequenceClassification, env } from '@huggingface/transformers';
+
+// Configure Transformers.js to use local models exclusively and set the correct path
+env.allowLocalModels = true;
+env.allowRemoteModels = false;
+env.localModelPath = '/models/';
 
 import {
   CoordinatorToWorkerMessage,
@@ -28,38 +33,42 @@ class EmbeddingPipeline {
 
   static async getInstance(): Promise<FeatureExtractionPipeline> {
     if (this.instance === null) {
-      const options: {
-        local_files_only: boolean,
-        device?: GPUDevice,
-        quantized?: boolean
-      } = { local_files_only: true };
+      const modelId = 'Xenova/all-MiniLM-L6-v2';
+      
       try {
-        if (navigator.gpu) {
-          const adapter = await navigator.gpu.requestAdapter();
-          if (adapter) {
-            const device = await adapter.requestDevice();
-            options.device = device;
-            options.quantized = true;
+        if (isLoggingEnabled) console.log(`[ML Worker] Initializing v3 embedding pipeline...`);
+        
+        // Try WebGPU with FP16 first (Standard for v3)
+        try {
+          this.instance = (await pipeline('feature-extraction', modelId, { 
+            device: 'webgpu', 
+            dtype: 'fp16',
+          })) as FeatureExtractionPipeline;
+          this.platform = 'gpu';
+          if (isLoggingEnabled) console.log(`[ML Worker] v3 Embedding: WebGPU (fp16) SUCCESS.`);
+        } catch (gpuError) {
+          console.warn(`[ML Worker] WebGPU (fp16) failed, trying WebGPU (fp32)...`, gpuError);
+          try {
+            this.instance = (await pipeline('feature-extraction', modelId, { 
+              device: 'webgpu', 
+              dtype: 'fp32',
+            })) as FeatureExtractionPipeline;
             this.platform = 'gpu';
-            if (isLoggingEnabled) console.log(`[ML Worker] Initializing embedding pipeline on GPU.`);
-          } else {
-            throw new Error("No suitable GPU adapter found.");
+            if (isLoggingEnabled) console.log(`[ML Worker] v3 Embedding: WebGPU (fp32) SUCCESS.`);
+          } catch (gpuError2) {
+            console.warn(`[ML Worker] WebGPU failed, falling back to CPU...`, gpuError2);
+            this.instance = (await pipeline('feature-extraction', modelId, { 
+              device: 'wasm', 
+              dtype: 'q8', // Quantized for CPU
+            })) as FeatureExtractionPipeline;
+            this.platform = 'cpu';
+            if (isLoggingEnabled) console.log(`[ML Worker] v3 Embedding: CPU (q8) SUCCESS.`);
           }
-        } else {
-          throw new Error("WebGPU not supported.");
         }
       } catch (e) {
-        this.platform = 'cpu';
-        console.error(`[ML Worker] Critical GPU initialization failed. Falling back to CPU for embedding.`, e);
+        console.error(`[ML Worker] Critical failure in v3 embedding pipeline:`, e);
+        throw e;
       }
-
-      this.instance = (await pipeline(
-        'feature-extraction',
-        'Xenova/all-MiniLM-L6-v2',
-        options
-      )) as FeatureExtractionPipeline;
-
-      if (isLoggingEnabled) console.log(`[ML Worker] Embedding pipeline successfully initialized. Final platform: ${this.platform}`);
 
       self.postMessage({
         type: 'worker_device_status',
@@ -87,28 +96,37 @@ class CustomRerankerPipeline {
   static async getInstance(): Promise<CustomRerankerPipeline> {
     if (this.instance === null) {
       const modelName = 'Xenova/bge-reranker-base';
-      const options: { local_files_only: boolean, device?: GPUDevice, quantized?: boolean } = { local_files_only: true };
-
+      
       try {
-        if (navigator.gpu) {
-          const adapter = await navigator.gpu.requestAdapter();
-          if (adapter) {
-            const device = await adapter.requestDevice();
-            options.device = device;
-            options.quantized = true;
-            this.platform = 'gpu';
-            if (isLoggingEnabled) console.log(`[ML Worker] Initializing reranker pipeline on GPU.`);
-          } else { throw new Error("No GPU adapter"); }
-        } else { throw new Error("WebGPU not supported"); }
-      } catch (e) {
-        this.platform = 'cpu';
-        console.error(`[ML Worker] Critical GPU initialization failed. Falling back to CPU for reranker.`, e);
-      }
+        if (isLoggingEnabled) console.log(`[ML Worker] Initializing v3 reranker pipeline...`);
+        const tokenizer = await AutoTokenizer.from_pretrained(modelName);
+        let model;
+        let platform: 'gpu' | 'cpu' = 'cpu';
 
-      const tokenizer = await AutoTokenizer.from_pretrained(modelName, { local_files_only: true });
-      const model = await AutoModelForSequenceClassification.from_pretrained(modelName, options);
-      this.instance = new CustomRerankerPipeline(tokenizer, model);
-      if (isLoggingEnabled) console.log(`[ML Worker] Reranker pipeline successfully initialized. Final platform: ${this.platform}`);
+        try {
+          // Try GPU for reranker (INT8 since bge-reranker usually doesn't have FP16 locally)
+          model = await AutoModelForSequenceClassification.from_pretrained(modelName, { 
+            device: 'webgpu', 
+            dtype: 'q8' 
+          });
+          platform = 'gpu';
+          if (isLoggingEnabled) console.log(`[ML Worker] v3 Reranker: WebGPU (q8) SUCCESS.`);
+        } catch (e) {
+          console.warn(`[ML Worker] v3 Reranker WebGPU failed, falling back to CPU...`, e);
+          model = await AutoModelForSequenceClassification.from_pretrained(modelName, { 
+            device: 'wasm', 
+            dtype: 'q8' 
+          });
+          platform = 'cpu';
+          if (isLoggingEnabled) console.log(`[ML Worker] v3 Reranker: CPU (q8) SUCCESS.`);
+        }
+
+        this.instance = new CustomRerankerPipeline(tokenizer, model);
+        this.platform = platform;
+      } catch (e) {
+        console.error(`[ML Worker] Critical failure in v3 reranker pipeline:`, e);
+        throw e;
+      }
     }
     return this.instance;
   }

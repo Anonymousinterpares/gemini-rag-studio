@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { VectorStore, chunkDocument } from './pipeline';
 
-// Mock @xenova/transformers cos_sim
-vi.mock('@xenova/transformers', () => ({
+// Mock @huggingface/transformers cos_sim
+vi.mock('@huggingface/transformers', () => ({
   cos_sim: vi.fn((a, b) => {
     // Simple mock dot product for testing
     return a.reduce((acc: number, val: number, i: number) => acc + val * b[i], 0);
