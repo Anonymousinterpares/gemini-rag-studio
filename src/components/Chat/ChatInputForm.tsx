@@ -67,7 +67,11 @@ export const ChatInputForm: FC<ChatInputFormProps> = ({
                     placeholder={
                         activeJobCount > 0
                             ? "Processing documents... please wait"
-                            : (isLoading && caseFileState.isAwaitingFeedback ? "Building report..." : "")
+                            : isLoading 
+                                ? (caseFileState.isAwaitingFeedback ? "Building report..." : "Generating response...") 
+                                : (files.length === 0 && !appSettings.isChatModeEnabled)
+                                    ? "⚠️  Input Disabled: Upload documents or enable 🌐 Web Search / Chat mode to connect."
+                                    : "Ask a question about your documents..."
                     }
                 />
                 {isLoading ? (
