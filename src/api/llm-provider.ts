@@ -492,8 +492,14 @@ export async function generateContent(
         }
       }
       
-      // Heuristic for others: ~4 chars per token or ~1.3 tokens per word
-      const totalText = messages.map(m => m.content || '').join(' ');
-      return Math.ceil(totalText.length / 4);
-    }
-    
+  // Heuristic for others: ~4 chars per token or ~1.3 tokens per word
+  const totalText = messages.map(m => m.content || '').join(' ');
+  return Math.ceil(totalText.length / 4);
+}
+
+export async function countTokensFast(messages: ChatMessage[]): Promise<number> {
+    // Fast client-side fallback - do not hit network for UI polling
+    // Average English word is ~1.3 tokens, average char is ~0.25 tokens
+    const totalText = messages.map(m => m.content || '').join(' ');
+    return Math.ceil(totalText.length / 4);
+}

@@ -3,7 +3,7 @@ import { marked } from 'marked';
 import { AppFile, ChatMessage, JobProgress, Model, SearchResult, TokenUsage, SelectionComment } from '../types';
 import { summaryCache } from '../cache/summaryCache';
 import { ComputeTask, TaskPriority, TaskType } from '../compute/types';
-import { generateContent, Tool, SchemaType, countTokens } from '../api/llm-provider';
+import { generateContent, Tool, SchemaType, countTokens, countTokensFast } from '../api/llm-provider';
 import { ComputeCoordinator } from '../compute/coordinator';
 import { VectorStore } from '../rag/pipeline';
 import { useChatStore, useFileStore, useSettingsStore } from '../store';
@@ -229,11 +229,11 @@ export const useChat = ({
                 { role: 'user', content: userInput || ' ' }
             ];
 
-            const tokens = await countTokens(selectedModel, apiKey, messages);
+            const tokens = await countTokensFast(messages);
             setCurrentContextTokens(tokens);
         };
 
-        const timeoutId = setTimeout(calculateContextTokens, 1000); // 1s debounce
+        const timeoutId = setTimeout(calculateContextTokens, 150); // 150ms debounce for instant local UI
         return () => clearTimeout(timeoutId);
     }, [chatHistory, userInput, files, summaries, selectedModel, apiKeys, selectedProvider, getSystemPrompt, setCurrentContextTokens]);
 

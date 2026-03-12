@@ -70,6 +70,8 @@ export const useProjectStore = create<ProjectState>()(
                     if (linkedMatch) return linkedMatch.id;
                 }
 
+                if (!nodeLabel) return null; // Prevent crash if node has no label
+
                 const cleanLabel = nodeLabel.toLowerCase().trim();
 
                 // 1. Exact match
