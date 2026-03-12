@@ -94,6 +94,8 @@ function checkpoint(state: MapState) {
     };
 }
 
+let persistTimeout: ReturnType<typeof setTimeout> | null = null;
+
 export const useMapStore = create<MapState>((set, get) => ({
     nodes: [],
     edges: [],
@@ -298,15 +300,19 @@ export const useMapStore = create<MapState>((set, get) => ({
     setProgress: (progress) => set({ progress }),
 
     persistToDB: async () => {
-        const activeProjectId = useProjectStore.getState().activeProjectId;
-        if (!activeProjectId) return;
+        if (persistTimeout) clearTimeout(persistTimeout);
 
-        const { nodes, edges, isRagActive, isWebActive, isDeepActive } = get();
-        try {
-            await saveMap(activeProjectId, { nodes, edges, isRagActive, isWebActive, isDeepActive });
-        } catch (e) {
-            console.error('[MapStore] Failed to persist map to IndexedDB:', e);
-        }
+        persistTimeout = setTimeout(async () => {
+            const activeProjectId = useProjectStore.getState().activeProjectId;
+            if (!activeProjectId) return;
+
+            const { nodes, edges, isRagActive, isWebActive, isDeepActive } = get();
+            try {
+                await saveMap(activeProjectId, { nodes, edges, isRagActive, isWebActive, isDeepActive });
+            } catch (e) {
+                console.error('[MapStore] Failed to persist map to IndexedDB:', e);
+            }
+        }, 500);
     },
 
     hydrateFromDB: async () => {
