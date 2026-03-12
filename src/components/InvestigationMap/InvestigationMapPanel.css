@@ -134,17 +134,22 @@
     to { opacity: 1; transform: translateY(0); }
 }
 
-/* Progress */
 .map-progress-container {
+    position: absolute;
+    top: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 100;
     display: flex;
     align-items: center;
-    gap: 6px;
-    flex: 1;
-    min-width: 0;
-    background: var(--input-bg-color);
+    gap: 8px;
+    background: var(--panel-bg-color);
     border: 1px solid var(--border-color);
-    border-radius: 6px;
-    padding: 4px 10px;
+    border-radius: 20px;
+    padding: 6px 14px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+    min-width: 250px;
+    max-width: 80%;
 }
 
 .map-progress-label {

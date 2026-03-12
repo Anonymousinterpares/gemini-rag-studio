@@ -167,33 +167,7 @@ export const InvestigationMapPanel: FC<Props> = ({ onClose, onOpenDossierForNode
                     </div>
                 )}
 
-                {progress && (
-                    <div className="map-progress-container">
-                        <Loader size={13} className="animate-spin" style={{ marginRight: 6 }} />
-                        <span className="map-progress-label">{progress.label}</span>
-                        {progress.batchTotal > 1 && (
-                            <span className="map-progress-count">
-                                {progress.batchCurrent}/{progress.batchTotal}
-                            </span>
-                        )}
-                        {jobLock && lockExpiresAt && (
-                            <MapLockIndicator 
-                                expiresAt={lockExpiresAt} 
-                                onCancel={() => useMapStore.getState().releaseLock()} 
-                            />
-                        )}
-                    </div>
-                )}
-                {!progress && jobLock && lockExpiresAt && (
-                    <div className="map-progress-container">
-                        <Loader size={13} className="animate-spin" style={{ marginRight: 6 }} />
-                        <span className="map-progress-label">Preparing...</span>
-                        <MapLockIndicator 
-                            expiresAt={lockExpiresAt} 
-                            onCancel={() => useMapStore.getState().releaseLock()} 
-                        />
-                    </div>
-                )}
+
 
                 <div className="map-panel-header-right">
                     <button
@@ -238,6 +212,33 @@ export const InvestigationMapPanel: FC<Props> = ({ onClose, onOpenDossierForNode
 
             {/* ── Canvas ────────────────────────────────────────────────────── */}
             <div className="map-panel-body">
+                {progress && (
+                    <div className="map-progress-container">
+                        <Loader size={13} className="animate-spin" style={{ marginRight: 6 }} />
+                        <span className="map-progress-label">{progress.label}</span>
+                        {progress.batchTotal > 1 && (
+                            <span className="map-progress-count">
+                                {progress.batchCurrent}/{progress.batchTotal}
+                            </span>
+                        )}
+                        {jobLock && lockExpiresAt && (
+                            <MapLockIndicator 
+                                expiresAt={lockExpiresAt} 
+                                onCancel={() => useMapStore.getState().releaseLock()} 
+                            />
+                        )}
+                    </div>
+                )}
+                {!progress && jobLock && lockExpiresAt && (
+                    <div className="map-progress-container">
+                        <Loader size={13} className="animate-spin" style={{ marginRight: 6 }} />
+                        <span className="map-progress-label">Preparing...</span>
+                        <MapLockIndicator 
+                            expiresAt={lockExpiresAt} 
+                            onCancel={() => useMapStore.getState().releaseLock()} 
+                        />
+                    </div>
+                )}
                 <div className="map-canvas-container" ref={measureRef}>
                     {dimensions.width > 0 && dimensions.height > 0 && (
                         <InvestigationMapCanvas
