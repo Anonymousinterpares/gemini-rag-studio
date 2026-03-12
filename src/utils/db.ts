@@ -11,7 +11,7 @@ declare global {
 }
 
 const DB_NAME = 'fileExplorerDB'; // Keeping original name for backwards compatibility
-const DB_VERSION = 3; // v3 adds investigation map store
+const DB_VERSION = 4;
 const DIRECTORY_STORE_NAME = 'directoryHandles';
 const DIRECTORY_KEY = 'rootDirectoryHandle';
 
