@@ -45,33 +45,31 @@ function sanitizeHistory(messages: ChatMessage[]): {
     systemPrompt: string | undefined;
     history: ChatMessage[];
 } {
-    // console.log('[DEBUG] History before sanitization:', JSON.stringify(messages, null, 2));
     let systemPrompt: string | undefined = undefined;
     const sanitized: ChatMessage[] = [];
+    
+    // Create a working copy to avoid mutating the original array
+    let workingMessages = [...messages];
 
     // 1. Find and remove the system prompt
-    const systemMsgIndex = messages.findIndex(m => m.role === 'system');
+    const systemMsgIndex = workingMessages.findIndex(m => m.role === 'system');
     if (systemMsgIndex !== -1) {
-        systemPrompt = messages.splice(systemMsgIndex, 1)[0].content || undefined;
+        systemPrompt = workingMessages.splice(systemMsgIndex, 1)[0].content || undefined;
     }
 
     // 2. Find the first user message. Discard anything before it, UNLESS it's a sequence of tool interactions 
-    // that might be relevant? actually usually a conversation starts with User.
-    const firstUserIndex = messages.findIndex(m => m.role === 'user');
+    const firstUserIndex = workingMessages.findIndex(m => m.role === 'user');
     if (firstUserIndex === -1) {
-        // If no user messages, check if we have a valid tool sequence (rare for start). 
-        // For safety, return empty if no user interaction found at all.
-        // console.log('[DEBUG] History after sanitization (no user messages):', JSON.stringify([], null, 2));
         return { systemPrompt, history: [] };
     }
-    messages = messages.slice(firstUserIndex);
+    workingMessages = workingMessages.slice(firstUserIndex);
 
     // 3. Process messages
-    if (messages.length > 0) {
-        sanitized.push({ ...messages[0] }); // Start with the first user message
+    if (workingMessages.length > 0) {
+        sanitized.push({ ...workingMessages[0] }); // Start with the first user message
 
-        for (let i = 1; i < messages.length; i++) {
-            const currentMessage = messages[i];
+        for (let i = 1; i < workingMessages.length; i++) {
+            const currentMessage = workingMessages[i];
             const lastMessageInSanitized = sanitized[sanitized.length - 1];
 
             // Don't merge if either message involves tools
@@ -81,8 +79,6 @@ function sanitizeHistory(messages: ChatMessage[]): {
                 sanitized.push({ ...currentMessage });
             } else {
                 // Merge content if roles are the same and NOT tool related
-                // (e.g. two user messages in a row -> merge them)
-                // Note: ChatMessage content can be null for tool calls, so handle that
                 const lastContent = lastMessageInSanitized.content || '';
                 const currentContent = currentMessage.content || '';
                 lastMessageInSanitized.content = lastContent + `\n${currentContent}`;

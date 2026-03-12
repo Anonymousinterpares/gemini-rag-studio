@@ -67,8 +67,8 @@ export const App: FC = () => {
 
   const chatConfig = useMemo(() => ({
     coordinator, vectorStore, queryEmbeddingResolver, rerankPromiseResolver,
-    setRerankProgress: () => { }, setActiveSource, setIsModalOpen
-  }), [coordinator, vectorStore, queryEmbeddingResolver, rerankPromiseResolver, setActiveSource, setIsModalOpen]);
+    setRerankProgress: () => { }, setActiveSource, setIsModalOpen, setIsMapPanelOpen
+  }), [coordinator, vectorStore, queryEmbeddingResolver, rerankPromiseResolver, setActiveSource, setIsModalOpen, setIsMapPanelOpen]);
 
   const {
     userInput, setUserInput,

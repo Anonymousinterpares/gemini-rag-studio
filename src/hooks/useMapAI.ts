@@ -84,7 +84,7 @@ function deduplicateSources(sources: MapNodeSource[]): { deduplicated: MapNodeSo
 
 // ─── Granular Tool Definitions ──────────────────────────────────────────────────
 
-const ADD_NODES_TOOL: Tool = {
+export const ADD_NODES_TOOL: Tool = {
     type: 'function',
     function: {
         name: 'add_map_nodes',
@@ -130,7 +130,7 @@ const ADD_NODES_TOOL: Tool = {
     }
 };
 
-const UPDATE_NODE_TOOL: Tool = {
+export const UPDATE_NODE_TOOL: Tool = {
     type: 'function',
     function: {
         name: 'update_map_node',
@@ -236,7 +236,7 @@ function estimateNodeTokens(nodes: MapNode[]): number {
 }
 
 // ─── Node layout helpers ─────────────────────────────────────────────────────────
-function gridLayout(nodes: { id: string; label: string; entityType?: string; description?: string; sources?: MapNodeSource[]; timestamp?: string; certaintyScore?: number }[], existingCount: number): MapNode[] {
+export function gridLayout(nodes: { id: string; label: string; entityType?: string; description?: string; sources?: MapNodeSource[]; timestamp?: string; certaintyScore?: number }[], existingCount: number): MapNode[] {
     const cols = Math.max(4, Math.ceil(Math.sqrt(nodes.length)));
     return nodes.map((n, i) => ({
         id: n.id,
@@ -295,123 +295,183 @@ function autoLayout(nodes: MapNode[], edges: MapEdge[], direction: 'TB' | 'LR' =
     });
 }
 
+export interface ToolExecutionResult {
+    addedNodes: string[];
+    updatedNodes: string[];
+    skippedNodes: number;
+    addedEdges: number;
+    removedEdges: number;
+    totalRequested: number;
+}
+
+interface RequestedNode {
+    id: string;
+    label: string;
+    entityType?: string;
+    description?: string;
+    sources?: MapNodeSource[];
+    timestamp?: string;
+    certaintyScore?: number;
+}
+
 // ─── Apply tool calls from LLM response ────────────────────────────────────────
-function applyToolCalls(
+export function applyToolCalls(
     toolCalls: { function: { name: string; arguments: string } }[],
     mapStore: ReturnType<typeof useMapStore.getState>,
-    nodeLayoutFn: (nodes: ReturnType<typeof JSON.parse>) => MapNode[]
-) {
+    nodeLayoutFn: (nodes: RequestedNode[]) => MapNode[]
+): ToolExecutionResult {
+    const result: ToolExecutionResult = {
+        addedNodes: [],
+        updatedNodes: [],
+        skippedNodes: 0,
+        addedEdges: 0,
+        removedEdges: 0,
+        totalRequested: 0
+    };
+
     for (const tc of toolCalls) {
-        const args = JSON.parse(tc.function.arguments);
-        switch (tc.function.name) {
-            case 'add_map_nodes': {
-                const newNodes = nodeLayoutFn(args.nodes || []);
+        try {
+            const args = JSON.parse(tc.function.arguments);
+            switch (tc.function.name) {
+                case 'add_map_nodes': {
+                    const requestedNodes: RequestedNode[] = args.nodes || [];
+                    result.totalRequested += requestedNodes.length;
 
-                // For each new node, calculate citation count and mass
-                newNodes.forEach(node => {
-                    const { uniqueCount } = deduplicateSources(node.data.sources || []);
-                    node.data.citationCount = uniqueCount;
-                    node.data.mass = calculateNodeMass(node, mapStore.edges);
-                });
+                    // Surgical check: ensure we don't add nodes that already exist by ID
+                    const existingIds = new Set(mapStore.nodes.map(n => n.id));
+                    const filteredRequested = requestedNodes.filter((n: RequestedNode) => {
+                        if (existingIds.has(n.id)) {
+                            result.skippedNodes++;
+                            return false;
+                        }
+                        return true;
+                    });
 
-                mapStore.patchNodes({ add: newNodes });
-                break;
-            }
-            case 'update_map_node': {
-                const { id, description, timestamp, certaintyScore, tags, sources } = args;
-                const updatePatch: Partial<MapNode['data']> & { id: string } = { id };
-                if (description !== undefined) updatePatch.description = description;
-                if (timestamp !== undefined) {
-                    updatePatch.timestamp = timestamp;
-                    updatePatch.isTimestampVerified = false;
+                    const newNodes = nodeLayoutFn(filteredRequested);
+
+                    // For each new node, calculate citation count and mass
+                    newNodes.forEach(node => {
+                        const { deduplicated, uniqueCount } = deduplicateSources(node.data.sources || []);
+                        node.data.sources = deduplicated; // Use deduplicated sources
+                        node.data.citationCount = uniqueCount;
+                        node.data.mass = calculateNodeMass(node, mapStore.edges);
+                        result.addedNodes.push(node.data.label);
+                    });
+
+                    mapStore.patchNodes({ add: newNodes });
+                    break;
                 }
-                if (certaintyScore !== undefined) {
-                    updatePatch.certaintyScore = certaintyScore;
-                    updatePatch.isCertaintyVerified = false;
+                case 'update_map_node': {
+                    const { id, description, timestamp, certaintyScore, tags, sources } = args;
+                    result.totalRequested++;
+
+                    const updatePatch: Partial<MapNode['data']> & { id: string } = { id };
+                    if (description !== undefined) updatePatch.description = description;
+                    if (timestamp !== undefined) {
+                        updatePatch.timestamp = timestamp;
+                        updatePatch.isTimestampVerified = false;
+                    }
+                    if (certaintyScore !== undefined) {
+                        updatePatch.certaintyScore = certaintyScore;
+                        updatePatch.isCertaintyVerified = false;
+                    }
+                    if (tags !== undefined) updatePatch.tags = tags;
+
+                    // Recalculate citation count if sources are updated
+                    if (sources !== undefined) {
+                        const { deduplicated, uniqueCount } = deduplicateSources(sources);
+                        updatePatch.sources = deduplicated; // Use deduplicated sources
+                        updatePatch.citationCount = uniqueCount;
+                    }
+
+                    // Find existing node to recalculate mass based on potentially updated data
+                    const existingNode = mapStore.nodes.find(n => n.id === id);
+                    if (existingNode) {
+                        const mergedNode = {
+                            ...existingNode,
+                            data: { ...existingNode.data, ...updatePatch }
+                        };
+                        updatePatch.mass = calculateNodeMass(mergedNode, mapStore.edges);
+                        result.updatedNodes.push(existingNode.data.label);
+                        mapStore.patchNodes({ update: [updatePatch] });
+                    } else {
+                        result.skippedNodes++;
+                    }
+                    break;
                 }
-                if (tags !== undefined) updatePatch.tags = tags;
+                case 'add_map_edges': {
+                    const edgesArgs = args.edges || [];
+                    result.totalRequested += edgesArgs.length;
 
-                // Recalculate citation count if sources are updated
-                if (sources !== undefined) {
-                    updatePatch.sources = sources;
-                    const { uniqueCount } = deduplicateSources(sources);
-                    updatePatch.citationCount = uniqueCount;
+                    const newEdges: MapEdge[] = edgesArgs.map((e: { source: string; target: string; label?: string; connectionType?: string; certainty?: string }) => ({
+                        id: `edge-${Date.now()}-${Math.random().toString(36).slice(2)}-${e.source}-${e.target}`,
+                        source: e.source,
+                        target: e.target,
+                        label: e.label,
+                        data: {
+                            connectionType: (e.connectionType || 'related_to') as import('../types').ConnectionType,
+                            certainty: (e.certainty || 'confirmed') as 'confirmed' | 'suspected' | 'disproven',
+                        },
+                    }));
+                    mapStore.patchEdges({ add: newEdges });
+                    result.addedEdges += newEdges.length;
+
+                    // Mass depends on internal edges, so recalculate mass for source/target nodes
+                    const nodeUpdates: (Partial<MapNode['data']> & { id: string })[] = [];
+                    const updatedEdges = [...mapStore.edges, ...newEdges];
+
+                    newEdges.forEach(edge => {
+                        [edge.source, edge.target].forEach(nodeId => {
+                            const node = mapStore.nodes.find(n => n.id === nodeId);
+                            if (node && !nodeUpdates.some(u => u.id === nodeId)) {
+                                nodeUpdates.push({
+                                    id: nodeId,
+                                    mass: calculateNodeMass(node, updatedEdges)
+                                });
+                            }
+                        });
+                    });
+
+                    if (nodeUpdates.length > 0) {
+                        mapStore.patchNodes({ update: nodeUpdates });
+                    }
+                    break;
                 }
+                case 'remove_map_edge': {
+                    const edgeIdsToRemove = args.edgeIds || [];
+                    result.totalRequested += edgeIdsToRemove.length;
 
-                // Find existing node to recalculate mass based on potentially updated data
-                const existingNode = mapStore.nodes.find(n => n.id === id);
-                if (existingNode) {
-                    const mergedNode = {
-                        ...existingNode,
-                        data: { ...existingNode.data, ...updatePatch }
-                    };
-                    updatePatch.mass = calculateNodeMass(mergedNode, mapStore.edges);
-                }
+                    const edgesAfterRemoval = mapStore.edges.filter(e => !edgeIdsToRemove.includes(e.id));
+                    const nodesToUpdate = new Set<string>();
 
-                mapStore.patchNodes({ update: [updatePatch] });
-                break;
-            }
-            case 'add_map_edges': {
-                const newEdges: MapEdge[] = (args.edges || []).map((e: { source: string; target: string; label?: string; connectionType?: string; certainty?: string }) => ({
-                    id: `edge-${Date.now()}-${Math.random().toString(36).slice(2)}-${e.source}-${e.target}`,
-                    source: e.source,
-                    target: e.target,
-                    label: e.label,
-                    data: {
-                        connectionType: (e.connectionType || 'related_to') as import('../types').ConnectionType,
-                        certainty: (e.certainty || 'confirmed') as 'confirmed' | 'suspected' | 'disproven',
-                    },
-                }));
-                mapStore.patchEdges({ add: newEdges });
-
-                // Mass depends on internal edges, so recalculate mass for source/target nodes
-                const nodeUpdates: (Partial<MapNode['data']> & { id: string })[] = [];
-                const updatedEdges = [...mapStore.edges, ...newEdges];
-
-                newEdges.forEach(edge => {
-                    [edge.source, edge.target].forEach(nodeId => {
-                        const node = mapStore.nodes.find(n => n.id === nodeId);
-                        if (node && !nodeUpdates.some(u => u.id === nodeId)) {
-                            nodeUpdates.push({
-                                id: nodeId,
-                                mass: calculateNodeMass(node, updatedEdges)
-                            });
+                    mapStore.edges.forEach(e => {
+                        if (edgeIdsToRemove.includes(e.id)) {
+                            nodesToUpdate.add(e.source);
+                            nodesToUpdate.add(e.target);
                         }
                     });
-                });
 
-                if (nodeUpdates.length > 0) {
-                    mapStore.patchNodes({ update: nodeUpdates });
-                }
-                break;
-            }
-            case 'remove_map_edge': {
-                const edgeIdsToRemove = args.edgeIds || [];
-                const edgesAfterRemoval = mapStore.edges.filter(e => !edgeIdsToRemove.includes(e.id));
-                const nodesToUpdate = new Set<string>();
+                    mapStore.patchEdges({ remove: edgeIdsToRemove });
+                    result.removedEdges += edgeIdsToRemove.length;
 
-                mapStore.edges.forEach(e => {
-                    if (edgeIdsToRemove.includes(e.id)) {
-                        nodesToUpdate.add(e.source);
-                        nodesToUpdate.add(e.target);
+                    // Recalculate mass for nodes affected by edge removal
+                    const nodeUpdates = Array.from(nodesToUpdate).map(nodeId => {
+                        const node = mapStore.nodes.find(n => n.id === nodeId);
+                        return node ? { id: nodeId, mass: calculateNodeMass(node, edgesAfterRemoval) } : null;
+                    }).filter((u): u is { id: string, mass: number } => u !== null);
+
+                    if (nodeUpdates.length > 0) {
+                        mapStore.patchNodes({ update: nodeUpdates });
                     }
-                });
-
-                mapStore.patchEdges({ remove: edgeIdsToRemove });
-
-                // Recalculate mass for nodes affected by edge removal
-                const nodeUpdates = Array.from(nodesToUpdate).map(nodeId => {
-                    const node = mapStore.nodes.find(n => n.id === nodeId);
-                    return node ? { id: nodeId, mass: calculateNodeMass(node, edgesAfterRemoval) } : null;
-                }).filter((u): u is { id: string, mass: number } => u !== null);
-
-                if (nodeUpdates.length > 0) {
-                    mapStore.patchNodes({ update: nodeUpdates });
+                    break;
                 }
-                break;
             }
+        } catch (e) {
+            console.error('[applyToolCalls] Error parsing arguments for', tc.function.name, e);
         }
     }
+
+    return result;
 }
 
 // ─── System prompts ────────────────────────────────────────────────────────────

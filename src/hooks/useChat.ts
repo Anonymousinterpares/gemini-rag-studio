@@ -13,6 +13,8 @@ import { useDossierStore } from '../store/useDossierStore';
 import { searchWeb } from '../utils/search';
 import { sectionizeMessage, createFuzzyRegex, CITATION_REGEX, SEARCH_RESULTS_REGEX } from '../utils/chatUtils';
 import { getDossierTools, handleDossierToolCall, DOSSIER_COMPILER_PROMPT } from '../agents/dossier';
+import { RouteDecision } from '../agents/router_v2';
+import { ADD_NODES_TOOL, UPDATE_NODE_TOOL, applyToolCalls, gridLayout } from './useMapAI';
 
 
 const SEARCH_TOOL: Tool = {
@@ -82,6 +84,20 @@ FORMATTING RULES:
 
 {summaries_section}`;
 
+const MAPPING_MODE_PROMPT = `You are a Mapping Specialist for an investigation tool. 
+Your ONLY goal is to update the investigation map (nodes and connections) based on the user's request and the provided context.
+
+CRITICAL RULES:
+1. YOU MUST USE THE TOOLS: 'add_map_nodes', 'update_map_node', 'add_map_edges'.
+2. DO NOT output raw Markdown lists or text descriptions of the entities.
+3. If the user wants to add/update something, EMIT THE TOOL CALL.
+4. If the information is in the files, use the provided source IDs in the tool call's 'sources' parameter.
+5. If the request is ambiguous, you may ask a brief clarification question, but PRIORITIZE tool usage if any data is clear.
+6. DO NOT explain what you are doing. Just execute the map actions.
+
+{date_section}
+{summaries_section}`;
+
 interface UseChatProps {
     coordinator: React.MutableRefObject<ComputeCoordinator | null> | null;
     vectorStore: React.MutableRefObject<VectorStore | null> | null;
@@ -90,6 +106,7 @@ interface UseChatProps {
     setRerankProgress: (progress: JobProgress | null) => void;
     setActiveSource: React.Dispatch<React.SetStateAction<{ file: AppFile, chunks: SearchResult[] } | null>>;
     setIsModalOpen: React.Dispatch<React.SetStateAction<boolean>>;
+    setIsMapPanelOpen: (isOpen: boolean) => void;
 }
 
 export const useChat = ({
@@ -99,6 +116,7 @@ export const useChat = ({
     rerankPromiseResolver,
     setActiveSource,
     setIsModalOpen,
+    setIsMapPanelOpen,
 }: UseChatProps) => {
     const {
         chatHistory, setChatHistory,
@@ -159,7 +177,7 @@ export const useChat = ({
         }
     }, [coordinator, appSettings.isLoggingEnabled, setTokenUsage]);
 
-    const getSystemPrompt = useCallback((relevantDocIds: string[] = []) => {
+    const getSystemPrompt = useCallback((relevantDocIds: string[] = [], mode?: RouteDecision['mode']) => {
         let summariesSection = '';
         const relevantSummaries = Object.entries(summaries).filter(([id]) => relevantDocIds.includes(id));
 
@@ -174,14 +192,18 @@ export const useChat = ({
             summariesSection = `Here is a high-level summary of the documents relevant to your query:\n\n${summaryList}\n\n`;
         }
 
-        const template = appSettings.isChatModeEnabled ? CHAT_MODE_PROMPT_TEMPLATE : AGENT_SYSTEM_PROMPT_TEMPLATE;
+        let template = appSettings.isChatModeEnabled ? CHAT_MODE_PROMPT_TEMPLATE : AGENT_SYSTEM_PROMPT_TEMPLATE;
+        if (mode === 'MAPPING') {
+            template = MAPPING_MODE_PROMPT;
+        }
+
         const docOnly = (appSettings.docOnlyMode && !appSettings.isChatModeEnabled)
             ? `\n\nDOC-ONLY MODE: You must answer strictly using the provided document contexts and conversation. Do not use external or general knowledge. If the documents do not contain the answer, reply exactly: "I could not find an answer in the provided documents."\n`
             : '';
 
         let finalPrompt = template.replace('{summaries_section}', summariesSection + docOnly);
 
-        if (appSettings.isChatModeEnabled) {
+        if (appSettings.isChatModeEnabled || mode === 'MAPPING') {
             const now = new Date();
             const dateStr = now.toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
             const timeStr = now.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -301,10 +323,50 @@ export const useChat = ({
         try {
             const apiKey = apiKeys[selectedProvider];
 
-            // Prioritize explicit Case File requests
+            // ── Phase 1: Intent Routing ──────────────────────────────────────────
             let isCaseFileMode = forceCaseFile;
+            let routeMode: import('../agents/router_v2').RouteDecision['mode'] = 'CHAT';
+            let complexity: 'factoid' | 'overview' | 'synthesis' | 'comparison' | 'reasoning' | 'case_file' | 'mapping' | 'unknown' = 'unknown';
 
-            // Handle Case File Feedback Step
+            if (!isCaseFileMode && appSettings.enableRouterV2) {
+                try {
+                    const { decideRouteV2 } = await import('../agents/router_v2');
+                    const embedQueryFn = async (q: string) => {
+                        const p = new Promise<number[]>((resolve) => { if (queryEmbeddingResolver) queryEmbeddingResolver.current = resolve; });
+                        if (coordinator.current) {
+                            coordinator.current.addJob('Embed Query', [{ id: `query-${Date.now()}`, priority: TaskPriority.P1_Primary, payload: { type: TaskType.EmbedQuery, query: q } }]);
+                        }
+                        return await p;
+                    };
+
+                    if (!vectorStore?.current) throw new Error("Vector store not initialized.");
+
+                    const route = await decideRouteV2({
+                        query, history, filesLoaded: files.length > 0, vectorStore: vectorStore.current,
+                        model: selectedModel, apiKey, settings: appSettings, embedQuery: embedQueryFn,
+                        onTokenUsage: (usage) => {
+                            perRequestTokenUsage.promptTokens += usage.promptTokens;
+                            perRequestTokenUsage.completionTokens += usage.completionTokens;
+                            setTokenUsage(prev => ({
+                                promptTokens: prev.promptTokens + usage.promptTokens,
+                                completionTokens: prev.completionTokens + usage.completionTokens
+                            }));
+                        }
+                    });
+                    routeMode = route.mode;
+                    complexity = route.complexity || 'unknown';
+
+                    if (routeMode === 'CASE_FILE') {
+                        isCaseFileMode = true;
+                    }
+                } catch (_e) {
+                    if (appSettings.isLoggingEnabled) console.warn('[RouterV2] Failed', _e);
+                }
+            }
+
+            // ── Phase 2: Action Dispatch ─────────────────────────────────────────
+
+            // 1. Case File Feedback Step
             if (caseFileState.isAwaitingFeedback && caseFileState.metadata) {
                 const { generateCaseFile, filterVisibleHistory } = await import('../agents/case_file');
                 const embedQueryFn = async (q: string) => {
@@ -350,10 +412,63 @@ export const useChat = ({
                 return;
             }
 
-            // If Chat Mode is ON, enable search capabilities (UNLESS we are in Case File mode)
-            if (appSettings.isChatModeEnabled && !isCaseFileMode) {
+            // 2. Deep Analysis Dispatch
+            if (routeMode.startsWith('DEEP_ANALYSIS') && appSettings.enableDeepAnalysisV1) {
+                const { runDeepAnalysis } = await import('../agents/deep_analysis');
+                const level = appSettings.deepAnalysisLevel === 3 || routeMode === 'DEEP_ANALYSIS_L3' ? 3 : 2;
+                const embedQueryFn = async (q: string) => {
+                    const p = new Promise<number[]>((resolve) => { if (queryEmbeddingResolver) queryEmbeddingResolver.current = resolve; });
+                    if (coordinator.current) {
+                        coordinator.current.addJob('Embed Query', [{ id: `query-${Date.now()}`, priority: TaskPriority.P1_Primary, payload: { type: TaskType.EmbedQuery, query: q } }]);
+                    }
+                    return await p;
+                };
+
+                const da = await runDeepAnalysis({
+                    query, history: newHistory, vectorStore: vectorStore!.current!,
+                    model: selectedModel, apiKey, settings: appSettings, embedQuery: embedQueryFn,
+                    rerank: appSettings.isRerankingEnabled ? async (rerankQuery, docs) => {
+                        const tasks: Omit<ComputeTask, 'jobId'>[] = [];
+                        docs.forEach((d, i) => tasks.push({
+                            id: `rerank-${i}`,
+                            priority: TaskPriority.P1_Primary,
+                            payload: {
+                                type: TaskType.Rerank,
+                                query: rerankQuery,
+                                documents: [{ ...d, parentChunkIndex: (d as SearchResult).parentChunkIndex ?? -1 }]
+                            }
+                        }));
+                        const rerankPromise = new Promise<SearchResult[]>((resolve) => { if (rerankPromiseResolver) rerankPromiseResolver.current = { resolve, jobId: '', taskResults: [] }; });
+                        if (coordinator.current) {
+                            const jobId = coordinator.current.addJob('Rerank', tasks);
+                            if (rerankPromiseResolver.current) rerankPromiseResolver.current.jobId = jobId;
+                        }
+                        return await rerankPromise;
+                    } : undefined,
+                    level,
+                    onTokenUsage: (usage) => {
+                        perRequestTokenUsage.promptTokens += usage.promptTokens;
+                        perRequestTokenUsage.completionTokens += usage.completionTokens;
+                        setTokenUsage(prev => ({
+                            promptTokens: prev.promptTokens + usage.promptTokens,
+                            completionTokens: prev.completionTokens + usage.completionTokens
+                        }));
+                    }
+                });
+                const finalMsg: ChatMessage = { role: 'model', content: `${da.finalText}<!--searchResults:${JSON.stringify(da.usedResults)}-->`, type: 'case_file_report', tokenUsage: perRequestTokenUsage, elapsedTime: Date.now() - startTime };
+                if (updateIndex !== undefined) {
+                    updateMessage(updateIndex, finalMsg);
+                } else {
+                    setChatHistory([...newHistory, finalMsg]);
+                }
+                setIsLoading(false);
+                return;
+            }
+
+            // 3. Mapping or Chat Mode Dispatch
+            if ((appSettings.isChatModeEnabled || routeMode === 'MAPPING') && !isCaseFileMode) {
                 const currentHistory = [...newHistory];
-                const tools = [SEARCH_TOOL, ...getDossierTools()];
+                const tools = [SEARCH_TOOL, ADD_NODES_TOOL, UPDATE_NODE_TOOL, ...getDossierTools()];
                 let loopCount = 0;
                 const MAX_LOOPS = appSettings.maxSearchLoops;
 
@@ -375,7 +490,7 @@ export const useChat = ({
                         });
                     }
 
-                    const messagesToSend = [{ role: 'system' as const, content: getSystemPrompt() }, ...currentHistory];
+                    const messagesToSend = [{ role: 'system' as const, content: getSystemPrompt([], routeMode) }, ...currentHistory];
 
                     const response = await callGenerateContent(selectedModel, apiKey, messagesToSend, tools);
 
@@ -384,20 +499,10 @@ export const useChat = ({
 
                     // Universal Interceptor: Catch models that invent their own search syntax
                     if (toolCalls.length === 0 && cleanResponseText) {
-                        // ... Match Logic ...
-                        // 1. Match XML-style: <search_web>query</search_web>
                         const xmlMatch = cleanResponseText.match(/<search_web>([\s\S]*?)<\/search_web>/i);
-
-                        // 2. Match Square-style: [search_web: query]
                         const bracketMatch = cleanResponseText.match(/\[search_web:?\s*([\s\S]*?)\]/i);
-
-                        // 3. Match Complex XML: <invoke name="search_web"><parameter name="query">...</parameter></invoke>
                         const invokeMatch = cleanResponseText.match(/<invoke name="search_web">[\s\S]*?<parameter name="query">([\s\S]*?)<\/parameter>[\s\S]*?<\/invoke>/i);
-
-                        // 4. Match Markdown Table: | tool | search_web | ... | query | ... |
                         const tableMatch = cleanResponseText.match(/\|\s*tool\s*\|\s*search_web\s*\|[\s\S]*?\|\s*query\s*\|\s*([\s\S]*?)\s*\|/i);
-
-                        // 5. Match JSON-style anywhere in text
                         const jsonMatch = cleanResponseText.match(/\{[\s\S]*?"query"[\s\S]*?\}/i) || cleanResponseText.match(/\{[\s\S]*?"search"[\s\S]*?\}/i);
 
                         let extractedQuery = '';
@@ -424,13 +529,11 @@ export const useChat = ({
                         }
 
                         if (extractedQuery) {
-                            console.log('[Chat] Intercepted non-standard tool call:', extractedQuery);
                             toolCalls = [{
                                 id: `intercepted_${Date.now()}`,
                                 type: 'function',
                                 function: { name: 'search_web', arguments: JSON.stringify({ query: extractedQuery }) }
                             }];
-                            // Clean the text response so the user doesn't see the raw command
                             cleanResponseText = cleanResponseText.replace(matchedText, '').trim();
                         }
                     }
@@ -443,7 +546,8 @@ export const useChat = ({
                             tokenUsage: perRequestTokenUsage,
                             elapsedTime: Date.now() - startTime,
                             isStreaming: false
-                        };                        if (updateIndex !== undefined) {
+                        };
+                        if (updateIndex !== undefined) {
                             updateMessage(updateIndex, finalMsg);
                         } else {
                             setChatHistory([...currentHistory, finalMsg]);
@@ -468,31 +572,23 @@ export const useChat = ({
                             try {
                                 const args = JSON.parse(toolCall.function.arguments);
                                 const searchQuery = args.query || args.search || toolCall.function.arguments;
-                                console.log(`[Chat] Executing search_web with query: "${searchQuery}"`);
-
                                 const results = await searchWeb(searchQuery);
 
-                                // ── Map Update Queue ───────────────────────────────────────────────
-                                // Forward results to the map's update queue (fire-and-forget; map
-                                // may not be open, queue will drain lazily via useMapAI).
                                 try {
                                     const { useMapUpdateQueue } = await import('../store/useMapUpdateQueue');
                                     const resultArray = Array.isArray(results) ? results : [results];
                                     if (resultArray.length > 0) {
                                         useMapUpdateQueue.getState().enqueueUpdate(resultArray);
                                     }
-                                } catch { /* map store not available – non-fatal */ }
-                                // ───────────────────────────────────────────────────────────────────
+                                } catch { /* map store not available */ }
 
-                                const toolOutput = {
+                                currentHistory.push({
                                     role: 'tool' as const,
                                     tool_call_id: toolCall.id,
                                     name: toolCall.function.name,
                                     content: JSON.stringify(results)
-                                };
-                                currentHistory.push(toolOutput);
+                                });
                             } catch (_e) {
-                                console.error('[Chat] Search tool error:', _e);
                                 currentHistory.push({
                                     role: 'tool' as const,
                                     tool_call_id: toolCall.id,
@@ -503,17 +599,14 @@ export const useChat = ({
                         } else if (toolCall.function.name === 'update_dossier') {
                             try {
                                 const args = JSON.parse(toolCall.function.arguments);
-                                console.log(`[Chat] Executing update_dossier for section: "${args.sectionTitle}"`);
                                 const result = await handleDossierToolCall(toolCall.function.name, args);
-                                const toolOutput = {
+                                currentHistory.push({
                                     role: 'tool' as const,
                                     tool_call_id: toolCall.id,
                                     name: toolCall.function.name,
                                     content: JSON.stringify(result)
-                                };
-                                currentHistory.push(toolOutput);
+                                });
                             } catch (_e) {
-                                console.error('[Chat] Dossier tool error:', _e);
                                 currentHistory.push({
                                     role: 'tool' as const,
                                     tool_call_id: toolCall.id,
@@ -521,15 +614,33 @@ export const useChat = ({
                                     content: JSON.stringify({ error: _e instanceof Error ? _e.message : "Dossier update failed" })
                                 });
                             }
+                        } else if (toolCall.function.name === 'add_map_nodes' || toolCall.function.name === 'update_map_node' || toolCall.function.name === 'add_map_edges' || toolCall.function.name === 'remove_map_edge') {
+                            try {
+                                const mapStore = useMapStore.getState();
+                                const executionResult = applyToolCalls([toolCall], mapStore, (nodes) => gridLayout(nodes, mapStore.nodes.length));
+                                setIsMapPanelOpen(true);
+                                currentHistory.push({
+                                    role: 'tool' as const,
+                                    tool_call_id: toolCall.id,
+                                    name: toolCall.function.name,
+                                    content: JSON.stringify({ success: true, ...executionResult })
+                                });
+                            } catch (_e) {
+                                currentHistory.push({
+                                    role: 'tool' as const,
+                                    tool_call_id: toolCall.id,
+                                    name: toolCall.function.name,
+                                    content: JSON.stringify({ error: _e instanceof Error ? _e.message : "Map update failed" })
+                                });
+                            }
                         }
                     }
-
                     loopCount++;
                 }
 
                 // Final attempt after reaching limit
-                const finalPrompt = "SYSTEM: You have reached the maximum number of searches allowed for this turn. Please synthesize all the information gathered so far (including the web search results above) and provide your final comprehensive answer to the user now.";
-                const finalResponse = await callGenerateContent(selectedModel, apiKey, [{ role: 'system' as const, content: getSystemPrompt() }, ...currentHistory, { role: 'user', content: finalPrompt }], []);
+                const finalPrompt = "SYSTEM: You have reached the maximum number of searches allowed for this turn. Please synthesize all the information gathered so far and provide your final comprehensive answer to the user now.";
+                const finalResponse = await callGenerateContent(selectedModel, apiKey, [{ role: 'system' as const, content: getSystemPrompt([], routeMode) }, ...currentHistory, { role: 'user', content: finalPrompt }], []);
 
                 const finalMsg: ChatMessage = {
                     role: 'model',
@@ -548,96 +659,7 @@ export const useChat = ({
                 return;
             }
 
-            let decision = 'GENERAL_CONVERSATION';
-            let complexity: 'factoid' | 'overview' | 'synthesis' | 'comparison' | 'reasoning' | 'case_file' | 'unknown' = 'unknown';
-
-            if (!isCaseFileMode) {
-                const routerPrompt = `Router Agent: GENERAL_CONVERSATION or KNOWLEDGE_SEARCH. Query: "${query}"`;
-                const routerResponse = await callGenerateContent(selectedModel, apiKey, [{ role: 'user', content: routerPrompt }]);
-                decision = (routerResponse.text || '').trim().toUpperCase().includes('KNOWLEDGE_SEARCH') ? 'KNOWLEDGE_SEARCH' : 'GENERAL_CONVERSATION';
-
-                if (appSettings.enableRouterV2) {
-                    try {
-                        const { decideRouteV2 } = await import('../agents/router_v2');
-                        const embedQueryFn = async (q: string) => {
-                            const p = new Promise<number[]>((resolve) => { if (queryEmbeddingResolver) queryEmbeddingResolver.current = resolve; });
-                            if (coordinator.current) {
-                                coordinator.current.addJob('Embed Query', [{ id: `query-${Date.now()}`, priority: TaskPriority.P1_Primary, payload: { type: TaskType.EmbedQuery, query: q } }]);
-                            }
-                            return await p;
-                        };
-
-                        if (!vectorStore?.current) throw new Error("Vector store not initialized.");
-
-                        const route = await decideRouteV2({
-                            query, history, filesLoaded: files.length > 0, vectorStore: vectorStore.current,
-                            model: selectedModel, apiKey, settings: appSettings, embedQuery: embedQueryFn,
-                            onTokenUsage: (usage) => {
-                                perRequestTokenUsage.promptTokens += usage.promptTokens;
-                                perRequestTokenUsage.completionTokens += usage.completionTokens;
-                                setTokenUsage(prev => ({
-                                    promptTokens: prev.promptTokens + usage.promptTokens,
-                                    completionTokens: prev.completionTokens + usage.completionTokens
-                                }));
-                            }
-                        });
-                        decision = route.mode === 'CHAT' ? 'GENERAL_CONVERSATION' : 'KNOWLEDGE_SEARCH';
-                        complexity = route.complexity || 'unknown';
-
-                        if (route.mode === 'CASE_FILE') {
-                            isCaseFileMode = true;
-                        }
-
-                        if (route.mode.startsWith('DEEP_ANALYSIS') && appSettings.enableDeepAnalysisV1) {
-                            const { runDeepAnalysis } = await import('../agents/deep_analysis');
-                            const level = appSettings.deepAnalysisLevel === 3 || route.mode === 'DEEP_ANALYSIS_L3' ? 3 : 2;
-                            const da = await runDeepAnalysis({
-                                query, history: newHistory, vectorStore: vectorStore.current,
-                                model: selectedModel, apiKey, settings: appSettings, embedQuery: embedQueryFn,
-                                rerank: appSettings.isRerankingEnabled ? async (rerankQuery, docs) => {
-                                    const tasks: Omit<ComputeTask, 'jobId'>[] = [];
-                                    docs.forEach((d, i) => tasks.push({
-                                        id: `rerank-${i}`,
-                                        priority: TaskPriority.P1_Primary,
-                                        payload: {
-                                            type: TaskType.Rerank,
-                                            query: rerankQuery,
-                                            documents: [{ ...d, parentChunkIndex: (d as SearchResult).parentChunkIndex ?? -1 }]
-                                        }
-                                    }));
-                                    const rerankPromise = new Promise<SearchResult[]>((resolve) => { if (rerankPromiseResolver) rerankPromiseResolver.current = { resolve, jobId: '', taskResults: [] }; });
-                                    if (coordinator.current) {
-                                        const jobId = coordinator.current.addJob('Rerank', tasks);
-                                        if (rerankPromiseResolver.current) rerankPromiseResolver.current.jobId = jobId;
-                                    }
-                                    return await rerankPromise;
-                                } : undefined,
-                                level,
-                                onTokenUsage: (usage) => {
-                                    perRequestTokenUsage.promptTokens += usage.promptTokens;
-                                    perRequestTokenUsage.completionTokens += usage.completionTokens;
-                                    setTokenUsage(prev => ({
-                                        promptTokens: prev.promptTokens + usage.promptTokens,
-                                        completionTokens: prev.completionTokens + usage.completionTokens
-                                    }));
-                                }
-                            });
-                            const finalMsg: ChatMessage = { role: 'model', content: `${da.finalText}<!--searchResults:${JSON.stringify(da.usedResults)}-->`, type: 'case_file_report', tokenUsage: perRequestTokenUsage, elapsedTime: Date.now() - startTime };
-                            if (updateIndex !== undefined) {
-                                updateMessage(updateIndex, finalMsg);
-                            } else {
-                                setChatHistory([...newHistory, finalMsg]);
-                            }
-                            setIsLoading(false);
-                            return;
-                        }
-                    } catch (_e) {
-                        if (appSettings.isLoggingEnabled) console.warn('[RouterV2] Failed', _e);
-                    }
-                }
-
-            }
-
+            // 4. Case File Mode Dispatch
             if (isCaseFileMode) {
                 const { analyzeChatForCaseFile } = await import('../agents/case_file');
                 const analysis = await analyzeChatForCaseFile({
@@ -688,6 +710,16 @@ Or just tell me what specific aspects you'd like me to focus on.`;
                 return;
             }
 
+            // 5. Default RAG (Agent Search) Dispatch
+            let decision = 'GENERAL_CONVERSATION';
+            if (!appSettings.enableRouterV2) {
+                const routerPrompt = `Router Agent: GENERAL_CONVERSATION or KNOWLEDGE_SEARCH. Query: "${query}"`;
+                const routerResponse = await callGenerateContent(selectedModel, apiKey, [{ role: 'user', content: routerPrompt }]);
+                decision = (routerResponse.text || '').trim().toUpperCase().includes('KNOWLEDGE_SEARCH') ? 'KNOWLEDGE_SEARCH' : 'GENERAL_CONVERSATION';
+            } else {
+                decision = routeMode === 'CHAT' ? 'GENERAL_CONVERSATION' : 'KNOWLEDGE_SEARCH';
+            }
+
             if (decision === 'GENERAL_CONVERSATION') {
                 const llmResponse = await callGenerateContent(selectedModel, apiKey, [{ role: 'system', content: getSystemPrompt() }, ...newHistory]);
                 const finalMsg: ChatMessage = {
@@ -714,9 +746,7 @@ Or just tell me what specific aspects you'd like me to focus on.`;
 
             if (!vectorStore?.current) throw new Error("Vector store not initialized.");
 
-            // DIAGNOSTIC LOGGING & DYNAMIC WINDOW
             const initialCandidates = vectorStore.current.search(queryEmbedding, appSettings.numInitialCandidates);
-
             let finalChunkCount = appSettings.numFinalContextChunks;
             if (complexity === 'overview' || complexity === 'synthesis') {
                 finalChunkCount = Math.min(20, finalChunkCount * 2);
@@ -732,7 +762,7 @@ Or just tell me what specific aspects you'd like me to focus on.`;
             if (searchResults.length === 0 && files.length > 0) {
                 const finalMsg: ChatMessage = {
                     role: 'model',
-                    content: `I couldn't find any relevant information in your documents for this query. The search threshold might be too restrictive, or the documents may not contain the answer.`,
+                    content: `I couldn't find any relevant information in your documents for this query.`,
                     tokenUsage: perRequestTokenUsage,
                     elapsedTime: Date.now() - startTime
                 };
@@ -779,7 +809,7 @@ Or just tell me what specific aspects you'd like me to focus on.`;
             setIsLoading(false);
             setAbortController(null);
         }
-    }, [isLoading, appSettings, coordinator, vectorStore, queryEmbeddingResolver, rerankPromiseResolver, apiKeys, selectedProvider, selectedModel, setIsLoading, setChatHistory, getSystemPrompt, waitForSummaries, files, setTokenUsage, setAbortController, caseFileState, setCaseFileState, updateMessage]);
+    }, [isLoading, appSettings, coordinator, vectorStore, queryEmbeddingResolver, rerankPromiseResolver, apiKeys, selectedProvider, selectedModel, setIsLoading, setChatHistory, getSystemPrompt, waitForSummaries, files, setTokenUsage, setAbortController, caseFileState, setCaseFileState, updateMessage, setIsMapPanelOpen]);
 
     const handleRedo = useCallback(async (index: number) => {
         const messageToRedo = chatHistory[index];

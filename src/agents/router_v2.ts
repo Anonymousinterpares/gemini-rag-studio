@@ -9,10 +9,10 @@ import { Model } from '../types';
 import { filterVisibleHistory } from '../utils/chatUtils';
 
 export type RouteDecision = {
-  mode: 'CHAT' | 'RAG' | 'DEEP_ANALYSIS_L1' | 'DEEP_ANALYSIS_L2' | 'DEEP_ANALYSIS_L3' | 'CASE_FILE';
+  mode: 'CHAT' | 'RAG' | 'DEEP_ANALYSIS_L1' | 'DEEP_ANALYSIS_L2' | 'DEEP_ANALYSIS_L3' | 'CASE_FILE' | 'MAPPING';
   reason: string;
   preResults?: SearchResult[];
-  complexity?: 'factoid' | 'overview' | 'synthesis' | 'comparison' | 'reasoning' | 'case_file' | 'unknown';
+  complexity?: 'factoid' | 'overview' | 'synthesis' | 'comparison' | 'reasoning' | 'case_file' | 'mapping' | 'unknown';
 };
 
 export async function decideRouteV2(opts: {
@@ -69,17 +69,19 @@ Context History:
 ${historyText}
 
 Query: ${query}
-Categories: factoid, overview, synthesis, comparison, reasoning, case_file
-Note: case_file is for requests to generate an extensive, structured report, document, or case study based on the discussion.
+Categories: factoid, overview, synthesis, comparison, reasoning, case_file, mapping
+Note: 
+- case_file is for requests to generate an extensive, structured report or document.
+- mapping is for requests to add, update, remove, or link entities on the investigation map (e.g., "add to map", "create node", "link these").
 Return only one word.` },
     ]);
     if (onTokenUsage) {
       onTokenUsage({ promptTokens: cls.usage.promptTokens, completionTokens: cls.usage.completionTokens });
     }
     const t = (cls.text || '').trim().toLowerCase();
-    const categories = ['factoid', 'overview', 'synthesis', 'comparison', 'reasoning', 'case_file'];
+    const categories = ['factoid', 'overview', 'synthesis', 'comparison', 'reasoning', 'case_file', 'mapping'];
     if (categories.includes(t)) {
-      complexity = t as 'factoid' | 'overview' | 'synthesis' | 'comparison' | 'reasoning' | 'case_file';
+      complexity = t as 'factoid' | 'overview' | 'synthesis' | 'comparison' | 'reasoning' | 'case_file' | 'mapping';
     }
   } catch {
     // ignore; keep unknown
@@ -88,6 +90,10 @@ Return only one word.` },
   // Evidence-aware rules
   const tauLow = settings.relevanceThreshold ?? 0.25;
   const goodEvidence = maxSim >= tauLow && docDiversity >= 1;
+
+  if (complexity === 'mapping') {
+    return { mode: 'MAPPING', reason: 'User requested a map action.', preResults, complexity };
+  }
 
   if (complexity === 'case_file') {
     return { mode: 'CASE_FILE', reason: 'User requested an extensive report (Case File).', preResults, complexity };

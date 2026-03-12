@@ -174,7 +174,39 @@ export const MessageItem: FC<MessageItemProps> = ({
                     ) : (
                         <div className="message-row">
                             <div className="message-main-content">
-                                {msg.role === 'model' ? (() => {
+                                {msg.role === 'tool' ? (() => {
+                                    // Handle Map Tool Results specifically
+                                    const isMappingTool = msg.name === 'add_map_nodes' || msg.name === 'update_map_node' || msg.name === 'add_map_edges' || msg.name === 'remove_map_edge';
+                                    if (isMappingTool) {
+                                        try {
+                                            const data = JSON.parse(msg.content || '{}');
+                                            return (
+                                                <div className="map-update-badge" style={{
+                                                    background: 'rgba(0, 255, 128, 0.05)',
+                                                    border: '1px solid var(--accent-color)',
+                                                    padding: '12px',
+                                                    borderRadius: '8px',
+                                                    fontSize: '0.9rem',
+                                                    color: 'var(--text-color)',
+                                                    display: 'flex',
+                                                    flexDirection: 'column',
+                                                    gap: '4px'
+                                                }}>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--accent-color)', fontWeight: 'bold' }}>
+                                                        <Network size={16} /> Investigation Map Updated
+                                                    </div>
+                                                    <div style={{ marginLeft: '24px', opacity: 0.9 }}>
+                                                        {data.addedNodes?.length > 0 && <div>Added: {data.addedNodes.join(', ')}</div>}
+                                                        {data.updatedNodes?.length > 0 && <div>Updated: {data.updatedNodes.join(', ')}</div>}
+                                                        {data.addedEdges > 0 && <div>Connections: +{data.addedEdges}</div>}
+                                                        {data.skippedNodes > 0 && <div style={{ color: 'var(--warning-orange)', fontSize: '0.8rem' }}>ℹ️ {data.skippedNodes} duplicates merged (semantically identical)</div>}
+                                                    </div>
+                                                </div>
+                                            );
+                                        } catch { /* fallback to default */ }
+                                    }
+                                    return <div dangerouslySetInnerHTML={handlers.renderModelMessage(msg.content, msg.content)} />;
+                                })() : msg.role === 'model' ? (() => {
                                     const sections = (isLast && msg.role === 'model' && isTyping)
                                         ? sectionizeMessage(activeContent || '')
                                         : (msg.sections || sectionizeMessage(msg.content || ''));
@@ -335,7 +367,7 @@ export const MessageItem: FC<MessageItemProps> = ({
                                         </div>
                                     );
                                 })() : msg.content}
-                                {msg.content && (msg.type === 'case_file_report' || msg.content.startsWith('# Case File')) && (
+                                {msg.content && (msg.type === 'case_file_report' || (msg.content.startsWith('# Case File') && !msg.content.trim().startsWith('{'))) && (
                                     <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '12px' }}>
                                         <DownloadReportButton content={msg.content} index={i} rootDirectoryHandle={rootDirectoryHandle} />
                                         <button
