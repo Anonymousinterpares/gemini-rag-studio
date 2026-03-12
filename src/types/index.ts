@@ -250,6 +250,9 @@ export interface DossierSource {
   fileId?: string;        // For document sources
   chatSessionId?: string; // For chat_exchange
   snippet?: string;       // Short excerpt
+  start?: number;         // Start offset for document highlighting
+  end?: number;           // End offset for document highlighting
+  parentChunkIndex?: number; // Chunk index for structural linking
 }
 
 export interface DossierSection {

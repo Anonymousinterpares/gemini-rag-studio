@@ -90,11 +90,12 @@
 .doc-line-text {
   flex-grow: 1;
   padding-left: 1rem;
+  padding-right: 1rem;
   margin: 0;
-  white-space: pre-wrap;
-  word-wrap: break-word;
+  white-space: pre;
   font-family: 'Fira Code', 'JetBrains Mono', monospace;
   line-height: 1.5;
+  overflow: visible;
 }
 
 .doc-spacer {

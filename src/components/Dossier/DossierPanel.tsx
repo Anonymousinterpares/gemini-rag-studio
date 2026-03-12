@@ -55,11 +55,11 @@ const DossierSectionView: React.FC<{
         .filter(s => !!s.fileId)
         .map(s => ({
             id: s.fileId!,
-            start: 0,
-            end: 0,
+            start: s.start ?? 0,
+            end: s.end ?? 0,
             chunk: s.snippet || '',
             similarity: 1,
-            parentChunkIndex: -1 // High-level marker for dossier-attached sources
+            parentChunkIndex: s.parentChunkIndex ?? -1
         }));
 
     return (

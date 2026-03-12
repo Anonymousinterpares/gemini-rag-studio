@@ -310,7 +310,10 @@ export const useDossierAI = (refs?: DossierAIRefs) => {
                                     type: 'document',
                                     label: res.id.split('/').pop() || res.id,
                                     fileId: res.id,
-                                    snippet: res.chunk
+                                    snippet: res.chunk,
+                                    start: res.start,
+                                    end: res.end,
+                                    parentChunkIndex: res.parentChunkIndex
                                 });
                             }
                         }
@@ -457,7 +460,10 @@ export const useDossierAI = (refs?: DossierAIRefs) => {
                                     type: 'document',
                                     label: res.id.split('/').pop() || res.id,
                                     fileId: res.id,
-                                    snippet: res.chunk
+                                    snippet: res.chunk,
+                                    start: res.start,
+                                    end: res.end,
+                                    parentChunkIndex: res.parentChunkIndex
                                 });
                             }
                         }
