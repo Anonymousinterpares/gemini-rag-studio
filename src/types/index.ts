@@ -101,6 +101,8 @@ export interface MapNodeSource {
   chatMessageIndex?: number;
   snippet?: string;
   parentChunkIndex?: number;
+  start?: number;
+  end?: number;
   embedding?: number[];
 }
 

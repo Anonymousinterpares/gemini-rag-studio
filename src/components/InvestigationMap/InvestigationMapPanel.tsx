@@ -54,7 +54,7 @@ const MapLockIndicator: FC<{ expiresAt: number; onCancel: () => void }> = ({ exp
 interface Props {
     onClose: () => void;
     onOpenDossierForNode?: (nodeId: string) => void;
-    onOpenFileChunk?: (fileId: string, chunkIndex: number) => void;
+    onOpenFileChunk?: (fileId: string, chunkIndex: number, start?: number, end?: number) => void;
     coordinator?: MutableRefObject<ComputeCoordinator | null>;
     vectorStore?: MutableRefObject<VectorStore | null>;
     queryEmbeddingResolver?: MutableRefObject<((value: number[]) => void) | null>;

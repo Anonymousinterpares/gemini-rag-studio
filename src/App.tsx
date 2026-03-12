@@ -363,6 +363,7 @@ export const App: FC = () => {
     handleStartComment, handleAddComment, handleEditComment, handleDeleteComment,
     handleDeleteSelectionComment, setActiveCommentInput, setCommentText,
     handleCopy, handleDownloadAction, handleStartEdit,
+    handleSourceClick,
     // "handleRedo" in MessageItemHandlers = per-message re-run (renamed to avoid collision)
     handleRedo: handleRerunQuery,
     handleRemoveMessage, handleMouseUp,
@@ -422,15 +423,6 @@ export const App: FC = () => {
     if (h) setIsExplorerOpen(true);
   };
 
-  if (!activeProjectId) {
-    return (
-      <div style={{ width: '100vw', height: '100vh', display: 'flex' }}>
-        <ProjectBrowser />
-        <ToastContainer />
-      </div>
-    );
-  }
-
   const wrappedHandleSourceClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     const target = e.target as HTMLElement;
     const isSourceLink = !!target.closest('.source-link');
@@ -439,6 +431,15 @@ export const App: FC = () => {
     }
     handleSourceClick(e);
   }, [handleSourceClick, isDossierOpen]);
+
+  if (!activeProjectId) {
+    return (
+      <div style={{ width: '100vw', height: '100vh', display: 'flex' }}>
+        <ProjectBrowser />
+        <ToastContainer />
+      </div>
+    );
+  }
 
   return (
     <div className='app-container'>
@@ -490,10 +491,10 @@ export const App: FC = () => {
               useDossierStore.getState().setActiveDossier(dossierId);
               setIsDossierOpen(true);
             }}
-            onOpenFileChunk={(fileId, chunkIndex) => {
+            onOpenFileChunk={(fileId, chunkIndex, start = 0, end = 0, snippet = '') => {
               const file = files.find(f => f.id === fileId);
               if (file) {
-                const docViewerChunk = { id: fileId, parentChunkIndex: chunkIndex, start: 0, end: 0, chunk: '', similarity: 0 };
+                const docViewerChunk = { id: fileId, parentChunkIndex: chunkIndex, start, end, chunk: snippet, similarity: 0 };
                 setActiveSource({ file, chunks: [docViewerChunk] });
                 setIsModalOpen(true);
               } else {

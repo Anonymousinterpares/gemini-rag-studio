@@ -79,7 +79,7 @@ function deduplicateSources(sources: MapNodeSource[]): { deduplicated: MapNodeSo
         }
     }
 
-    return { deduplicated: sources, uniqueCount: unique.length };
+    return { deduplicated: unique, uniqueCount: unique.length };
 }
 
 // ─── Granular Tool Definitions ──────────────────────────────────────────────────
@@ -102,7 +102,7 @@ const ADD_NODES_TOOL: Tool = {
                             entityType: { type: SchemaType.STRING, description: 'One of: person, location, event, organization, evidence, group' },
                             description: { type: SchemaType.STRING },
                             timestamp: { type: SchemaType.STRING, description: 'Timestamp in DD.MM.YYYY HH:MM:SS format. If only a date is available, use 00:00:00 for the time.' },
-                            certaintyScore: { type: SchemaType.NUMBER, description: 'AI confidence score from 0 to 100.' },
+                            certaintyScore: { type: SchemaType.NUMBER, description: 'AI confidence score from 0 to 100 as a NUMBER. Never use words like "ninety".' },
                             sources: {
                                 type: SchemaType.ARRAY,
                                 items: {
@@ -113,7 +113,9 @@ const ADD_NODES_TOOL: Tool = {
                                         snippet: { type: SchemaType.STRING },
                                         url: { type: SchemaType.STRING },
                                         fileId: { type: SchemaType.STRING },
-                                        parentChunkIndex: { type: SchemaType.NUMBER }
+                                        parentChunkIndex: { type: SchemaType.NUMBER },
+                                        start: { type: SchemaType.NUMBER },
+                                        end: { type: SchemaType.NUMBER }
                                     },
                                     required: ['type', 'label', 'snippet', 'url']
                                 }
@@ -151,7 +153,9 @@ const UPDATE_NODE_TOOL: Tool = {
                             snippet: { type: SchemaType.STRING, description: 'Exact quote for semantic de-duplication.' },
                             url: { type: SchemaType.STRING, description: 'File path or ID. Crucial for structural de-duplication.' },
                             fileId: { type: SchemaType.STRING, description: 'Technical ID of the file.' },
-                            parentChunkIndex: { type: SchemaType.NUMBER, description: 'Technical index of the chunk.' }
+                            parentChunkIndex: { type: SchemaType.NUMBER, description: 'Technical index of the chunk.' },
+                            start: { type: SchemaType.NUMBER },
+                            end: { type: SchemaType.NUMBER }
                         },
                         required: ['type', 'label', 'snippet', 'url']
                     }
@@ -190,7 +194,9 @@ const ADD_EDGES_TOOL: Tool = {
                                         snippet: { type: SchemaType.STRING, description: 'A brief quote or excerpt from the source.' },
                                         url: { type: SchemaType.STRING, description: 'The original internal ID or web URL.' },
                                         fileId: { type: SchemaType.STRING, description: 'Technical ID of the file.' },
-                                        parentChunkIndex: { type: SchemaType.NUMBER, description: 'Technical index of the chunk.' }
+                                        parentChunkIndex: { type: SchemaType.NUMBER, description: 'Technical index of the chunk.' },
+                                        start: { type: SchemaType.NUMBER },
+                                        end: { type: SchemaType.NUMBER }
                                     },
                                     required: ['type', 'label']
                                 }
@@ -426,7 +432,8 @@ STRICT RULES:
    - If only a date is available (e.g. "Jan 5, 2024"), use "05.01.2024 00:00:00".
    - If no year is provided but it can be inferred from context, use the inferred year.
    - If absolutely no temporal data exists for an entity, leave the field EMPTY.
-8. CERTAINTY: Assign a certaintyScore (0-100) based on how explicit and cross-referenced the evidence is.`;
+8. CERTAINTY: Assign a certaintyScore (0-100) based on how explicit and cross-referenced the evidence is.
+9. SOURCE COORDINATES: You MUST preserve all source properties including fileId, parentChunkIndex, start, and end.`;
 
 interface InternalSearchResult {
     id?: string;
@@ -436,6 +443,8 @@ interface InternalSearchResult {
     chunk?: string;
     embedding?: number[];
     parentChunkIndex?: number;
+    start?: number;
+    end?: number;
 }
 
 // ─── Shared Research Pipeline ──────────────────────────────────────────────────
@@ -460,7 +469,7 @@ async function buildResearchContext(opts: {
     console.log('Settings:', { RAG: mapStore.isRagActive, WEB: mapStore.isWebActive, DEEP: mapStore.isDeepActive });
 
     let finalSynthesizedContext = '';
-    const allRawContexts: { label: string, chunk: string, id?: string, link?: string, similarity?: number, embedding?: number[], parentChunkIndex?: number }[] = [];
+    const allRawContexts: { label: string, chunk: string, id?: string, link?: string, similarity?: number, embedding?: number[], parentChunkIndex?: number, start?: number, end?: number }[] = [];
 
     // ── Phase 1: The Planner (Deep Analysis Only) ──────────────────────
     let searchQueries = [cleanInstruction.split('\n')[0].substring(0, 200)]; // Default
@@ -490,7 +499,9 @@ JSON Format: { "queries": ["query1", "query2", ...] }`;
         id: sr.id,
         link: sr.link,
         embedding: sr.embedding,
-        parentChunkIndex: sr.parentChunkIndex
+        parentChunkIndex: sr.parentChunkIndex,
+        start: sr.start,
+        end: sr.end
     }));
 
     // 2b. WEB Search — in DEEP mode run up to 3 targeted planner queries;
@@ -576,7 +587,9 @@ JSON Format: { "queries": ["query1", "query2", ...] }`;
                     id: r.id,
                     similarity: r.similarity,
                     embedding: queryEmbedding,
-                    parentChunkIndex: r.parentChunkIndex
+                    parentChunkIndex: r.parentChunkIndex,
+                    start: r.start,
+                    end: r.end
                 }));
             } catch (e) { console.error('[MapAI] RAG search error:', e); }
         }
@@ -590,7 +603,9 @@ JSON Format: { "queries": ["query1", "query2", ...] }`;
         url: c.id || c.link || '',
         fileId: c.id,
         embedding: c.embedding,
-        parentChunkIndex: c.parentChunkIndex
+        parentChunkIndex: c.parentChunkIndex,
+        start: c.start,
+        end: c.end
     }));
     const { deduplicated, uniqueCount } = deduplicateSources(dedupSources);
 
@@ -602,7 +617,7 @@ JSON Format: { "queries": ["query1", "query2", ...] }`;
         file: d.label,
         id: d.fileId || d.url || 'N/A',
         chunk: d.parentChunkIndex ?? 'N/A',
-        snippet: d.snippet?.substring(0, 50) + '...'
+        snippet: d.snippet?.substring(0, 50) + '...' 
     })));
     console.groupEnd();
 
@@ -614,9 +629,9 @@ JSON Format: { "queries": ["query1", "query2", ...] }`;
             if (d.type === 'web') {
                 return `REF_${i}: { "name": "${d.label}", "type": "web", "url": "${d.url}" }`;
             }
-            return `REF_${i}: { "name": "${d.label}", "type": "document", "url": "${d.url}", "fileId": "${d.fileId || ''}", "chunkIndex": ${d.parentChunkIndex ?? 'null'} }`;
-        }).join('\n') +
-        "\n\nCRITICAL: When citing sources in tool calls, you MUST copy ALL properties exactly as they appear in the reference JSON above (including url, fileId, and chunkIndex).";
+            return `REF_${i}: { "name": "${d.label}", "type": "document", "url": "${d.url}", "fileId": "${d.fileId || ''}", "parentChunkIndex": ${d.parentChunkIndex ?? 'null'}, "start": ${d.start ?? 0}, "end": ${d.end ?? 0} }`;
+        }).join('\n') + 
+        "\n\nCRITICAL: When citing sources in tool calls, you MUST copy ALL properties exactly as they appear in the reference JSON above (including url, fileId, parentChunkIndex, start, and end).";
 
     if (mapStore.isDeepActive && uniqueCount > 0) {
         mapStore.setProgress({ phase: 2, batchCurrent: 1, batchTotal: 1, label: 'Evaluating evidence...' });
@@ -636,7 +651,8 @@ Produce a high-signal "Unified Investigation Brief". If sources conflict, note t
         // Fast Mode Synthesis
         finalSynthesizedContext = buildRefTable(deduplicated) +
             "\n\n" +
-            deduplicated.map((d, i) => `[REF_${i}: ${d.label}${d.type === 'web' ? ` | ${d.url}` : ''}]\n${d.snippet}`).join('\n\n');
+            deduplicated.map((d, i) => `[REF_${i}: ${d.label}${d.type === 'web' ? ` | ${d.url}` : ''}]
+${d.snippet}`).join('\n\n');
     }
 
     console.groupEnd();
@@ -651,7 +667,7 @@ export const useMapAI = (config?: {
     queryEmbeddingResolver: MutableRefObject<((value: number[]) => void) | null>;
 }) => {
     const [isMapProcessing, setIsMapProcessing] = useState(false);
-    const [reviewTokenWarning, setReviewTokenWarning] = useState<{
+    const [reviewTokenWarning, setReviewTokenWarning] = useState<{ 
         estimatedTokens: number;
         onConfirmAll: () => void;
         onConfirmTrimmed: () => void;
@@ -668,7 +684,8 @@ export const useMapAI = (config?: {
         const update = queue.dequeueUpdate();
         if (!update || update.length === 0) return;
 
-        const summaries = update.map(r => `**${r.title}** (${r.link})\n${r.snippet}`).join('\n---\n');
+        const summaries = update.map(r => `**${r.title}** (${r.link})
+${r.snippet}`).join('\n---\n');
         // We call it via a global reference to avoid circular dependency in useCallback
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         if ((window as any)._handleMapInstruction) {
@@ -893,7 +910,6 @@ export const useMapAI = (config?: {
                     }
 
                     const phase2Response = await generateContent(selectedModel, apiKey, modifiedMessages, [ADD_EDGES_TOOL]);
-
                     if (phase2Response.toolCalls?.length) {
                         try {
                             applyToolCalls(phase2Response.toolCalls, mapStore, (nodes) => gridLayout(nodes, currentNodes.length));

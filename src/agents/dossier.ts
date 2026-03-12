@@ -36,7 +36,8 @@ export const getDossierTools = (): Tool[] => {
                                     type: { 
                                         type: SchemaType.STRING, 
                                         description: 'The nature of the source: "document" for uploaded files, "web" for internet search, or "chat_exchange" for conversation history.',
-                                        enum: ['document', 'web', 'chat_exchange']
+                                        enum: ['document', 'web', 'chat_exchange'],
+                                        format: 'enum'
                                     },
                                     label: { 
                                         type: SchemaType.STRING, 
@@ -70,7 +71,7 @@ export const getDossierTools = (): Tool[] => {
  * Normalizes sources provided by the LLM. It handles both raw strings (which often happen
  * despite schema instructions) and partial objects, ensuring they follow the DossierSource type.
  */
-function normalizeSources(rawSources: any[]): import('../types').DossierSource[] {
+function normalizeSources(rawSources: unknown[]): import('../types').DossierSource[] {
     if (!rawSources || !Array.isArray(rawSources)) return [];
     
     return rawSources.map(s => {
@@ -85,16 +86,17 @@ function normalizeSources(rawSources: any[]): import('../types').DossierSource[]
 
         // Case 2: Already typed object
         if (typeof s === 'object' && s !== null) {
-            const type = s.type || (s.url ? 'web' : 'document');
+            const obj = s as Record<string, unknown>;
+            const type = (obj.type as string) || (obj.url ? 'web' : 'document');
             return {
-                type: type as any,
-                label: s.label || s.fileId || s.url || 'Unknown Source',
-                fileId: s.fileId,
-                url: s.url,
-                snippet: s.snippet,
-                start: s.start,
-                end: s.end,
-                parentChunkIndex: s.parentChunkIndex
+                type: type as 'document' | 'web' | 'chat',
+                label: (obj.label || obj.fileId || obj.url || 'Unknown Source') as string,
+                fileId: obj.fileId as string | undefined,
+                url: obj.url as string | undefined,
+                snippet: obj.snippet as string | undefined,
+                start: obj.start as number | undefined,
+                end: obj.end as number | undefined,
+                parentChunkIndex: obj.parentChunkIndex as number | undefined
             };
         }
 
@@ -111,9 +113,15 @@ export const handleDossierToolCall = async (
     options?: { proposeOnly?: boolean }
 ): Promise<{ result: string }> => {
     if (name === 'update_dossier') {
-        const { dossierId, sectionTitle, content, sources: rawSources } = args as any;
+        const payload = args as { 
+            dossierId: string; 
+            sectionTitle: string; 
+            content: string; 
+            sources?: unknown[] 
+        };
+        const { dossierId, sectionTitle, content, sources: rawSources } = payload;
 
-        const sources = normalizeSources(rawSources);
+        const sources = normalizeSources(rawSources || []);
 
         const store = useDossierStore.getState();
         const dossier = store.dossiers.find(d => d.id === dossierId);

@@ -181,7 +181,7 @@ const DossierSectionView: React.FC<{
                                             data-end={source.end ?? 0}
                                             data-parent-chunk-index={source.parentChunkIndex ?? -1}
                                             data-chunk={source.snippet || ''}
-                                            onClick={(e) => handleSourceClick(e as any)}
+                                            onClick={(e) => handleSourceClick(e as unknown as React.MouseEvent<HTMLDivElement>)}
                                             style={{ background: 'var(--panel-bg-color)', border: '1px solid var(--border-color)', color: 'var(--text-color)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', padding: '2px 8px', borderRadius: '4px', fontSize: '0.75rem' }}
                                             title={source.snippet}
                                         >

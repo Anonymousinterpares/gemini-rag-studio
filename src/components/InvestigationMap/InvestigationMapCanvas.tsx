@@ -68,7 +68,7 @@ interface SourceDrawerState {
 
 interface Props {
     onOpenDossierForNode?: (nodeId: string) => void;
-    onOpenFileChunk?: (fileId: string, chunkIndex: number) => void;
+    onOpenFileChunk?: (fileId: string, chunkIndex: number, start?: number, end?: number, snippet?: string) => void;
     coordinator?: MutableRefObject<ComputeCoordinator | null>;
     vectorStore?: MutableRefObject<VectorStore | null>;
     queryEmbeddingResolver?: MutableRefObject<((value: number[]) => void) | null>;
@@ -612,10 +612,10 @@ const InvestigationMapCanvasInner: FC<Props> = ({ onOpenDossierForNode, onOpenFi
                                                             window.open(src.url, '_blank', 'noopener,noreferrer');
                                                         } else if (src.type === 'document') {
                                                             // DEEP LINKING: Use fileId and chunkIndex if available
-                                                            if (src.fileId && src.parentChunkIndex !== undefined) {
-                                                                onOpenFileChunk?.(src.fileId, src.parentChunkIndex);
-                                                            } else {
-                                                                // Fallback to label or url match
+                                                                if (src.fileId && src.parentChunkIndex !== undefined) {
+                                                                    onOpenFileChunk?.(src.fileId, src.parentChunkIndex, src.start, src.end, src.snippet);
+                                                                } else {
+                                                                    // Fallback to label or url match
                                                                 const matchId = findMatchingDossierId(src.label, src.url || '');
                                                                 onOpenDossierForNode?.(matchId || src.url || '');
                                                             }
@@ -634,7 +634,7 @@ const InvestigationMapCanvasInner: FC<Props> = ({ onOpenDossierForNode, onOpenFi
                                                                 window.open(src.url, '_blank', 'noopener,noreferrer');
                                                             } else {
                                                                 if (src.fileId && src.parentChunkIndex !== undefined) {
-                                                                    onOpenFileChunk?.(src.fileId, src.parentChunkIndex);
+                                                                    onOpenFileChunk?.(src.fileId, src.parentChunkIndex, src.start, src.end, src.snippet);
                                                                 } else {
                                                                     const matchId = findMatchingDossierId(src.label, src.url || '');
                                                                     onOpenDossierForNode?.(matchId || src.url || '');

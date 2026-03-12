@@ -297,11 +297,11 @@ export const useDossierAI = (refs?: DossierAIRefs) => {
 
                         // ── Auto-Attach Missing Sources ───────────────────────
                         // If the LLM uses [1], [2] in content but misses sources, auto-fill them.
-                        const citedIndices = Array.from(args.content.matchAll(/\[(\d+)\]/g))
-                            .map(m => parseInt((m as any)[1], 10))
+                        const citedIndices = Array.from(String(args.content || '').matchAll(/\[(\d+)\]/g))
+                            .map(m => parseInt(m[1], 10))
                             .filter(idx => idx > 0 && idx <= ragResults.length);
                         
-                        const normalizedSources: import('../types').DossierSource[] = (args.sources || []).map((s: any) => {
+                        const normalizedSources: import('../types').DossierSource[] = (args.sources || []).map((s: Partial<import('../types').DossierSource>) => {
                             const labelMatch = s.label?.match(/\d+/);
                             let correspondingRes = ragResults.find(r => r.id === s.fileId && (!s.snippet || r.chunk.includes(s.snippet)));
                             if (!correspondingRes && labelMatch) {
@@ -466,11 +466,11 @@ export const useDossierAI = (refs?: DossierAIRefs) => {
                         const args = JSON.parse(tc.function.arguments);
 
                         // ── Auto-Attach Missing Sources (Edit Mode) ───────────
-                        const citedIndices = Array.from(args.content.matchAll(/\[(\d+)\]/g))
-                            .map(m => parseInt((m as any)[1], 10))
+                        const citedIndices = Array.from(String(args.content || '').matchAll(/\[(\d+)\]/g))
+                            .map(m => parseInt(m[1], 10))
                             .filter(idx => idx > 0 && idx <= ragResults.length);
                         
-                        const normalizedSources: import('../types').DossierSource[] = (args.sources || []).map((s: any) => {
+                        const normalizedSources: import('../types').DossierSource[] = (args.sources || []).map((s: Partial<import('../types').DossierSource>) => {
                             const labelMatch = s.label?.match(/\d+/);
                             let correspondingRes = ragResults.find(r => r.id === s.fileId && (!s.snippet || r.chunk.includes(s.snippet)));
                             if (!correspondingRes && labelMatch) {

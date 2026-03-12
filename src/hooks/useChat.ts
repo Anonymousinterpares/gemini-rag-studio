@@ -3,7 +3,7 @@ import { marked } from 'marked';
 import { AppFile, ChatMessage, JobProgress, Model, SearchResult, TokenUsage, SelectionComment } from '../types';
 import { summaryCache } from '../cache/summaryCache';
 import { ComputeTask, TaskPriority, TaskType } from '../compute/types';
-import { generateContent, Tool, SchemaType, countTokens, countTokensFast } from '../api/llm-provider';
+import { generateContent, Tool, SchemaType, countTokensFast } from '../api/llm-provider';
 import { ComputeCoordinator } from '../compute/coordinator';
 import { VectorStore } from '../rag/pipeline';
 import { useChatStore, useFileStore, useSettingsStore } from '../store';
@@ -221,7 +221,6 @@ export const useChat = ({
     useEffect(() => {
         const calculateContextTokens = async () => {
             const systemPrompt = getSystemPrompt();
-            const apiKey = apiKeys[selectedProvider];
 
             const messages: ChatMessage[] = [
                 { role: 'system', content: systemPrompt },
