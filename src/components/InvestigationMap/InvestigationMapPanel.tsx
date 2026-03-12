@@ -1,4 +1,4 @@
-import { FC, useState } from 'react';
+import { FC, useState, useEffect, MutableRefObject } from 'react';
 import { Undo2, Redo2, Network, X, GitMerge, Loader, Maximize2, Minimize2, Trash2, Power } from 'lucide-react';
 import { useMapStore } from '../../store/useMapStore';
 import { useMapAI } from '../../hooks/useMapAI';
@@ -6,8 +6,50 @@ import { useMeasure } from '../../hooks';
 import { InvestigationMapCanvas } from './InvestigationMapCanvas';
 import { ComputeCoordinator } from '../../compute/coordinator';
 import { VectorStore } from '../../rag/pipeline';
-import { MutableRefObject } from 'react';
 import './InvestigationMapPanel.css';
+
+const MapLockIndicator: FC<{ expiresAt: number; onCancel: () => void }> = ({ expiresAt, onCancel }) => {
+    const [timeLeft, setTimeLeft] = useState(Math.max(0, expiresAt - Date.now()));
+
+    useEffect(() => {
+        const interval = setInterval(() => {
+            const remaining = Math.max(0, expiresAt - Date.now());
+            setTimeLeft(remaining);
+            if (remaining === 0) clearInterval(interval);
+        }, 100);
+        return () => clearInterval(interval);
+    }, [expiresAt]);
+
+    const totalDuration = 90000;
+    const progressPercent = Math.min(100, Math.max(0, (timeLeft / totalDuration) * 100));
+    
+    // Circle math
+    const radius = 10;
+    const circumference = 2 * Math.PI * radius;
+    const strokeDashoffset = circumference - (progressPercent / 100) * circumference;
+
+    return (
+        <button 
+            className="map-lock-indicator-btn" 
+            onClick={onCancel} 
+            title={`Cancel Generation (Auto-cancels in ${Math.ceil(timeLeft / 1000)}s)`}
+        >
+            <svg width="24" height="24" viewBox="0 0 24 24" className="map-lock-ring">
+                <circle className="map-lock-ring-bg" cx="12" cy="12" r={radius} strokeWidth="2" fill="none" />
+                <circle 
+                    className="map-lock-ring-fg" 
+                    cx="12" cy="12" r={radius} 
+                    strokeWidth="2" 
+                    fill="none" 
+                    strokeDasharray={circumference}
+                    strokeDashoffset={strokeDashoffset}
+                    transform="rotate(-90 12 12)"
+                />
+            </svg>
+            <span className="map-lock-stop-icon"></span>
+        </button>
+    );
+};
 
 interface Props {
     onClose: () => void;
@@ -49,7 +91,7 @@ const TokenBudgetWarning: FC<TokenWarningProps> = ({ estimatedTokens, onConfirmA
 
 export const InvestigationMapPanel: FC<Props> = ({ onClose, onOpenDossierForNode, onOpenFileChunk, coordinator, vectorStore, queryEmbeddingResolver }) => {
     const {
-        nodes, edges, undo, redo, undoStack, redoStack, progress, jobLock, clearMap,
+        nodes, edges, undo, redo, undoStack, redoStack, progress, jobLock, lockExpiresAt, clearMap,
         isRagEnabled, isRagActive, isWebActive, isDeepActive, isRetrieving,
         setIsRagActive, setIsWebActive, setIsDeepActive
     } = useMapStore();
@@ -134,6 +176,22 @@ export const InvestigationMapPanel: FC<Props> = ({ onClose, onOpenDossierForNode
                                 {progress.batchCurrent}/{progress.batchTotal}
                             </span>
                         )}
+                        {jobLock && lockExpiresAt && (
+                            <MapLockIndicator 
+                                expiresAt={lockExpiresAt} 
+                                onCancel={() => useMapStore.getState().releaseLock()} 
+                            />
+                        )}
+                    </div>
+                )}
+                {!progress && jobLock && lockExpiresAt && (
+                    <div className="map-progress-container">
+                        <Loader size={13} className="animate-spin" style={{ marginRight: 6 }} />
+                        <span className="map-progress-label">Preparing...</span>
+                        <MapLockIndicator 
+                            expiresAt={lockExpiresAt} 
+                            onCancel={() => useMapStore.getState().releaseLock()} 
+                        />
                     </div>
                 )}
 

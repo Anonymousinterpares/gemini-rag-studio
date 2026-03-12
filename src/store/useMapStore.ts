@@ -22,6 +22,7 @@ interface MapState {
 
     // Concurrency lock — only one AI job at a time
     jobLock: boolean;
+    lockExpiresAt: number | null;
 
     // Progress indicator for multi-phase generation
     progress: MapProgress | null;
@@ -76,7 +77,7 @@ interface MapState {
     resetMap: () => void;
 
     // Job lock
-    acquireLock: () => boolean;   // returns false if already locked
+    acquireLock: (timeoutMs?: number) => boolean;   // returns false if already locked
     releaseLock: () => void;
 
     // Progress
@@ -95,6 +96,7 @@ function checkpoint(state: MapState) {
 }
 
 let persistTimeout: ReturnType<typeof setTimeout> | null = null;
+let lockSafetyTimeout: ReturnType<typeof setTimeout> | null = null;
 
 export const useMapStore = create<MapState>((set, get) => ({
     nodes: [],
@@ -102,6 +104,7 @@ export const useMapStore = create<MapState>((set, get) => ({
     undoStack: [],
     redoStack: [],
     jobLock: false,
+    lockExpiresAt: null,
     progress: null,
     isRagEnabled: false,
     isRagActive: false,
@@ -281,15 +284,27 @@ export const useMapStore = create<MapState>((set, get) => ({
         set({ nodes: [], edges: [], undoStack: [], redoStack: [] });
     },
 
-    acquireLock: () => {
+    acquireLock: (timeoutMs = 90000) => {
         const { jobLock } = get();
         if (jobLock) return false;
-        set({ jobLock: true });
+        
+        set({ jobLock: true, lockExpiresAt: Date.now() + timeoutMs });
+
+        if (lockSafetyTimeout) clearTimeout(lockSafetyTimeout);
+        lockSafetyTimeout = setTimeout(() => {
+            if (get().jobLock) {
+                console.warn('[MapStore] Forcefully releasing stalled jobLock after timeout.');
+                get().releaseLock();
+                get().setMapError("Map process timed out.");
+            }
+        }, timeoutMs);
+
         return true;
     },
 
     releaseLock: () => {
-        set({ jobLock: false });
+        if (lockSafetyTimeout) clearTimeout(lockSafetyTimeout);
+        set({ jobLock: false, lockExpiresAt: null });
         if (get().lastChanges) {
             setTimeout(() => {
                 get().clearLastChanges();
@@ -330,6 +345,7 @@ export const useMapStore = create<MapState>((set, get) => ({
                     lastChanges: null,
                     progress: null,
                     jobLock: false,
+                    lockExpiresAt: null,
                     isRagActive: data.isRagActive ?? true,
                     isWebActive: data.isWebActive ?? false,
                     isDeepActive: data.isDeepActive ?? false,
@@ -342,7 +358,8 @@ export const useMapStore = create<MapState>((set, get) => ({
                     redoStack: [],
                     lastChanges: null,
                     progress: null,
-                    jobLock: false
+                    jobLock: false,
+                    lockExpiresAt: null
                 });
             }
         } catch (e) {

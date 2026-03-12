@@ -628,3 +628,49 @@
 .node-badge--disproven {
     background: var(--accent-red);
 }
+
+/* ── Map Lock Indicator ──────────────────────────────────────────────────────── */
+.map-lock-indicator-btn {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    margin-left: auto;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    color: var(--text-color-secondary);
+    transition: transform 0.1s, color 0.1s;
+    outline: none;
+}
+
+.map-lock-indicator-btn:hover {
+    color: #e74c3c;
+    transform: scale(1.1);
+}
+
+.map-lock-ring {
+    position: absolute;
+    top: 0;
+    left: 0;
+}
+
+.map-lock-ring-bg {
+    stroke: var(--border-color);
+}
+
+.map-lock-ring-fg {
+    stroke: currentColor;
+    transition: stroke-dashoffset 0.1s linear, stroke 0.2s;
+}
+
+.map-lock-stop-icon {
+    width: 6px;
+    height: 6px;
+    background-color: currentColor;
+    border-radius: 1px;
+    z-index: 1;
+}
