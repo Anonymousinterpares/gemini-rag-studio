@@ -22,6 +22,8 @@ const DocViewer = memo(function DocViewer({ coordinator, selectedFile, chunksToH
   const BASE_FONT_SIZE_PX = 16;
   const PARAGRAPH_SPACING_EM = 0.75;
 
+  console.log('[DocViewer] Received chunksToHighlight:', chunksToHighlight);
+
   const hasChunks = chunksToHighlight.length > 0;
 
   useLayoutEffect(() => {

@@ -301,10 +301,29 @@ export const useDossierAI = (refs?: DossierAIRefs) => {
                             .map(m => parseInt((m as any)[1], 10))
                             .filter(idx => idx > 0 && idx <= ragResults.length);
                         
-                        const normalizedSources: import('../types').DossierSource[] = args.sources ? args.sources : [];
+                        const normalizedSources: import('../types').DossierSource[] = (args.sources || []).map((s: any) => {
+                            const labelMatch = s.label?.match(/\d+/);
+                            let correspondingRes = ragResults.find(r => r.id === s.fileId && (!s.snippet || r.chunk.includes(s.snippet)));
+                            if (!correspondingRes && labelMatch) {
+                                const possibleIndex = parseInt(labelMatch[0], 10) - 1;
+                                if (possibleIndex >= 0 && possibleIndex < ragResults.length) {
+                                    correspondingRes = ragResults[possibleIndex];
+                                }
+                            }
+                            if (correspondingRes) {
+                                return {
+                                    ...s,
+                                    fileId: correspondingRes.id,
+                                    start: correspondingRes.start,
+                                    end: correspondingRes.end,
+                                    parentChunkIndex: correspondingRes.parentChunkIndex
+                                };
+                            }
+                            return s;
+                        });
                         for (const idx of citedIndices) {
                             const res = ragResults[idx - 1];
-                            const alreadyExists = normalizedSources.some(s => s.fileId === res.id);
+                            const alreadyExists = normalizedSources.some(s => s.fileId === res.id && Object.keys(s).includes('start'));
                             if (!alreadyExists) {
                                 normalizedSources.push({
                                     type: 'document',
@@ -451,10 +470,29 @@ export const useDossierAI = (refs?: DossierAIRefs) => {
                             .map(m => parseInt((m as any)[1], 10))
                             .filter(idx => idx > 0 && idx <= ragResults.length);
                         
-                        const normalizedSources: import('../types').DossierSource[] = args.sources ? args.sources : [];
+                        const normalizedSources: import('../types').DossierSource[] = (args.sources || []).map((s: any) => {
+                            const labelMatch = s.label?.match(/\d+/);
+                            let correspondingRes = ragResults.find(r => r.id === s.fileId && (!s.snippet || r.chunk.includes(s.snippet)));
+                            if (!correspondingRes && labelMatch) {
+                                const possibleIndex = parseInt(labelMatch[0], 10) - 1;
+                                if (possibleIndex >= 0 && possibleIndex < ragResults.length) {
+                                    correspondingRes = ragResults[possibleIndex];
+                                }
+                            }
+                            if (correspondingRes) {
+                                return {
+                                    ...s,
+                                    fileId: correspondingRes.id,
+                                    start: correspondingRes.start,
+                                    end: correspondingRes.end,
+                                    parentChunkIndex: correspondingRes.parentChunkIndex
+                                };
+                            }
+                            return s;
+                        });
                         for (const idx of citedIndices) {
                             const res = ragResults[idx - 1];
-                            const alreadyExists = normalizedSources.some(s => s.fileId === res.id);
+                            const alreadyExists = normalizedSources.some(s => s.fileId === res.id && Object.keys(s).includes('start'));
                             if (!alreadyExists) {
                                 normalizedSources.push({
                                     type: 'document',

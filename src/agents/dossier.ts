@@ -91,7 +91,10 @@ function normalizeSources(rawSources: any[]): import('../types').DossierSource[]
                 label: s.label || s.fileId || s.url || 'Unknown Source',
                 fileId: s.fileId,
                 url: s.url,
-                snippet: s.snippet
+                snippet: s.snippet,
+                start: s.start,
+                end: s.end,
+                parentChunkIndex: s.parentChunkIndex
             };
         }
 
