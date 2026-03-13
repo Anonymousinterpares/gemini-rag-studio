@@ -45,28 +45,25 @@ function sanitizeHistory(messages: ChatMessage[]): {
     systemPrompt: string | undefined;
     history: ChatMessage[];
 } {
-    let systemPrompt: string | undefined = undefined;
-    const sanitized: ChatMessage[] = [];
+    // 1. Find and extract the system prompt without mutating the original array
+    const systemMsg = messages.find(m => m.role === 'system');
+    const systemPrompt = systemMsg?.content || undefined;
+
+    // 2. Filter out system messages and find the first user message
+    const nonSystemMessages = messages.filter(m => m.role !== 'system');
+    const firstUserIndex = nonSystemMessages.findIndex(m => m.role === 'user');
     
-    // Create a working copy to avoid mutating the original array
-    let workingMessages = [...messages];
-
-    // 1. Find and remove the system prompt
-    const systemMsgIndex = workingMessages.findIndex(m => m.role === 'system');
-    if (systemMsgIndex !== -1) {
-        systemPrompt = workingMessages.splice(systemMsgIndex, 1)[0].content || undefined;
-    }
-
-    // 2. Find the first user message. Discard anything before it, UNLESS it's a sequence of tool interactions 
-    const firstUserIndex = workingMessages.findIndex(m => m.role === 'user');
     if (firstUserIndex === -1) {
         return { systemPrompt, history: [] };
     }
-    workingMessages = workingMessages.slice(firstUserIndex);
 
-    // 3. Process messages
+    // 3. Start from the first user message and process
+    const workingMessages = nonSystemMessages.slice(firstUserIndex);
+    const sanitized: ChatMessage[] = [];
+    
     if (workingMessages.length > 0) {
-        sanitized.push({ ...workingMessages[0] }); // Start with the first user message
+        // We push a clone to avoid mutating objects in the original array if we merge content
+        sanitized.push({ ...workingMessages[0] });
 
         for (let i = 1; i < workingMessages.length; i++) {
             const currentMessage = workingMessages[i];
@@ -86,22 +83,15 @@ function sanitizeHistory(messages: ChatMessage[]): {
         }
     }
     
-    // 4. Ensure the conversation ends with a User message OR a Tool message (if the model requested it)
-    // Actually, for "generateContent", we usually expect the last message to be User or Tool Output.
-    // If the last message is Model (without tool calls), then there's nothing to generate?
-    // But in a chat loop, we might append a user message and ask for generation.
-    // Let's just ensure we don't have trailing Model messages unless they are tool calls waiting for execution?
-    // No, generateContent is called TO GET a model response. So the last message should be User or Tool.
-    
-    // For now, relax the "last must be user" check to allow "last must be user OR tool"
-    while(sanitized.length > 0) {
-        const last = sanitized[sanitized.length - 1];
+    // 4. Ensure the conversation ends with a User message OR a Tool message
+    let result = sanitized;
+    while(result.length > 0) {
+        const last = result[result.length - 1];
         if (last.role === 'user' || last.role === 'tool') break;
-        sanitized.pop();
+        result = result.slice(0, -1);
     }
 
-    // console.log('[DEBUG] History after sanitization:', JSON.stringify(sanitized, null, 2));
-    return { systemPrompt, history: sanitized };
+    return { systemPrompt, history: result };
 }
 
 export async function generateContent(
@@ -130,18 +120,15 @@ export async function generateContent(
     throw new Error(`API key for ${model.provider} is required. Provide it in the settings or in your .env.local file.`);
   }
   
-  const { history: fullHistory, systemPrompt } = sanitizeHistory([...messages]);
+  const { history: fullHistory, systemPrompt } = sanitizeHistory(messages);
   
-  // The last message is the prompt trigger.
-  // We must pop it because providers expect (history + new_message) structure.
-  const lastMessage = fullHistory.pop(); 
-
-  if (!lastMessage) {
+  if (fullHistory.length === 0) {
       throw new Error("Invalid chat history: No messages to process.");
   }
 
-  // Use 'fullHistory' as the history (now without the last message)
-  const history = fullHistory;
+  // The last message is the prompt trigger.
+  const lastMessage = fullHistory[fullHistory.length - 1];
+  const history = fullHistory.slice(0, -1);
 
   switch (model.provider) {
     case 'google': {
@@ -470,7 +457,7 @@ export async function generateContent(
         try {
           const ai = new GoogleGenerativeAI(apiKey);
           const gemini = ai.getGenerativeModel({ model: model.id });
-          const { history, systemPrompt } = sanitizeHistory([...messages]);
+          const { history, systemPrompt } = sanitizeHistory(messages);
           
           const contents: Content[] = history.map(m => ({
               role: m.role === 'model' ? 'model' : 'user',

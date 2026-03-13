@@ -12,7 +12,7 @@ export interface MapProgress {
     label: string;
 }
 
-interface MapState {
+export interface MapState {
     nodes: MapNode[];
     edges: MapEdge[];
 

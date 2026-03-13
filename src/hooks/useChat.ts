@@ -14,7 +14,7 @@ import { searchWeb } from '../utils/search';
 import { sectionizeMessage, createFuzzyRegex, CITATION_REGEX, SEARCH_RESULTS_REGEX } from '../utils/chatUtils';
 import { getDossierTools, handleDossierToolCall, DOSSIER_COMPILER_PROMPT } from '../agents/dossier';
 import { RouteDecision } from '../agents/router_v2';
-import { ADD_NODES_TOOL, UPDATE_NODE_TOOL, applyToolCalls, gridLayout } from './useMapAI';
+import { useAutoLayout } from './useAutoLayout';
 
 
 const SEARCH_TOOL: Tool = {
@@ -134,6 +134,7 @@ export const useChat = ({
 
     const { files } = useFileStore();
     const { appSettings, selectedModel, selectedProvider, apiKeys } = useSettingsStore();
+    const { runLayout } = useAutoLayout();
 
     const [summaries, setSummaries] = useState<Record<string, string>>({});
     const [hoveredSelectionId, setHoveredSelectionId] = useState<string | null>(null);
@@ -466,173 +467,88 @@ export const useChat = ({
             }
 
             // 3. Mapping or Chat Mode Dispatch
-            if ((appSettings.isChatModeEnabled || routeMode === 'MAPPING') && !isCaseFileMode) {
+            if (routeMode === 'MAPPING' && !isCaseFileMode) {
+                const mapStore = useMapStore.getState();
+                const apiKey = apiKeys[selectedProvider];
+                const { runMappingPipeline } = await import('../utils/mappingService');
+
+                const configRefs = (coordinator && vectorStore && queryEmbeddingResolver) ? {
+                    coordinator: coordinator as React.MutableRefObject<ComputeCoordinator | null>,
+                    vectorStore: vectorStore as React.MutableRefObject<VectorStore | null>,
+                    queryEmbeddingResolver: queryEmbeddingResolver as React.MutableRefObject<((value: number[]) => void) | null>
+                } : undefined;
+
+                const result = await runMappingPipeline({
+                    instruction: query,
+                    mapStore,
+                    apiKey,
+                    selectedModel,
+                    files,
+                    appSettings,
+                    chatHistory: newHistory,
+                    config: configRefs
+                });
+
+                setIsMapPanelOpen(true);
+
+                const finalMsg: ChatMessage = {
+                    role: 'model',
+                    content: result.success
+                        ? `Map updated: ${result.totalChanges} changes applied based on our conversation.`
+                        : `I encountered an error while updating the map: ${result.error}`,
+                    tokenUsage: perRequestTokenUsage,
+                    elapsedTime: Date.now() - startTime
+                };
+
+                if (updateIndex !== undefined) updateMessage(updateIndex, finalMsg);
+                else setChatHistory([...newHistory, finalMsg]);
+                setIsLoading(false);
+                setTimeout(() => runLayout(), 150);
+                return;
+            }
+
+            if (appSettings.isChatModeEnabled && !isCaseFileMode) {
                 const currentHistory = [...newHistory];
-                const tools = [SEARCH_TOOL, ADD_NODES_TOOL, UPDATE_NODE_TOOL, ...getDossierTools()];
+                const tools = [SEARCH_TOOL, ...getDossierTools()];
                 let loopCount = 0;
                 const MAX_LOOPS = appSettings.maxSearchLoops;
 
                 while (loopCount < MAX_LOOPS) {
-                    if (controller.signal.aborted) return;
+                    const response = await callGenerateContent(selectedModel, apiKey, [{ role: 'system' as const, content: getSystemPrompt([], routeMode) }, ...currentHistory], tools);
+                    const toolCalls = response.toolCalls || [];
+                    const responseText = response.text || '';
 
-                    // Inject warning when near the limit - add to currentHistory so it persists
-                    if (loopCount === MAX_LOOPS - 2 && MAX_LOOPS > 2) {
-                        currentHistory.push({
-                            role: 'system',
-                            content: "ATTENTION: You have only 2 search calls remaining. Please make your final searches now if needed, then gather all information and provide your final answer to the user.",
-                            isInternal: true
-                        });
-                    } else if (loopCount === MAX_LOOPS - 1) {
-                        currentHistory.push({
-                            role: 'system',
-                            content: "ATTENTION: This is your LAST search call. After this, you MUST provide your final answer based on all gathered information.",
-                            isInternal: true
-                        });
-                    }
-
-                    const messagesToSend = [{ role: 'system' as const, content: getSystemPrompt([], routeMode) }, ...currentHistory];
-
-                    const response = await callGenerateContent(selectedModel, apiKey, messagesToSend, tools);
-
-                    let toolCalls = response.toolCalls || [];
-                    let cleanResponseText = response.text || '';
-
-                    // Universal Interceptor: Catch models that invent their own search syntax
-                    if (toolCalls.length === 0 && cleanResponseText) {
-                        const xmlMatch = cleanResponseText.match(/<search_web>([\s\S]*?)<\/search_web>/i);
-                        const bracketMatch = cleanResponseText.match(/\[search_web:?\s*([\s\S]*?)\]/i);
-                        const invokeMatch = cleanResponseText.match(/<invoke name="search_web">[\s\S]*?<parameter name="query">([\s\S]*?)<\/parameter>[\s\S]*?<\/invoke>/i);
-                        const tableMatch = cleanResponseText.match(/\|\s*tool\s*\|\s*search_web\s*\|[\s\S]*?\|\s*query\s*\|\s*([\s\S]*?)\s*\|/i);
-                        const jsonMatch = cleanResponseText.match(/\{[\s\S]*?"query"[\s\S]*?\}/i) || cleanResponseText.match(/\{[\s\S]*?"search"[\s\S]*?\}/i);
-
-                        let extractedQuery = '';
-                        let matchedText = '';
-
-                        if (xmlMatch) {
-                            extractedQuery = xmlMatch[1].trim();
-                            matchedText = xmlMatch[0];
-                        } else if (bracketMatch) {
-                            extractedQuery = bracketMatch[1].trim();
-                            matchedText = bracketMatch[0];
-                        } else if (invokeMatch) {
-                            extractedQuery = invokeMatch[1].trim();
-                            matchedText = invokeMatch[0];
-                        } else if (tableMatch) {
-                            extractedQuery = tableMatch[1].trim();
-                            matchedText = tableMatch[0];
-                        } else if (jsonMatch) {
-                            try {
-                                const parsed = JSON.parse(jsonMatch[0].replace(/```json|```/g, '').trim());
-                                extractedQuery = parsed.query || parsed.search || (parsed.parameters?.query);
-                                if (extractedQuery) matchedText = jsonMatch[0];
-                            } catch { /* ignore */ }
-                        }
-
-                        if (extractedQuery) {
-                            toolCalls = [{
-                                id: `intercepted_${Date.now()}`,
-                                type: 'function',
-                                function: { name: 'search_web', arguments: JSON.stringify({ query: extractedQuery }) }
-                            }];
-                            cleanResponseText = cleanResponseText.replace(matchedText, '').trim();
-                        }
-                    }
-
-                    // If no tool calls (and no fallback detected), we are done.
                     if (toolCalls.length === 0) {
                         const finalMsg: ChatMessage = {
                             role: 'model',
-                            content: cleanResponseText,
+                            content: responseText || '',
                             tokenUsage: perRequestTokenUsage,
                             elapsedTime: Date.now() - startTime,
-                            isStreaming: false
+                            isStreaming: true
                         };
-                        if (updateIndex !== undefined) {
-                            updateMessage(updateIndex, finalMsg);
-                        } else {
-                            setChatHistory([...currentHistory, finalMsg]);
-                        }
+                        if (updateIndex !== undefined) updateMessage(updateIndex, finalMsg);
+                        else setChatHistory([...currentHistory, finalMsg]);
                         setIsLoading(false);
                         setAbortController(null);
                         return;
                     }
 
-                    // Handle tool calls
-                    const assistantMessage: ChatMessage = {
-                        role: 'model',
-                        content: cleanResponseText || null,
-                        tool_calls: toolCalls
-                    };
-                    currentHistory.push(assistantMessage);
+                    // Push model's turn with tool calls
+                    currentHistory.push({ role: 'model', content: responseText || null, tool_calls: toolCalls });
 
-                    // Execute tools
-                    for (const toolCall of toolCalls) {
-                        if (controller.signal.aborted) return;
-                        if (toolCall.function.name === 'search_web') {
+                    // Execute tool calls
+                    for (const tc of toolCalls) {
+                        if (tc.function.name === 'search_web') {
                             try {
-                                const args = JSON.parse(toolCall.function.arguments);
-                                const searchQuery = args.query || args.search || toolCall.function.arguments;
-                                const results = await searchWeb(searchQuery);
-
-                                try {
-                                    const { useMapUpdateQueue } = await import('../store/useMapUpdateQueue');
-                                    const resultArray = Array.isArray(results) ? results : [results];
-                                    if (resultArray.length > 0) {
-                                        useMapUpdateQueue.getState().enqueueUpdate(resultArray);
-                                    }
-                                } catch { /* map store not available */ }
-
-                                currentHistory.push({
-                                    role: 'tool' as const,
-                                    tool_call_id: toolCall.id,
-                                    name: toolCall.function.name,
-                                    content: JSON.stringify(results)
-                                });
-                            } catch (_e) {
-                                currentHistory.push({
-                                    role: 'tool' as const,
-                                    tool_call_id: toolCall.id,
-                                    name: toolCall.function.name,
-                                    content: JSON.stringify({ error: _e instanceof Error ? _e.message : "Search failed" })
-                                });
+                                const args = JSON.parse(tc.function.arguments);
+                                const results = await searchWeb(args.query || args.search || tc.function.arguments);
+                                currentHistory.push({ role: 'tool', tool_call_id: tc.id, name: tc.function.name, content: JSON.stringify(results) });
+                            } catch {
+                                currentHistory.push({ role: 'tool', tool_call_id: tc.id, name: tc.function.name, content: JSON.stringify({ error: 'Search failed' }) });
                             }
-                        } else if (toolCall.function.name === 'update_dossier') {
-                            try {
-                                const args = JSON.parse(toolCall.function.arguments);
-                                const result = await handleDossierToolCall(toolCall.function.name, args);
-                                currentHistory.push({
-                                    role: 'tool' as const,
-                                    tool_call_id: toolCall.id,
-                                    name: toolCall.function.name,
-                                    content: JSON.stringify(result)
-                                });
-                            } catch (_e) {
-                                currentHistory.push({
-                                    role: 'tool' as const,
-                                    tool_call_id: toolCall.id,
-                                    name: toolCall.function.name,
-                                    content: JSON.stringify({ error: _e instanceof Error ? _e.message : "Dossier update failed" })
-                                });
-                            }
-                        } else if (toolCall.function.name === 'add_map_nodes' || toolCall.function.name === 'update_map_node' || toolCall.function.name === 'add_map_edges' || toolCall.function.name === 'remove_map_edge') {
-                            try {
-                                const mapStore = useMapStore.getState();
-                                const executionResult = applyToolCalls([toolCall], mapStore, (nodes) => gridLayout(nodes, mapStore.nodes.length));
-                                setIsMapPanelOpen(true);
-                                currentHistory.push({
-                                    role: 'tool' as const,
-                                    tool_call_id: toolCall.id,
-                                    name: toolCall.function.name,
-                                    content: JSON.stringify({ success: true, ...executionResult })
-                                });
-                            } catch (_e) {
-                                currentHistory.push({
-                                    role: 'tool' as const,
-                                    tool_call_id: toolCall.id,
-                                    name: toolCall.function.name,
-                                    content: JSON.stringify({ error: _e instanceof Error ? _e.message : "Map update failed" })
-                                });
-                            }
+                        } else if (tc.function.name.startsWith('dossier_')) {
+                            const result = await handleDossierToolCall(tc.function.name, JSON.parse(tc.function.arguments));
+                            currentHistory.push({ role: 'tool', tool_call_id: tc.id, name: tc.function.name, content: JSON.stringify(result) });
                         }
                     }
                     loopCount++;
@@ -809,7 +725,7 @@ Or just tell me what specific aspects you'd like me to focus on.`;
             setIsLoading(false);
             setAbortController(null);
         }
-    }, [isLoading, appSettings, coordinator, vectorStore, queryEmbeddingResolver, rerankPromiseResolver, apiKeys, selectedProvider, selectedModel, setIsLoading, setChatHistory, getSystemPrompt, waitForSummaries, files, setTokenUsage, setAbortController, caseFileState, setCaseFileState, updateMessage, setIsMapPanelOpen]);
+    }, [isLoading, appSettings, coordinator, vectorStore, queryEmbeddingResolver, rerankPromiseResolver, apiKeys, selectedProvider, selectedModel, setIsLoading, setChatHistory, getSystemPrompt, waitForSummaries, files, setTokenUsage, setAbortController, caseFileState, setCaseFileState, updateMessage, setIsMapPanelOpen, runLayout]);
 
     const handleRedo = useCallback(async (index: number) => {
         const messageToRedo = chatHistory[index];
@@ -940,13 +856,13 @@ Or just tell me what specific aspects you'd like me to focus on.`;
             const file = files.find(f => f.id === fileId);
             if (file) {
                 // By default use the clicked chunk
-                let allRelevantChunks: SearchResult[] = [{ 
-                    id: fileId, 
-                    start, 
-                    end, 
-                    parentChunkIndex: parentIndex, 
-                    chunk: chunkText, 
-                    similarity: 1 
+                let allRelevantChunks: SearchResult[] = [{
+                    id: fileId,
+                    start,
+                    end,
+                    parentChunkIndex: parentIndex,
+                    chunk: chunkText,
+                    similarity: 1
                 }];
 
                 // Find all chunks from the same file in the same container (message or dossier section)
