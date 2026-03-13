@@ -12,6 +12,9 @@ const MapLockIndicator: FC<{ expiresAt: number; onCancel: () => void }> = ({ exp
     const [timeLeft, setTimeLeft] = useState(Math.max(0, expiresAt - Date.now()));
 
     useEffect(() => {
+        // Reset timeLeft immediately when expiresAt changes
+        setTimeLeft(Math.max(0, expiresAt - Date.now()));
+        
         const interval = setInterval(() => {
             const remaining = Math.max(0, expiresAt - Date.now());
             setTimeLeft(remaining);

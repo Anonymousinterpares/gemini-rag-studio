@@ -78,6 +78,7 @@ export interface MapState {
 
     // Job lock
     acquireLock: (timeoutMs?: number) => boolean;   // returns false if already locked
+    refreshLock: (timeoutMs?: number) => void;
     releaseLock: () => void;
 
     // Progress
@@ -300,6 +301,22 @@ export const useMapStore = create<MapState>((set, get) => ({
         }, timeoutMs);
 
         return true;
+    },
+
+    refreshLock: (timeoutMs = 90000) => {
+        const { jobLock } = get();
+        if (!jobLock) return;
+
+        set({ lockExpiresAt: Date.now() + timeoutMs });
+
+        if (lockSafetyTimeout) clearTimeout(lockSafetyTimeout);
+        lockSafetyTimeout = setTimeout(() => {
+            if (get().jobLock) {
+                console.warn('[MapStore] Forcefully releasing stalled jobLock after timeout (refreshed).');
+                get().releaseLock();
+                get().setMapError("Map process timed out.");
+            }
+        }, timeoutMs);
     },
 
     releaseLock: () => {

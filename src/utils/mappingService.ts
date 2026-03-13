@@ -413,13 +413,19 @@ export async function runMappingPipeline(opts: {
         // Initial state
         let currentMapState = useMapStore.getState();
 
-        if (onProgress) onProgress('Researching context...');
+        if (onProgress) {
+            onProgress('Researching context...');
+            currentMapState.refreshLock();
+        }
         const context = await buildResearchContext({ cleanInstruction: instruction, mapStore: currentMapState, apiKey, selectedModel, files, chatHistory, config });
 
         const getExistingNodesPrompt = (state: MapState) => state.nodes.map((n: MapNode) => `${n.id}: ${n.data.label} (${n.data.entityType})`).join('\n');
 
         // TURN 1: Nodes
-        if (onProgress) onProgress('Verifying entities (Turn 1/2)...');
+        if (onProgress) {
+            onProgress('Verifying entities (Turn 1/2)...');
+            currentMapState.refreshLock();
+        }
         const userContentTurn1 = `SOURCE:\n${instruction}\n\nEVIDENCE:\n${context}\n\nEXISTING NODES:\n${getExistingNodesPrompt(currentMapState)}`;
         const turn1 = await generateContent(selectedModel, apiKey, [
             { role: 'system', content: `${SYSTEM_BASE}\nTask: IDENTITY. Add or update nodes. Fix typos in labels. DO NOT add edges. Cite document sources WITH offsets from the SOURCE TABLE.` },
@@ -434,7 +440,10 @@ export async function runMappingPipeline(opts: {
         currentMapState = useMapStore.getState();
 
         // TURN 2: Edges
-        if (onProgress) onProgress('Discovering connections (Turn 2/2)...');
+        if (onProgress) {
+            onProgress('Discovering connections (Turn 2/2)...');
+            currentMapState.refreshLock();
+        }
         const userContentTurn2 = `SOURCE:\n${instruction}\n\nEVIDENCE:\n${context}\n\nNODES TO CONNECT (USE THESE EXACT IDs):\n${getExistingNodesPrompt(currentMapState)}`;
         const turn2 = await generateContent(selectedModel, apiKey, [
             { role: 'system', content: `${SYSTEM_BASE}\nTask: TOPOLOGY. Add or remove edges between nodes. DO NOT add nodes.` },
@@ -449,6 +458,10 @@ export async function runMappingPipeline(opts: {
         currentMapState = useMapStore.getState();
 
         // Final Snap
+        if (onProgress) {
+            onProgress('Finalizing layout...');
+            currentMapState.refreshLock();
+        }
         const finalNodes = currentMapState.nodes.map((n: MapNode) => ({ ...n, data: { ...n.data, mass: calculateNodeMass(n, currentMapState.edges) } }));
         currentMapState.loadMap(autoLayout(finalNodes, currentMapState.edges, 'LR'), currentMapState.edges);
         currentMapState.persistToDB();
