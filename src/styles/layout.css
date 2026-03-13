@@ -95,3 +95,16 @@
   text-align: center;
   padding: 1rem;
 }
+
+.system-progress-overlay {
+  position: fixed;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+  pointer-events: none; /* Allow clicking through if necessary, but ProgressBar usually has auto pointer-events */
+}
+
+.system-progress-overlay > * {
+  pointer-events: auto;
+}

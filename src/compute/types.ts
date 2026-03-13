@@ -391,6 +391,8 @@ export interface SystemComputeStatusMessage {
   type: 'system_compute_status';
   device: ComputeDevice;
   mlWorkerCount: number;
+  totalMlWorkers: number;
+  isInitializing: boolean;
 }
 
 // Message from Coordinator to App with job progress updates

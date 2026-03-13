@@ -40,6 +40,10 @@ export class ComputeCoordinator {
   private isLoggingEnabled = true;
   private vectorStore: VectorStore;
   private setActiveJobCount: (updater: (prev: number) => number) => void;
+  
+  private expectedMlWorkerCount = 0;
+  private initializingMlWorkerIds = new Set<string>();
+  private maxConcurrentInitializations = 2;
 
   public on<K extends keyof CoordinatorEventMap>(eventName: K, listener: Listener<CoordinatorEventMap[K]>): void {
     if (!this.listeners.has(eventName)) {
@@ -69,7 +73,9 @@ export class ComputeCoordinator {
   constructor(settings: AppSettings, hardwareConcurrency: number, setActiveJobCount: (updater: (prev: number) => number) => void, vectorStore: VectorStore) {
     this.vectorStore = vectorStore;
     this.setActiveJobCount = setActiveJobCount;
+    this.maxConcurrentInitializations = Math.min(4, Math.max(2, Math.floor(hardwareConcurrency / 4)));
     const numMlWorkers = settings.numMlWorkers;
+    this.expectedMlWorkerCount = numMlWorkers;
     const numGpWorkers = Math.max(1, hardwareConcurrency - numMlWorkers);
 
     if (this.isLoggingEnabled) console.log(`[${new Date().toISOString()}] [Coordinator] Initializing with ${numMlWorkers} ML workers and ${numGpWorkers} GP workers.`);
@@ -95,29 +101,25 @@ export class ComputeCoordinator {
     switch (message.type) {
       case 'worker_ready':
         if (this.isLoggingEnabled) console.log(`[${new Date().toISOString()}] [Coordinator] Worker script ${message.workerId} has loaded.`);
-        // If it's the first ML worker in the queue, kick off its initialization.
-        if (this.mlWorkersToInitialize[0] === message.workerId) {
-          if (this.isLoggingEnabled) console.log(`[${new Date().toISOString()}] [Coordinator] Sending initialization command to ${message.workerId}.`);
-          workerHandle.worker.postMessage({ type: 'initialize_worker' });
-        }
+        this.checkAndTriggerMlInitializations();
         break;
       case 'worker_initialized':
         if (this.isLoggingEnabled) console.log(`[${new Date().toISOString()}] [Coordinator] Worker ${message.workerId} has successfully initialized its pipelines.`);
         workerHandle.isInitialized = true;
         workerHandle.isIdle = true;
-        // Remove the initialized worker from the queue
-        this.mlWorkersToInitialize.shift();
-        // Trigger initialization of the next worker if it exists
-        if (this.mlWorkersToInitialize.length > 0) {
-          const nextWorkerId = this.mlWorkersToInitialize[0];
-          const nextWorkerHandle = this.mlWorkerPool.find(w => w.id === nextWorkerId);
-          if (nextWorkerHandle) {
-            if (this.isLoggingEnabled) console.log(`[${new Date().toISOString()}] [Coordinator] Sending initialization command to ${nextWorkerId}.`);
-            nextWorkerHandle.worker.postMessage({ type: 'initialize_worker' });
-          }
-        } else {
+        
+        // Remove from initializing sets/queues
+        this.initializingMlWorkerIds.delete(message.workerId);
+        this.mlWorkersToInitialize = this.mlWorkersToInitialize.filter(id => id !== message.workerId);
+        
+        // Trigger initialization of more workers if available
+        this.checkAndTriggerMlInitializations();
+        
+        if (this.mlWorkersToInitialize.length === 0 && this.initializingMlWorkerIds.size === 0) {
           if (this.isLoggingEnabled) console.log(`[${new Date().toISOString()}] [Coordinator] All ML workers have been initialized.`);
         }
+        
+        this.updateAndEmitSystemStatus();
         // Attempt to dispatch tasks now that a worker is ready
         this.dispatchTasks();
         break;
@@ -626,6 +628,7 @@ export class ComputeCoordinator {
   public async setMlWorkerCount(newCount: number) {
     if (this.isLoggingEnabled) console.log(`[${new Date().toISOString()}] [Coordinator] Adjusting ML worker count from ${this.mlWorkerPool.length} to ${newCount}`);
     const currentCount = this.mlWorkerPool.length;
+    this.expectedMlWorkerCount = newCount;
 
     if (newCount > currentCount) {
       // Add workers
@@ -646,9 +649,11 @@ export class ComputeCoordinator {
         if (initQueueIndex > -1) {
           this.mlWorkersToInitialize.splice(initQueueIndex, 1);
         }
+        this.initializingMlWorkerIds.delete(workerHandle.id);
       }
     }
     this.updateAndEmitSystemStatus();
+    this.checkAndTriggerMlInitializations();
   }
 
   private addMlWorker() {
@@ -662,33 +667,53 @@ export class ComputeCoordinator {
     this.workerDeviceStatuses.set(workerId, 'unknown');
     worker.onmessage = (event: MessageEvent<WorkerToCoordinatorMessage>) => this.handleWorkerMessage(handle, event.data);
 
-    // Add to the initialization queue.
-    // If the queue was empty, it means all previous workers were already initialized,
-    // so we can kick off initialization for this new one immediately.
-    const shouldStartInitialization = this.mlWorkersToInitialize.length === 0;
     this.mlWorkersToInitialize.push(workerId);
-    if (shouldStartInitialization) {
-      if (this.isLoggingEnabled) console.log(`[${new Date().toISOString()}] [Coordinator] Sending initialization command to ${workerId}.`);
-      handle.worker.postMessage({ type: 'initialize_worker' });
-    }
+    // Don't call postMessage directly here, let checkAndTriggerMlInitializations handle it
+    // when the worker script reports 'worker_ready'
   }
 
   private updateAndEmitSystemStatus() {
-    const statuses = Array.from(this.workerDeviceStatuses.values());
-    // If any worker is on GPU, the system status is GPU.
-    // Otherwise, if all are CPU, it's CPU.
-    // Otherwise, it's unknown.
-    const overallStatus: ComputeDevice = statuses.includes('gpu')
-      ? 'gpu'
-      : statuses.every(s => s === 'cpu')
-      ? 'cpu'
-      : 'unknown';
+    const overallStatus = this.determineDominantDevice();
     
+    const initializedMlCount = this.mlWorkerPool.filter(w => w.isInitialized).length;
+    const isInitializing = this.mlWorkersToInitialize.length > 0 || this.initializingMlWorkerIds.size > 0;
+
     this.emit('system_compute_status', {
       type: 'system_compute_status',
       device: overallStatus,
-      mlWorkerCount: this.mlWorkerPool.length,
+      mlWorkerCount: initializedMlCount,
+      totalMlWorkers: this.expectedMlWorkerCount,
+      isInitializing
     });
+  }
+
+  private checkAndTriggerMlInitializations() {
+    while (
+      this.initializingMlWorkerIds.size < this.maxConcurrentInitializations && 
+      this.mlWorkersToInitialize.length > 0
+    ) {
+      // Only trigger initialization for workers that are in the queue and NOT already initializing
+      const nextWorkerId = this.mlWorkersToInitialize.find(id => !this.initializingMlWorkerIds.has(id));
+      if (!nextWorkerId) break;
+
+      const nextWorkerHandle = this.mlWorkerPool.find(w => w.id === nextWorkerId);
+      if (nextWorkerHandle) {
+        if (this.isLoggingEnabled) console.log(`[${new Date().toISOString()}] [Coordinator] Sending initialization command to ${nextWorkerId}.`);
+        this.initializingMlWorkerIds.add(nextWorkerId);
+        nextWorkerHandle.worker.postMessage({ type: 'initialize_worker' });
+      } else {
+        this.mlWorkersToInitialize = this.mlWorkersToInitialize.filter(id => id !== nextWorkerId);
+      }
+    }
+    
+    this.updateAndEmitSystemStatus();
+  }
+
+  private determineDominantDevice(): ComputeDevice {
+    const statuses = Array.from(this.workerDeviceStatuses.values());
+    if (statuses.includes('gpu')) return 'gpu';
+    if (statuses.every(s => s === 'cpu')) return 'cpu';
+    return 'unknown';
   }
 
   public prioritizeLayoutForDoc(docId: string) {
@@ -747,7 +772,7 @@ export class ComputeCoordinator {
         // Otherwise, find the first available worker that isn't already assigned in this loop
         targetWorkerHandle = availableWorkers.find(w => !assignedWorkerIds.has(w.id));
         
-        // If it's a streaming task, pin it for the future
+        // If it's a sleep-or-stream task, pin it for the future
         if (targetWorkerHandle && docId && (task.payload.type === TaskType.StreamChunk || task.payload.type === TaskType.CompleteStream)) {
             if (this.isLoggingEnabled) console.log(`[${new Date().toISOString()}] [Coordinator] Pinning ${docId} to ${targetWorkerHandle.id}.`);
             this.workerPins.set(docId, targetWorkerHandle.id);

@@ -34,6 +34,7 @@ import { CaseFilePanel } from './components/CaseFile/CaseFilePanel';
 import { DossierPanel } from './components/Dossier/DossierPanel';
 import { InvestigationMapPanel } from './components/InvestigationMap/InvestigationMapPanel';
 import { ProjectBrowser } from './components/ProjectBrowser/ProjectBrowser';
+import { ProgressBar } from './components/ProgressBar';
 import { ToastContainer } from './components/ToastContainer';
 import { useDossierAI } from './hooks/useDossierAI';
 import { useMapAI } from './hooks/useMapAI';
@@ -45,7 +46,7 @@ import './Modal.css';
 export const App: FC = () => {
   const { appSettings, setAppSettings, modelsList, selectedModel, setSelectedModel, apiKeys, setApiKeys } = useSettingsStore();
   const { fileTree, selectedFile, isDragging } = useFileStore();
-  const { computeDevice, mlWorkerCount } = useComputeStore();
+  const { computeDevice, mlWorkerCount, totalMlWorkerCount, isInitializingWorkers } = useComputeStore();
 
   const [viewMode, setViewMode] = useState<ViewMode>('tree');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -443,6 +444,15 @@ export const App: FC = () => {
 
   return (
     <div className='app-container'>
+      {isInitializingWorkers && (
+        <div className="system-progress-overlay">
+          <ProgressBar 
+            progress={mlWorkerCount} 
+            total={totalMlWorkerCount} 
+            label="Activating Intelligence Workers..." 
+          />
+        </div>
+      )}
       <FilePanel
         showSettings={showSettings} setShowSettings={setShowSettings}
         glowType={glowType} isDragging={isDragging} handleDropValidate={handleDropValidate}

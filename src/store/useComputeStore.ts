@@ -8,6 +8,8 @@ interface ComputeState {
   jobTimers: Record<string, JobTimer>;
   computeDevice: 'gpu' | 'cpu' | 'unknown';
   mlWorkerCount: number;
+  totalMlWorkerCount: number;
+  isInitializingWorkers: boolean;
   activeJobCount: number;
   totalEmbeddingsCount: number;
 
@@ -18,6 +20,8 @@ interface ComputeState {
   setJobTimers: (updater: Record<string, JobTimer> | ((prev: Record<string, JobTimer>) => Record<string, JobTimer>)) => void;
   setComputeDevice: (device: 'gpu' | 'cpu' | 'unknown') => void;
   setMlWorkerCount: (count: number) => void;
+  setTotalMlWorkerCount: (count: number) => void;
+  setIsInitializingWorkers: (isInitializing: boolean) => void;
   setActiveJobCount: (updater: number | ((prev: number) => number)) => void;
   setTotalEmbeddingsCount: (count: number) => void;
 }
@@ -29,6 +33,8 @@ export const useComputeStore = create<ComputeState>((set) => ({
   jobTimers: {},
   computeDevice: 'unknown',
   mlWorkerCount: 0,
+  totalMlWorkerCount: 0,
+  isInitializingWorkers: false,
   activeJobCount: 0,
   totalEmbeddingsCount: 0,
 
@@ -47,6 +53,10 @@ export const useComputeStore = create<ComputeState>((set) => ({
   setComputeDevice: (computeDevice) => set({ computeDevice }),
 
   setMlWorkerCount: (mlWorkerCount) => set({ mlWorkerCount }),
+
+  setTotalMlWorkerCount: (totalMlWorkerCount) => set({ totalMlWorkerCount }),
+
+  setIsInitializingWorkers: (isInitializingWorkers) => set({ isInitializingWorkers }),
 
   setActiveJobCount: (updater) => set((state) => ({
     activeJobCount: typeof updater === 'function' ? updater(state.activeJobCount) : updater

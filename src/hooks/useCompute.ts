@@ -15,7 +15,9 @@ export const useCompute = (docFontSize: number) => {
         setRerankProgress, 
         setJobTimers, 
         setComputeDevice, 
-        setMlWorkerCount, 
+        setMlWorkerCount,
+        setTotalMlWorkerCount,
+        setIsInitializingWorkers,
         setActiveJobCount, 
         setTotalEmbeddingsCount 
     } = useComputeStore();
@@ -183,6 +185,8 @@ export const useCompute = (docFontSize: number) => {
         const handleSystemStatus = (message: SystemComputeStatusMessage) => {
             setComputeDevice(message.device);
             setMlWorkerCount(message.mlWorkerCount);
+            setTotalMlWorkerCount(message.totalMlWorkers);
+            setIsInitializingWorkers(message.isInitializing);
         };
 
         const handleSummaryStarted = (message: import('../compute/types').SummaryGenerationStartedMessage) => {
@@ -241,7 +245,7 @@ export const useCompute = (docFontSize: number) => {
                 coordinator.current.off('stream_chunk_added', handleStreamChunkAdded);
             }
         };
-    }, [appSettings, files, setFiles, apiKeys, docFontSize, selectedModel, selectedProvider, setIsEmbedding, setJobProgress, setRerankProgress, setJobTimers, setComputeDevice, setMlWorkerCount, setActiveJobCount, setTotalEmbeddingsCount]);
+    }, [appSettings, files, setFiles, apiKeys, docFontSize, selectedModel, selectedProvider, setIsEmbedding, setJobProgress, setRerankProgress, setJobTimers, setComputeDevice, setMlWorkerCount, setTotalMlWorkerCount, setIsInitializingWorkers, setActiveJobCount, setTotalEmbeddingsCount]);
 
     return {
         coordinator,

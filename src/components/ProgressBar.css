@@ -1,0 +1,49 @@
+.common-progress-container {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--panel-bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 20px;
+    padding: 6px 14px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+    min-width: 200px;
+    max-width: 100%;
+}
+
+.common-progress-label {
+    font-size: 12px;
+    color: var(--text-color);
+    white-space: nowrap;
+}
+
+.common-progress-count {
+    font-size: 11px;
+    color: var(--text-color-secondary);
+    margin-left: 2px;
+}
+
+.common-progress-bar-track {
+    flex: 1;
+    height: 4px;
+    background: var(--secondary-color);
+    border-radius: 2px;
+    overflow: hidden;
+    min-width: 60px;
+}
+
+.common-progress-bar-fill {
+    height: 100%;
+    background: var(--primary-color);
+    border-radius: 2px;
+    transition: width 0.3s ease;
+}
+
+.animate-spin {
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
