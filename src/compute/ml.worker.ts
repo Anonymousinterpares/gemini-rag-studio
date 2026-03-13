@@ -132,9 +132,15 @@ class CustomRerankerPipeline {
     return this.instance;
   }
 
-  async run(texts: string[]): Promise<number[]> {
+  /**
+   * Scores query-document pairs using the cross-encoder.
+   * Accepts pairs as [[query, doc], [query, doc], ...] — the tokenizer
+   * automatically formats each pair as [CLS] query [SEP] doc [SEP],
+   * matching the format the model was trained on.
+   */
+  async run(pairs: [string, string][]): Promise<number[]> {
     // @ts-expect-error - Transformers.js typing issue
-    const inputs = this.tokenizer(texts, { padding: true, truncation: true, return_tensors: 'pt' });
+    const inputs = this.tokenizer(pairs, { padding: true, truncation: true, return_tensors: 'pt' });
     // @ts-expect-error - Transformers.js typing issue
     const { logits } = await this.model(inputs);
 
@@ -238,8 +244,10 @@ async function executeTask(task: ComputeTask) {
         if (isLoggingEnabled) console.log(`[ML Worker ${workerId}] Starting reranking for: ${taskId}`);
         const { query, documents } = taskPayload;
         const reranker = await CustomRerankerPipeline.getInstance();
-        const rerankInputs = documents.map(d => query + "</s>" + d.chunk);
-        const rerankedScores = await reranker.run(rerankInputs);
+        // Pass [query, document] pairs directly — the tokenizer handles
+        // [CLS] query [SEP] doc [SEP] formatting, matching training conditions.
+        const rerankPairs: [string, string][] = documents.map(d => [query, d.chunk]);
+        const rerankedScores = await reranker.run(rerankPairs);
 
         const rankedDocuments = documents.map((doc, i) => ({
           ...doc,
