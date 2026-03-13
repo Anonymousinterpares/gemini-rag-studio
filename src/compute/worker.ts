@@ -159,10 +159,11 @@ async function executeTask(task: ComputeTask) {
         const { docId, query, model, apiKey } = taskPayload;
 
         // This worker can't embed, so we ask the coordinator to do it.
-        // This is a temporary solution until we have a proper service architecture.
+        // Use a requestId to avoid race conditions if multiple RAG tasks run concurrently.
+        const requestId = `${docId}-${Date.now()}`;
         const searchResultPromise = new Promise<SearchResult[]>((resolve) => {
             const listener = (event: MessageEvent) => {
-                if (event.data.type === 'search_result') {
+                if (event.data.type === 'search_result' && event.data.requestId === requestId) {
                     self.removeEventListener('message', listener);
                     resolve(event.data.results);
                 }
@@ -175,6 +176,7 @@ async function executeTask(task: ComputeTask) {
             query: query,
             topK: 5,
             docId,
+            requestId,
         });
 
         const searchResults = await searchResultPromise;

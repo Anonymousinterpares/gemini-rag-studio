@@ -472,7 +472,9 @@ export class ComputeCoordinator {
           }
           // For now, we'll count it as "completed" to avoid stalling the job forever.
           job.completedTasks++;
-          if (job.completedTasks === job.tasks.length) {
+          job.pendingTaskIds.delete(taskId);
+          
+          if (job.pendingTaskIds.size === 0) {
             if (this.isLoggingEnabled) console.warn(`[${new Date().toISOString()}] [Coordinator] Job "${job.name}" (${job.id}) is finishing with errors.`);
             this.emit('job_complete', { type: 'job_complete', jobId: job.id, jobName: job.name } as JobCompleteMessage);
             this.jobRegistry.delete(jobId);
@@ -485,7 +487,7 @@ export class ComputeCoordinator {
         break;
       }
       case 'embed_and_search': {
-        const { query, topK, docId } = message;
+        const { query, topK, docId, requestId } = message;
         // This is a multi-step process that involves both ML and GP workers.
         // 1. Create a temporary job to embed the query.
         const embedTask: Omit<ComputeTask, 'jobId'> = {
@@ -505,7 +507,7 @@ export class ComputeCoordinator {
             if (this.isLoggingEnabled) console.log(`[${new Date().toISOString()}] [Coordinator DEBUG] Got query embedding for ${docId}. Searching vector store...`);
             const searchResults = this.vectorStore.search(queryEmbedding, topK, docId);
             if (this.isLoggingEnabled) console.log(`[${new Date().toISOString()}] [Coordinator DEBUG] Search for ${docId} completed. Found ${searchResults.length} results. Sending back to worker ${workerHandle.id}.`, { searchResults });
-            workerHandle.worker.postMessage({ type: 'search_result', results: searchResults });
+            workerHandle.worker.postMessage({ type: 'search_result', results: searchResults, requestId });
             this.off('task_complete', taskCompletionListener); // Clean up listener
           }
         };

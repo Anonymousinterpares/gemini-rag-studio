@@ -206,12 +206,6 @@ export interface ComputeTask {
 
 // --- Message Contracts ---
 
-// Message from Coordinator to Worker to start a task
-export interface StartTaskMessage {
-  type: 'start_task';
-  payload: ComputeTaskPayload;
-}
-
 // --- Result Types ---
 
 
@@ -431,11 +425,13 @@ export interface EmbedAndSearchMessage {
     query: string;
     topK: number;
     docId?: string;
+    requestId: string;
 }
 
 export interface SearchResultMessage {
     type: 'search_result';
     results: SearchResult[];
+    requestId: string;
 }
 
 export type WorkerToCoordinatorMessage = TaskCompleteMessage | TaskErrorMessage | WorkerReadyMessage | WorkerInitializedMessage | WorkerDeviceStatusMessage | WorkerRerankerReadyMessage | SearchMessage | EmbedAndSearchMessage;
