@@ -18,6 +18,7 @@ import {
   StreamChunkPayload,
   StreamChunkResult,
   CompleteStreamPayload,
+  EmbedQueryResult,
 } from './types';
 import { hierarchicalChunker, StreamingHierarchicalChunker } from '../rag/hierarchical-splitter';
 
@@ -43,7 +44,7 @@ class EmbeddingPipeline {
           this.instance = (await pipeline('feature-extraction', modelId, {
             device: 'webgpu',
             dtype: 'fp16',
-          })) as FeatureExtractionPipeline;
+          })) as unknown as FeatureExtractionPipeline;
           this.platform = 'gpu';
           if (isLoggingEnabled) console.log(`[ML Worker] v3 Embedding: WebGPU (fp16) SUCCESS.`);
         } catch (gpuError) {
@@ -52,15 +53,15 @@ class EmbeddingPipeline {
             this.instance = (await pipeline('feature-extraction', modelId, {
               device: 'webgpu',
               dtype: 'fp32',
-            })) as FeatureExtractionPipeline;
+            })) as unknown as FeatureExtractionPipeline;
             this.platform = 'gpu';
             if (isLoggingEnabled) console.log(`[ML Worker] v3 Embedding: WebGPU (fp32) SUCCESS.`);
           } catch (gpuError2) {
             console.warn(`[ML Worker] WebGPU failed, falling back to CPU...`, gpuError2);
             this.instance = (await pipeline('feature-extraction', modelId, {
               device: 'wasm',
-              dtype: 'q8', // Quantized for CPU
-            })) as FeatureExtractionPipeline;
+              dtype: 'q8',
+            })) as unknown as FeatureExtractionPipeline;
             this.platform = 'cpu';
             if (isLoggingEnabled) console.log(`[ML Worker] v3 Embedding: CPU (q8) SUCCESS.`);
           }
@@ -229,7 +230,7 @@ async function executeTask(task: ComputeTask) {
         const { query } = taskPayload;
         const embedder = await EmbeddingPipeline.getInstance();
         const embeddingResult = await embedder(query, { pooling: 'mean', normalize: true });
-        result = Array.from(embeddingResult.data);
+        result = Array.from(embeddingResult.data) as EmbedQueryResult;
         if (isLoggingEnabled) console.log(`[ML Worker ${workerId}] Finished query embedding for: ${taskId}`);
         break;
       }
