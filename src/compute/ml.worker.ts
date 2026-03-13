@@ -165,6 +165,12 @@ self.onmessage = (event: MessageEvent<CoordinatorToWorkerMessage>) => {
     case 'initialize_worker':
       initializeAndReport();
       break;
+    // MANDATORY: 'initialize_reranker' is sent by the coordinator after Phase 1 to throttle
+    // concurrent reranker loads. NEVER remove this case — without it Phase 2 never starts.
+    case 'initialize_reranker':
+      if (isLoggingEnabled) console.log(`[ML Worker ${workerId}] Coordinator authorized Phase 2 (reranker) start.`);
+      initPhase2();
+      break;
     case 'start_task': {
       const { task } = event.data;
       // if (isLoggingEnabled) console.log(`[ML Worker ${workerId}] Received task:`, task.payload);
@@ -196,11 +202,11 @@ async function initPhase2(): Promise<void> {
 async function initializeAndReport() {
   try {
     if (isLoggingEnabled) console.log(`[ML Worker ${workerId}] Received initialization command. Starting Phase 1 (embedding)...`);
-    // Phase 1: load embedding pipeline — await this so the worker is ready for tasks ASAP.
+    // Phase 1: await completion so worker is ready for tasks ASAP.
+    // Coordinator queues this worker for Phase 2 when complete (coordinator-throttled).
     await initPhase1();
-    // Phase 2: load reranker concurrently in background — intentionally NOT awaited.
-    // The worker is already accepting tasks while this runs.
-    initPhase2();
+    // Phase 2 (reranker) is NOT started here. The coordinator sends 'initialize_reranker'
+    // when a concurrency slot is free — preventing simultaneous GPU/WASM saturation.
   } catch (e) {
     console.error(`[ML Worker ${workerId}] Critical error during Phase 1 initialization.`, e);
     // Do not send worker_initialized — coordinator will handle timeout (future: 5.4).

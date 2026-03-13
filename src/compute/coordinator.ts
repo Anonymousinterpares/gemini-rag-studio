@@ -46,6 +46,11 @@ export class ComputeCoordinator {
   private maxConcurrentInitializations = 3;
   private rerankerReadyCount = 0;
 
+  // Phase 2 throttling: workers queue here after Phase 1 completes.
+  // The coordinator drains this queue at the same concurrency limit as Phase 1.
+  private rerankerWorkersToInitialize: string[] = []; // ordered queue of workerIds
+  private initializingRerankerWorkerIds = new Set<string>(); // currently loading reranker
+
   public on<K extends keyof CoordinatorEventMap>(eventName: K, listener: Listener<CoordinatorEventMap[K]>): void {
     if (!this.listeners.has(eventName)) {
       this.listeners.set(eventName, new Set());
@@ -108,6 +113,9 @@ export class ComputeCoordinator {
         this.checkAndTriggerMlInitializations();
         break;
       case 'worker_reranker_ready':
+        // Free the Phase 2 concurrency slot before counting/logging
+        this.initializingRerankerWorkerIds.delete(message.workerId);
+        
         if (!message.error) {
           this.rerankerReadyCount++;
           if (this.isLoggingEnabled) console.log(`[${new Date().toISOString()}] [Coordinator] Worker ${message.workerId} Phase 2 complete (reranker ready). ${this.rerankerReadyCount}/${this.expectedMlWorkerCount} rerankers warm.`);
@@ -116,6 +124,9 @@ export class ComputeCoordinator {
           this.rerankerReadyCount++;
           console.warn(`[${new Date().toISOString()}] [Coordinator] Worker ${message.workerId} Phase 2 failed (reranker). Worker still usable for embedding.`);
         }
+        
+        // Trigger the next queued Phase 2 initialization
+        this.checkAndTriggerRerankerInitializations();
         this.updateAndEmitSystemStatus();
         break;
       case 'worker_initialized':
@@ -123,15 +134,19 @@ export class ComputeCoordinator {
         workerHandle.isInitialized = true;
         workerHandle.isIdle = true;
 
-        // Remove from initializing sets/queues
+        // Remove from Phase 1 tracking
         this.initializingMlWorkerIds.delete(message.workerId);
         this.mlWorkersToInitialize = this.mlWorkersToInitialize.filter(id => id !== message.workerId);
 
-        // Trigger initialization of more workers if available
+        // Queue this worker for Phase 2 (reranker), let the coordinator throttle it
+        this.rerankerWorkersToInitialize.push(message.workerId);
+        this.checkAndTriggerRerankerInitializations();
+
+        // Trigger Phase 1 initialization of next pending workers
         this.checkAndTriggerMlInitializations();
 
         if (this.mlWorkersToInitialize.length === 0 && this.initializingMlWorkerIds.size === 0) {
-          if (this.isLoggingEnabled) console.log(`[${new Date().toISOString()}] [Coordinator] All ML workers have been initialized.`);
+          if (this.isLoggingEnabled) console.log(`[${new Date().toISOString()}] [Coordinator] All ML workers Phase 1 complete.`);
         }
 
         this.updateAndEmitSystemStatus();
@@ -728,6 +743,34 @@ export class ComputeCoordinator {
 
     this.updateAndEmitSystemStatus();
   }
+
+  /**
+   * Phase 2 throttle: mirrors checkAndTriggerMlInitializations() for the reranker.
+   * Workers are queued here after Phase 1 completes. The coordinator drains the queue
+   * at most maxConcurrentInitializations at a time, preventing GPU/WASM saturation.
+   * MANDATORY: this must be called after every Phase 2 slot is freed (worker_reranker_ready).
+   */
+  private checkAndTriggerRerankerInitializations() {
+    while (
+      this.initializingRerankerWorkerIds.size < this.maxConcurrentInitializations &&
+      this.rerankerWorkersToInitialize.length > 0
+    ) {
+      const nextWorkerId = this.rerankerWorkersToInitialize.find(id => !this.initializingRerankerWorkerIds.has(id));
+      if (!nextWorkerId) break;
+
+      const nextWorkerHandle = this.mlWorkerPool.find(w => w.id === nextWorkerId);
+      if (nextWorkerHandle) {
+        if (this.isLoggingEnabled) console.log(`[${new Date().toISOString()}] [Coordinator] Starting Phase 2 (reranker) for ${nextWorkerId}. Active: ${this.initializingRerankerWorkerIds.size + 1}/${this.maxConcurrentInitializations}`);
+        this.initializingRerankerWorkerIds.add(nextWorkerId);
+        // Remove from queue to avoid double-triggering
+        this.rerankerWorkersToInitialize = this.rerankerWorkersToInitialize.filter(id => id !== nextWorkerId);
+        nextWorkerHandle.worker.postMessage({ type: 'initialize_reranker' });
+      } else {
+        this.rerankerWorkersToInitialize = this.rerankerWorkersToInitialize.filter(id => id !== nextWorkerId);
+      }
+    }
+  }
+
 
   private determineDominantDevice(): ComputeDevice {
     const statuses = Array.from(this.workerDeviceStatuses.values());

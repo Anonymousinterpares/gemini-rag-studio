@@ -356,6 +356,13 @@ export interface InitializeWorkerMessage {
   type: 'initialize_worker';
 }
 
+// Message from Coordinator to Worker to start Phase 2 (reranker) loading.
+// The coordinator sends this only when the concurrency slot is free, throttling
+// how many reranker models are loaded in parallel at startup.
+export interface InitializeRerankerMessage {
+  type: 'initialize_reranker';
+}
+
 // Message from Worker to Coordinator when it has fully initialized its internal pipelines
 export interface WorkerInitializedMessage {
     type: 'worker_initialized';
@@ -370,7 +377,7 @@ export interface JobCompleteMessage {
   payload?: unknown;
 }
 
-export type CoordinatorToWorkerMessage = StartTaskMessage | InitializeWorkerMessage | SetLoggingStateMessage;
+export type CoordinatorToWorkerMessage = StartTaskMessage | InitializeWorkerMessage | InitializeRerankerMessage | SetLoggingStateMessage;
 export type ComputeDevice = 'gpu' | 'cpu' | 'unknown';
 
 // Message from Worker to Coordinator with its determined compute device
