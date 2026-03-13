@@ -34,14 +34,14 @@ class EmbeddingPipeline {
   static async getInstance(): Promise<FeatureExtractionPipeline> {
     if (this.instance === null) {
       const modelId = 'Xenova/all-MiniLM-L6-v2';
-      
+
       try {
         if (isLoggingEnabled) console.log(`[ML Worker] Initializing v3 embedding pipeline...`);
-        
+
         // Try WebGPU with FP16 first (Standard for v3)
         try {
-          this.instance = (await pipeline('feature-extraction', modelId, { 
-            device: 'webgpu', 
+          this.instance = (await pipeline('feature-extraction', modelId, {
+            device: 'webgpu',
             dtype: 'fp16',
           })) as FeatureExtractionPipeline;
           this.platform = 'gpu';
@@ -49,16 +49,16 @@ class EmbeddingPipeline {
         } catch (gpuError) {
           console.warn(`[ML Worker] WebGPU (fp16) failed, trying WebGPU (fp32)...`, gpuError);
           try {
-            this.instance = (await pipeline('feature-extraction', modelId, { 
-              device: 'webgpu', 
+            this.instance = (await pipeline('feature-extraction', modelId, {
+              device: 'webgpu',
               dtype: 'fp32',
             })) as FeatureExtractionPipeline;
             this.platform = 'gpu';
             if (isLoggingEnabled) console.log(`[ML Worker] v3 Embedding: WebGPU (fp32) SUCCESS.`);
           } catch (gpuError2) {
             console.warn(`[ML Worker] WebGPU failed, falling back to CPU...`, gpuError2);
-            this.instance = (await pipeline('feature-extraction', modelId, { 
-              device: 'wasm', 
+            this.instance = (await pipeline('feature-extraction', modelId, {
+              device: 'wasm',
               dtype: 'q8', // Quantized for CPU
             })) as FeatureExtractionPipeline;
             this.platform = 'cpu';
@@ -96,7 +96,7 @@ class CustomRerankerPipeline {
   static async getInstance(): Promise<CustomRerankerPipeline> {
     if (this.instance === null) {
       const modelName = 'Xenova/bge-reranker-base';
-      
+
       try {
         if (isLoggingEnabled) console.log(`[ML Worker] Initializing v3 reranker pipeline...`);
         const tokenizer = await AutoTokenizer.from_pretrained(modelName);
@@ -105,17 +105,17 @@ class CustomRerankerPipeline {
 
         try {
           // Try GPU for reranker (INT8 since bge-reranker usually doesn't have FP16 locally)
-          model = await AutoModelForSequenceClassification.from_pretrained(modelName, { 
-            device: 'webgpu', 
-            dtype: 'q8' 
+          model = await AutoModelForSequenceClassification.from_pretrained(modelName, {
+            device: 'webgpu',
+            dtype: 'q8'
           });
           platform = 'gpu';
           if (isLoggingEnabled) console.log(`[ML Worker] v3 Reranker: WebGPU (q8) SUCCESS.`);
         } catch (e) {
           console.warn(`[ML Worker] v3 Reranker WebGPU failed, falling back to CPU...`, e);
-          model = await AutoModelForSequenceClassification.from_pretrained(modelName, { 
-            device: 'wasm', 
-            dtype: 'q8' 
+          model = await AutoModelForSequenceClassification.from_pretrained(modelName, {
+            device: 'wasm',
+            dtype: 'q8'
           });
           platform = 'cpu';
           if (isLoggingEnabled) console.log(`[ML Worker] v3 Reranker: CPU (q8) SUCCESS.`);
@@ -170,8 +170,10 @@ self.onmessage = (event: MessageEvent<CoordinatorToWorkerMessage>) => {
 async function initializeAndReport() {
   try {
     if (isLoggingEnabled) console.log(`[ML Worker ${workerId}] Received initialization command.`);
-    await EmbeddingPipeline.getInstance();
-    await CustomRerankerPipeline.getInstance();
+    await Promise.all([
+      EmbeddingPipeline.getInstance(),
+      CustomRerankerPipeline.getInstance(),
+    ]);
     if (isLoggingEnabled) console.log(`[ML Worker ${workerId}] All pipelines initialized successfully.`);
     self.postMessage({ type: 'worker_initialized', workerId });
   } catch (e) {

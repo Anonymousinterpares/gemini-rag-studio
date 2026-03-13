@@ -40,10 +40,10 @@ export class ComputeCoordinator {
   private isLoggingEnabled = true;
   private vectorStore: VectorStore;
   private setActiveJobCount: (updater: (prev: number) => number) => void;
-  
+
   private expectedMlWorkerCount = 0;
   private initializingMlWorkerIds = new Set<string>();
-  private maxConcurrentInitializations = 2;
+  private maxConcurrentInitializations = 3;
 
   public on<K extends keyof CoordinatorEventMap>(eventName: K, listener: Listener<CoordinatorEventMap[K]>): void {
     if (!this.listeners.has(eventName)) {
@@ -107,18 +107,18 @@ export class ComputeCoordinator {
         if (this.isLoggingEnabled) console.log(`[${new Date().toISOString()}] [Coordinator] Worker ${message.workerId} has successfully initialized its pipelines.`);
         workerHandle.isInitialized = true;
         workerHandle.isIdle = true;
-        
+
         // Remove from initializing sets/queues
         this.initializingMlWorkerIds.delete(message.workerId);
         this.mlWorkersToInitialize = this.mlWorkersToInitialize.filter(id => id !== message.workerId);
-        
+
         // Trigger initialization of more workers if available
         this.checkAndTriggerMlInitializations();
-        
+
         if (this.mlWorkersToInitialize.length === 0 && this.initializingMlWorkerIds.size === 0) {
           if (this.isLoggingEnabled) console.log(`[${new Date().toISOString()}] [Coordinator] All ML workers have been initialized.`);
         }
-        
+
         this.updateAndEmitSystemStatus();
         // Attempt to dispatch tasks now that a worker is ready
         this.dispatchTasks();
@@ -131,12 +131,12 @@ export class ComputeCoordinator {
       case 'task_complete': {
         const { jobId, taskId, taskType, result } = message;
         // if (this.isLoggingEnabled) console.log(`[${new Date().toISOString()}] [Coordinator DEBUG] Task ${taskId} (Type: ${TaskType[taskType]}) completed by worker ${workerHandle.id}.`);
-        
+
         switch (taskType) {
           case TaskType.DetectLanguage: {
             const { docId, language, tokenUsage } = result as import('./types').DetectLanguageResult;
             if (tokenUsage) {
-                this.emit('token_usage_update', { type: 'token_usage_update', usage: tokenUsage });
+              this.emit('token_usage_update', { type: 'token_usage_update', usage: tokenUsage });
             }
             // This is a fire-and-forget operation for the coordinator.
             // The result will be used by the main thread to update the file state.
@@ -178,7 +178,7 @@ export class ComputeCoordinator {
           case TaskType.GenerateSummaryQuery: {
             const { docId, query, model, apiKey, tokenUsage } = result as import('./types').GenerateSummaryQueryResult;
             if (tokenUsage) {
-                this.emit('token_usage_update', { type: 'token_usage_update', usage: tokenUsage });
+              this.emit('token_usage_update', { type: 'token_usage_update', usage: tokenUsage });
             }
             const nextTask: Omit<ComputeTask, 'jobId'> = {
               id: `${docId}-execute-rag-for-summary`,
@@ -230,30 +230,30 @@ export class ComputeCoordinator {
               childChunks: chunkResult.childChunks, // This is now correct
               language: 'unknown',
             };
-            
+
             // Store the final, correct payload in the results map.
             this.embeddingResults.set(chunkResult.docId, finalPayload);
 
             // Create embedding tasks for the CHILD chunks from the correct payload.
             const embedTasks: Omit<ComputeTask, 'jobId'>[] = (finalPayload.childChunks || []).map((child, childIndex) => {
-                if (child.parentChunkIndex === undefined || child.parentChunkIndex < 0) {
-                    console.error(`[Coordinator ERROR] Child chunk ${childIndex} for ${chunkResult.docId} has an invalid parent index.`, child);
-                }
-                return {
-                    id: `${chunkResult.docId}-embed-child-${childIndex}`,
-                    priority: TaskPriority.P1_Primary,
-                    payload: {
-                        type: TaskType.EmbedChildChunk,
-                        docId: chunkResult.docId,
-                        childChunkIndex: childIndex,
-                        childChunkText: child.text,
-                        parentChunkIndex: child.parentChunkIndex ?? -1,
-                        name: chunkResult.name,
-                        lastModified: chunkResult.lastModified,
-                        size: chunkResult.size,
-                        totalChunks: chunkResult.childChunks.length,
-                    },
-                };
+              if (child.parentChunkIndex === undefined || child.parentChunkIndex < 0) {
+                console.error(`[Coordinator ERROR] Child chunk ${childIndex} for ${chunkResult.docId} has an invalid parent index.`, child);
+              }
+              return {
+                id: `${chunkResult.docId}-embed-child-${childIndex}`,
+                priority: TaskPriority.P1_Primary,
+                payload: {
+                  type: TaskType.EmbedChildChunk,
+                  docId: chunkResult.docId,
+                  childChunkIndex: childIndex,
+                  childChunkText: child.text,
+                  parentChunkIndex: child.parentChunkIndex ?? -1,
+                  name: chunkResult.name,
+                  lastModified: chunkResult.lastModified,
+                  size: chunkResult.size,
+                  totalChunks: chunkResult.childChunks.length,
+                },
+              };
             });
 
             if (this.isLoggingEnabled) console.log(`[${new Date().toISOString()}] [Coordinator DEBUG] Creating ${embedTasks.length} EmbedChildChunk tasks for ${chunkResult.docId}.`);
@@ -284,19 +284,19 @@ export class ComputeCoordinator {
 
             let fileResult = this.embeddingResults.get(docId);
             if (!fileResult) {
-                // Initialize if not present (this handles the first chunk)
-                const taskPayload = (this.jobRegistry.get(jobId)?.tasks.find(t => t.id === taskId)?.payload as import('./types').StreamChunkPayload);
-                fileResult = {
-                    name: taskPayload.name,
-                    lastModified: taskPayload.lastModified,
-                    size: taskPayload.size,
-                    embeddings: [],
-                    parentChunks: [],
-                    childChunks: [],
-                    language: 'unknown',
-                    isStreaming: true,
-                };
-                this.embeddingResults.set(docId, fileResult);
+              // Initialize if not present (this handles the first chunk)
+              const taskPayload = (this.jobRegistry.get(jobId)?.tasks.find(t => t.id === taskId)?.payload as import('./types').StreamChunkPayload);
+              fileResult = {
+                name: taskPayload.name,
+                lastModified: taskPayload.lastModified,
+                size: taskPayload.size,
+                embeddings: [],
+                parentChunks: [],
+                childChunks: [],
+                language: 'unknown',
+                isStreaming: true,
+              };
+              this.embeddingResults.set(docId, fileResult);
             }
 
             // Append new chunks and embeddings
@@ -305,14 +305,14 @@ export class ComputeCoordinator {
             fileResult.embeddings.push(...embeddings);
 
             if (this.isLoggingEnabled) console.log(`[${new Date().toISOString()}] [Coordinator] Incremental stream chunk for ${docId}: ${parentChunks.length} parents, ${childChunks.length} children.`);
-            
+
             // Emit special event for incremental UI updates
             this.emit('stream_chunk_added', {
-                type: 'stream_chunk_added',
-                docId,
-                parentChunks,
-                childChunks,
-                embeddings,
+              type: 'stream_chunk_added',
+              docId,
+              parentChunks,
+              childChunks,
+              embeddings,
             });
             break;
           }
@@ -325,43 +325,43 @@ export class ComputeCoordinator {
             // The worker might have returned some final chunks. Add them.
             const fileResult = this.embeddingResults.get(docId);
             if (fileResult) {
-                fileResult.parentChunks = [...(fileResult.parentChunks || []), ...completeResult.parentChunks];
-                fileResult.childChunks = [...(fileResult.childChunks || []), ...completeResult.childChunks];
-                
-                // For streaming files, we must also trigger an Indexing task now that all chunks are available.
-                const indexTask: Omit<ComputeTask, 'jobId'> = {
-                    id: `${docId}-index-stream`,
+              fileResult.parentChunks = [...(fileResult.parentChunks || []), ...completeResult.parentChunks];
+              fileResult.childChunks = [...(fileResult.childChunks || []), ...completeResult.childChunks];
+
+              // For streaming files, we must also trigger an Indexing task now that all chunks are available.
+              const indexTask: Omit<ComputeTask, 'jobId'> = {
+                id: `${docId}-index-stream`,
+                priority: TaskPriority.P1_Primary,
+                payload: {
+                  type: TaskType.IndexDocument,
+                  docId: docId,
+                  parentChunks: fileResult.parentChunks,
+                },
+              };
+              this.addTasksToJob(jobId, [indexTask]);
+
+              if (completeResult.childChunks.length > 0) {
+                if (this.isLoggingEnabled) console.log(`[${new Date().toISOString()}] [Coordinator] Stream completion returned ${completeResult.childChunks.length} additional child chunks. Creating embedding tasks.`);
+                const embedTasks: Omit<ComputeTask, 'jobId'>[] = completeResult.childChunks.map((child, i) => {
+                  const childIndex = fileResult.childChunks!.length - completeResult.childChunks.length + i;
+                  return {
+                    id: `${docId}-embed-final-${childIndex}`,
                     priority: TaskPriority.P1_Primary,
                     payload: {
-                        type: TaskType.IndexDocument,
-                        docId: docId,
-                        parentChunks: fileResult.parentChunks,
+                      type: TaskType.EmbedChildChunk,
+                      docId: docId,
+                      childChunkIndex: childIndex,
+                      childChunkText: child.text,
+                      parentChunkIndex: child.parentChunkIndex ?? -1,
+                      name: fileResult.name,
+                      lastModified: fileResult.lastModified,
+                      size: fileResult.size,
+                      totalChunks: -1, // Unknown total
                     },
-                };
-                this.addTasksToJob(jobId, [indexTask]);
-
-                if (completeResult.childChunks.length > 0) {
-                     if (this.isLoggingEnabled) console.log(`[${new Date().toISOString()}] [Coordinator] Stream completion returned ${completeResult.childChunks.length} additional child chunks. Creating embedding tasks.`);
-                     const embedTasks: Omit<ComputeTask, 'jobId'>[] = completeResult.childChunks.map((child, i) => {
-                         const childIndex = fileResult.childChunks!.length - completeResult.childChunks.length + i;
-                         return {
-                             id: `${docId}-embed-final-${childIndex}`,
-                             priority: TaskPriority.P1_Primary,
-                             payload: {
-                                 type: TaskType.EmbedChildChunk,
-                                 docId: docId,
-                                 childChunkIndex: childIndex,
-                                 childChunkText: child.text,
-                                 parentChunkIndex: child.parentChunkIndex ?? -1,
-                                 name: fileResult.name,
-                                 lastModified: fileResult.lastModified,
-                                 size: fileResult.size,
-                                 totalChunks: -1, // Unknown total
-                             },
-                         };
-                     });
-                     this.addTasksToJob(jobId, embedTasks);
-                }
+                  };
+                });
+                this.addTasksToJob(jobId, embedTasks);
+              }
             }
             break;
           }
@@ -385,9 +385,9 @@ export class ComputeCoordinator {
 
           if (job.pendingTaskIds.size === 0) {
             if (this.isLoggingEnabled) console.log(`[${new Date().toISOString()}] [Coordinator DEBUG] Job "${job.name}" (${job.id}) has completed (all tasks finished).`);
-            
+
             const isTemporary = job.name.startsWith('_temp');
-            
+
             if (job.name.startsWith('Ingestion:')) {
               const docId = job.name.replace('Ingestion: ', '');
               const fileResult = this.embeddingResults.get(docId);
@@ -401,29 +401,29 @@ export class ComputeCoordinator {
                 this.emit('job_complete', { type: 'job_complete', jobId: job.id, jobName: job.name } as JobCompleteMessage);
               }
             } else if (job.name.startsWith('Summary:')) {
-                const docId = job.name.replace('Summary: ', '');
-                // The result of the 'task_complete' message for the final 'Summarize' task is the payload we need.
-                const summaryPayload = message.result as SummarizeResult;
-                this.summaryJobsInProgress.delete(docId);
+              const docId = job.name.replace('Summary: ', '');
+              // The result of the 'task_complete' message for the final 'Summarize' task is the payload we need.
+              const summaryPayload = message.result as SummarizeResult;
+              this.summaryJobsInProgress.delete(docId);
 
-                // Emit the token usage update
-                if (summaryPayload.tokenUsage) {
-                    this.emit('token_usage_update', {
-                        type: 'token_usage_update',
-                        usage: summaryPayload.tokenUsage,
-                    });
-                }
-
-                // Emit the original completion event for other listeners
-                this.emit('summary_generation_completed', {
-                    docId: summaryPayload.docId,
-                    summary: summaryPayload.summary,
-                    tokenUsage: summaryPayload.tokenUsage, // Keep it here for listeners that need it
+              // Emit the token usage update
+              if (summaryPayload.tokenUsage) {
+                this.emit('token_usage_update', {
+                  type: 'token_usage_update',
+                  usage: summaryPayload.tokenUsage,
                 });
+              }
 
-                this.emit('job_complete', { type: 'job_complete', jobId: job.id, jobName: job.name, payload: summaryPayload } as JobCompleteMessage);
-                // Now it's safe to delete the embedding result
-                this.embeddingResults.delete(docId);
+              // Emit the original completion event for other listeners
+              this.emit('summary_generation_completed', {
+                docId: summaryPayload.docId,
+                summary: summaryPayload.summary,
+                tokenUsage: summaryPayload.tokenUsage, // Keep it here for listeners that need it
+              });
+
+              this.emit('job_complete', { type: 'job_complete', jobId: job.id, jobName: job.name, payload: summaryPayload } as JobCompleteMessage);
+              // Now it's safe to delete the embedding result
+              this.embeddingResults.delete(docId);
             } else if (job.name.startsWith('Layout:')) {
               // These job types have their own lifecycles and don't need to emit a payload.
               this.emit('job_complete', { type: 'job_complete', jobId: job.id, jobName: job.name } as JobCompleteMessage);
@@ -433,7 +433,7 @@ export class ComputeCoordinator {
 
             this.jobRegistry.delete(jobId);
             if (!isTemporary) {
-                this.setActiveJobCount(prev => prev - 1);
+              this.setActiveJobCount(prev => prev - 1);
             }
             if (this.isLoggingEnabled) console.log(`[${new Date().toISOString()}] [Coordinator DEBUG] Job ${jobId} deleted from registry. Active jobs remaining: check main thread state.`);
           }
@@ -447,22 +447,22 @@ export class ComputeCoordinator {
       case 'task_error': {
         const { jobId, taskId, error } = message;
         if (this.isLoggingEnabled) console.error(`[${new Date().toISOString()}] [Coordinator] Worker reported an error for task ${taskId}:`, error);
-        
+
         const job = this.jobRegistry.get(jobId);
         if (job) {
-            if (job.name.startsWith('Summary:')) {
-                const docId = job.name.replace('Summary: ', '');
-                this.summaryJobsInProgress.delete(docId);
-                this.emit('summary_generation_failed', { type: 'summary_generation_failed', docId, error });
-            }
-            // For now, we'll count it as "completed" to avoid stalling the job forever.
-            job.completedTasks++;
-             if (job.completedTasks === job.tasks.length) {
-                if (this.isLoggingEnabled) console.warn(`[${new Date().toISOString()}] [Coordinator] Job "${job.name}" (${job.id}) is finishing with errors.`);
-                this.emit('job_complete', { type: 'job_complete', jobId: job.id, jobName: job.name } as JobCompleteMessage);
-                this.jobRegistry.delete(jobId);
-                this.setActiveJobCount(prev => prev - 1);
-            }
+          if (job.name.startsWith('Summary:')) {
+            const docId = job.name.replace('Summary: ', '');
+            this.summaryJobsInProgress.delete(docId);
+            this.emit('summary_generation_failed', { type: 'summary_generation_failed', docId, error });
+          }
+          // For now, we'll count it as "completed" to avoid stalling the job forever.
+          job.completedTasks++;
+          if (job.completedTasks === job.tasks.length) {
+            if (this.isLoggingEnabled) console.warn(`[${new Date().toISOString()}] [Coordinator] Job "${job.name}" (${job.id}) is finishing with errors.`);
+            this.emit('job_complete', { type: 'job_complete', jobId: job.id, jobName: job.name } as JobCompleteMessage);
+            this.jobRegistry.delete(jobId);
+            this.setActiveJobCount(prev => prev - 1);
+          }
         }
         workerHandle.isIdle = true;
         workerHandle.currentTaskId = null;
@@ -474,25 +474,25 @@ export class ComputeCoordinator {
         // This is a multi-step process that involves both ML and GP workers.
         // 1. Create a temporary job to embed the query.
         const embedTask: Omit<ComputeTask, 'jobId'> = {
-            id: `embed-query-for-summary-${Date.now()}`,
-            priority: TaskPriority.P1_Primary,
-            payload: {
-                type: TaskType.EmbedQuery,
-                query,
-            },
+          id: `embed-query-for-summary-${Date.now()}`,
+          priority: TaskPriority.P1_Primary,
+          payload: {
+            type: TaskType.EmbedQuery,
+            query,
+          },
         };
         const tempJobId = this.addJob(`_temp_embed_for_search_${Date.now()}`, [embedTask], true);
-        
+
         // 2. Listen for the completion of this specific task.
         const taskCompletionListener = (completionMessage: WorkerToCoordinatorMessage) => {
-            if (completionMessage.type === 'task_complete' && completionMessage.jobId === tempJobId) {
-                const queryEmbedding = completionMessage.result as number[];
-                if (this.isLoggingEnabled) console.log(`[${new Date().toISOString()}] [Coordinator DEBUG] Got query embedding for ${docId}. Searching vector store...`);
-                const searchResults = this.vectorStore.search(queryEmbedding, topK, docId);
-                if (this.isLoggingEnabled) console.log(`[${new Date().toISOString()}] [Coordinator DEBUG] Search for ${docId} completed. Found ${searchResults.length} results. Sending back to worker ${workerHandle.id}.`, { searchResults });
-                workerHandle.worker.postMessage({ type: 'search_result', results: searchResults });
-                this.off('task_complete', taskCompletionListener); // Clean up listener
-            }
+          if (completionMessage.type === 'task_complete' && completionMessage.jobId === tempJobId) {
+            const queryEmbedding = completionMessage.result as number[];
+            if (this.isLoggingEnabled) console.log(`[${new Date().toISOString()}] [Coordinator DEBUG] Got query embedding for ${docId}. Searching vector store...`);
+            const searchResults = this.vectorStore.search(queryEmbedding, topK, docId);
+            if (this.isLoggingEnabled) console.log(`[${new Date().toISOString()}] [Coordinator DEBUG] Search for ${docId} completed. Found ${searchResults.length} results. Sending back to worker ${workerHandle.id}.`, { searchResults });
+            workerHandle.worker.postMessage({ type: 'search_result', results: searchResults });
+            this.off('task_complete', taskCompletionListener); // Clean up listener
+          }
         };
         this.on('task_complete', taskCompletionListener);
         break;
@@ -502,9 +502,9 @@ export class ComputeCoordinator {
 
   public addJob(name: string, tasks: Omit<ComputeTask, 'jobId'>[], isTemporary = false): string {
     const jobId = `job-${this.nextJobId++}`;
-    
+
     if (!isTemporary) {
-        this.setActiveJobCount(prev => prev + 1);
+      this.setActiveJobCount(prev => prev + 1);
     }
 
     const tasksWithJobId: ComputeTask[] = tasks.map(task => ({
@@ -522,9 +522,9 @@ export class ComputeCoordinator {
     this.jobRegistry.set(jobId, job);
 
     if (name.startsWith('Summary:')) {
-        const docId = name.replace('Summary: ', '');
-        this.summaryJobsInProgress.add(docId);
-        this.emit('summary_generation_started', { type: 'summary_generation_started', docId });
+      const docId = name.replace('Summary: ', '');
+      this.summaryJobsInProgress.add(docId);
+      this.emit('summary_generation_started', { type: 'summary_generation_started', docId });
     }
 
     if (this.isLoggingEnabled) console.log(`[${new Date().toISOString()}] [Coordinator DEBUG] Added job "${name}" (${jobId}) with ${tasks.length} tasks.`);
@@ -559,21 +559,21 @@ export class ComputeCoordinator {
   }
 
   private routeTasks(tasks: ComputeTask[]) {
-      tasks.forEach(task => {
-        if (task.payload.type === TaskType.CalculateLayout || 
-            task.payload.type === TaskType.GenerateSummaryQuery || 
-            task.payload.type === TaskType.Summarize || 
-            task.payload.type === TaskType.DetectLanguage || 
-            task.payload.type === TaskType.ExecuteRAGForSummary ||
-            task.payload.type === TaskType.IndexDocument) {
-          this.gpTaskQueue.push(task);
-        } else {
-          this.mlTaskQueue.push(task);
-        }
-      });
-      // Re-sort queues by priority
-      this.gpTaskQueue.sort((a, b) => a.priority - b.priority);
-      this.mlTaskQueue.sort((a, b) => a.priority - b.priority);
+    tasks.forEach(task => {
+      if (task.payload.type === TaskType.CalculateLayout ||
+        task.payload.type === TaskType.GenerateSummaryQuery ||
+        task.payload.type === TaskType.Summarize ||
+        task.payload.type === TaskType.DetectLanguage ||
+        task.payload.type === TaskType.ExecuteRAGForSummary ||
+        task.payload.type === TaskType.IndexDocument) {
+        this.gpTaskQueue.push(task);
+      } else {
+        this.mlTaskQueue.push(task);
+      }
+    });
+    // Re-sort queues by priority
+    this.gpTaskQueue.sort((a, b) => a.priority - b.priority);
+    this.mlTaskQueue.sort((a, b) => a.priority - b.priority);
   }
 
   public getJobs(): Job[] {
@@ -668,13 +668,14 @@ export class ComputeCoordinator {
     worker.onmessage = (event: MessageEvent<WorkerToCoordinatorMessage>) => this.handleWorkerMessage(handle, event.data);
 
     this.mlWorkersToInitialize.push(workerId);
-    // Don't call postMessage directly here, let checkAndTriggerMlInitializations handle it
-    // when the worker script reports 'worker_ready'
+    if (this.initializingMlWorkerIds.size < this.maxConcurrentInitializations) {
+      this.checkAndTriggerMlInitializations();
+    }
   }
 
   private updateAndEmitSystemStatus() {
     const overallStatus = this.determineDominantDevice();
-    
+
     const initializedMlCount = this.mlWorkerPool.filter(w => w.isInitialized).length;
     const isInitializing = this.mlWorkersToInitialize.length > 0 || this.initializingMlWorkerIds.size > 0;
 
@@ -689,7 +690,7 @@ export class ComputeCoordinator {
 
   private checkAndTriggerMlInitializations() {
     while (
-      this.initializingMlWorkerIds.size < this.maxConcurrentInitializations && 
+      this.initializingMlWorkerIds.size < this.maxConcurrentInitializations &&
       this.mlWorkersToInitialize.length > 0
     ) {
       // Only trigger initialization for workers that are in the queue and NOT already initializing
@@ -705,7 +706,7 @@ export class ComputeCoordinator {
         this.mlWorkersToInitialize = this.mlWorkersToInitialize.filter(id => id !== nextWorkerId);
       }
     }
-    
+
     this.updateAndEmitSystemStatus();
   }
 
@@ -762,20 +763,20 @@ export class ComputeCoordinator {
       // Safely extract docId if it exists in the payload
       const docId = 'docId' in task.payload ? (task.payload as { docId: string }).docId : null;
       const pinnedWorkerId = docId ? this.workerPins.get(docId) : null;
-      
+
       let targetWorkerHandle: WorkerHandle | undefined;
-      
+
       if (pinnedWorkerId) {
         // If this task is pinned, find that specific worker if it's available
         targetWorkerHandle = availableWorkers.find(w => w.id === pinnedWorkerId && !assignedWorkerIds.has(w.id));
       } else {
         // Otherwise, find the first available worker that isn't already assigned in this loop
         targetWorkerHandle = availableWorkers.find(w => !assignedWorkerIds.has(w.id));
-        
+
         // If it's a sleep-or-stream task, pin it for the future
         if (targetWorkerHandle && docId && (task.payload.type === TaskType.StreamChunk || task.payload.type === TaskType.CompleteStream)) {
-            if (this.isLoggingEnabled) console.log(`[${new Date().toISOString()}] [Coordinator] Pinning ${docId} to ${targetWorkerHandle.id}.`);
-            this.workerPins.set(docId, targetWorkerHandle.id);
+          if (this.isLoggingEnabled) console.log(`[${new Date().toISOString()}] [Coordinator] Pinning ${docId} to ${targetWorkerHandle.id}.`);
+          this.workerPins.set(docId, targetWorkerHandle.id);
         }
       }
 
@@ -802,7 +803,7 @@ export class ComputeCoordinator {
     if (availableGpWorkers.length === 0 || this.gpTaskQueue.length === 0) {
       return;
     }
-    
+
     if (this.isLoggingEnabled) console.log(`[${new Date().toISOString()}] [Coordinator] Dispatching GP... Queue: ${this.gpTaskQueue.length}, Idle GP Workers: ${availableGpWorkers.length}/${this.gpWorkerPool.length}`);
 
     // P0 tasks get absolute priority and can use any idle worker, including the reserved one.
@@ -810,12 +811,12 @@ export class ComputeCoordinator {
     if (p0TaskIndex !== -1) {
       const task = this.gpTaskQueue.splice(p0TaskIndex, 1)[0];
       const workerHandle = availableGpWorkers.pop()!;
-      
+
       if (this.isLoggingEnabled) console.log(`[${new Date().toISOString()}] [Coordinator] EMERGENCY DISPATCH: Assigning P0 task ${task.id} to a GP worker.`);
       workerHandle.isIdle = false;
       workerHandle.currentTaskId = task.id;
       workerHandle.worker.postMessage({ type: 'start_task', task });
-      
+
       // After dispatching a P0, we immediately try to dispatch more tasks
       this.dispatchGpTasks(); // Recurse to handle other tasks
       return;
@@ -826,15 +827,15 @@ export class ComputeCoordinator {
     const workersToDispatch = availableGpWorkers.slice(0, workersToUseCount);
 
     if (workersToDispatch.length > 0) {
-        if (this.isLoggingEnabled) console.log(`[${new Date().toISOString()}] [Coordinator] Standard GP dispatch. Reserving 1 worker, attempting to use ${workersToDispatch.length}.`);
-        for (const workerHandle of workersToDispatch) {
-            if (this.gpTaskQueue.length === 0) break;
-            const task = this.gpTaskQueue.shift()!;
-            if (this.isLoggingEnabled) console.log(`[${new Date().toISOString()}] [Coordinator] Assigning GP task ${task.id} to ${workerHandle.id}.`);
-            workerHandle.isIdle = false;
-            workerHandle.currentTaskId = task.id;
-            workerHandle.worker.postMessage({ type: 'start_task', task });
-        }
+      if (this.isLoggingEnabled) console.log(`[${new Date().toISOString()}] [Coordinator] Standard GP dispatch. Reserving 1 worker, attempting to use ${workersToDispatch.length}.`);
+      for (const workerHandle of workersToDispatch) {
+        if (this.gpTaskQueue.length === 0) break;
+        const task = this.gpTaskQueue.shift()!;
+        if (this.isLoggingEnabled) console.log(`[${new Date().toISOString()}] [Coordinator] Assigning GP task ${task.id} to ${workerHandle.id}.`);
+        workerHandle.isIdle = false;
+        workerHandle.currentTaskId = task.id;
+        workerHandle.worker.postMessage({ type: 'start_task', task });
+      }
     }
   }
 }
