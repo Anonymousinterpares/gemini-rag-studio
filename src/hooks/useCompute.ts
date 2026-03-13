@@ -7,6 +7,7 @@ import { AppFile, SearchResult } from '../types';
 import { embeddingCache } from '../cache/embeddingCache';
 import { summaryCache } from '../cache/summaryCache';
 import { createFileTasks } from '../utils/taskFactory';
+import { computeSafeWorkerCap } from '../utils/workerMemoryGuard';
 
 export const useCompute = (docFontSize: number) => {
     const { 
@@ -17,6 +18,7 @@ export const useCompute = (docFontSize: number) => {
         setComputeDevice, 
         setMlWorkerCount,
         setTotalMlWorkerCount,
+        setRerankerWorkerCount,
         setIsInitializingWorkers,
         setActiveJobCount, 
         setTotalEmbeddingsCount 
@@ -34,8 +36,54 @@ export const useCompute = (docFontSize: number) => {
         if (!vectorStore.current) {
             vectorStore.current = new VectorStore();
         }
+        // Coordinator creation is async so the RAM guard can probe model file sizes first.
+        // We use a cancelled flag + cleanupRef to safely handle effect teardown
+        // even though the coordinator may not be ready yet.
+        let cancelled = false;
+        let cleanupFn: (() => void) | null = null;
+
+        const attachListeners = (c: ComputeCoordinator) => {
+            c.on('task_complete', handleTaskComplete);
+            c.on('job_complete', handleJobComplete);
+            c.on('job_progress', handleJobProgress);
+            c.on('system_compute_status', handleSystemStatus);
+            c.on('summary_generation_started', handleSummaryStarted);
+            c.on('summary_generation_completed', handleSummaryCompleted);
+            c.on('summary_generation_failed', handleSummaryFailed);
+            c.on('layout_updated', handleLayoutUpdated);
+            c.on('stream_chunk_added', handleStreamChunkAdded);
+        };
+
+        const detachListeners = (c: ComputeCoordinator) => {
+            c.off('task_complete', handleTaskComplete);
+            c.off('job_complete', handleJobComplete);
+            c.off('job_progress', handleJobProgress);
+            c.off('system_compute_status', handleSystemStatus);
+            c.off('summary_generation_started', handleSummaryStarted);
+            c.off('summary_generation_completed', handleSummaryCompleted);
+            c.off('summary_generation_failed', handleSummaryFailed);
+            c.off('layout_updated', handleLayoutUpdated);
+            c.off('stream_chunk_added', handleStreamChunkAdded);
+        };
+
         if (!coordinator.current) {
-            coordinator.current = new ComputeCoordinator(appSettings, navigator.hardwareConcurrency || 4, setActiveJobCount, vectorStore.current);
+            const MODEL_IDS = ['Xenova/all-MiniLM-L6-v2', 'Xenova/bge-reranker-base'];
+            computeSafeWorkerCap(MODEL_IDS).then((safeWorkerCap) => {
+                if (cancelled) return;
+                if (!coordinator.current) {
+                    coordinator.current = new ComputeCoordinator(
+                        appSettings,
+                        navigator.hardwareConcurrency || 4,
+                        setActiveJobCount,
+                        vectorStore.current!,
+                        safeWorkerCap
+                    );
+                }
+                attachListeners(coordinator.current!);
+                cleanupFn = () => detachListeners(coordinator.current!);
+            });
+        } else {
+            // Coordinator already exists on re-renders — attach immediately
         }
 
         const handleTaskComplete = (message: TaskCompleteMessage) => {
@@ -186,6 +234,7 @@ export const useCompute = (docFontSize: number) => {
             setComputeDevice(message.device);
             setMlWorkerCount(message.mlWorkerCount);
             setTotalMlWorkerCount(message.totalMlWorkers);
+            setRerankerWorkerCount(message.rerankerWorkerCount);
             setIsInitializingWorkers(message.isInitializing);
         };
 
@@ -221,31 +270,15 @@ export const useCompute = (docFontSize: number) => {
         };
 
         if (coordinator.current) {
-            coordinator.current.on('task_complete', handleTaskComplete);
-            coordinator.current.on('job_complete', handleJobComplete);
-            coordinator.current.on('job_progress', handleJobProgress);
-            coordinator.current.on('system_compute_status', handleSystemStatus);
-            coordinator.current.on('summary_generation_started', handleSummaryStarted);
-            coordinator.current.on('summary_generation_completed', handleSummaryCompleted);
-            coordinator.current.on('summary_generation_failed', handleSummaryFailed);
-            coordinator.current.on('layout_updated', handleLayoutUpdated);
-            coordinator.current.on('stream_chunk_added', handleStreamChunkAdded);
+            attachListeners(coordinator.current);
+            cleanupFn = () => detachListeners(coordinator.current!);
         }
 
         return () => {
-            if (coordinator.current) {
-                coordinator.current.off('task_complete', handleTaskComplete);
-                coordinator.current.off('job_complete', handleJobComplete);
-                coordinator.current.off('job_progress', handleJobProgress);
-                coordinator.current.off('system_compute_status', handleSystemStatus);
-                coordinator.current.off('summary_generation_started', handleSummaryStarted);
-                coordinator.current.off('summary_generation_completed', handleSummaryCompleted);
-                coordinator.current.off('summary_generation_failed', handleSummaryFailed);
-                coordinator.current.off('layout_updated', handleLayoutUpdated);
-                coordinator.current.off('stream_chunk_added', handleStreamChunkAdded);
-            }
+            cancelled = true;
+            cleanupFn?.();
         };
-    }, [appSettings, files, setFiles, apiKeys, docFontSize, selectedModel, selectedProvider, setIsEmbedding, setJobProgress, setRerankProgress, setJobTimers, setComputeDevice, setMlWorkerCount, setTotalMlWorkerCount, setIsInitializingWorkers, setActiveJobCount, setTotalEmbeddingsCount]);
+    }, [appSettings, files, setFiles, apiKeys, docFontSize, selectedModel, selectedProvider, setIsEmbedding, setJobProgress, setRerankProgress, setJobTimers, setComputeDevice, setMlWorkerCount, setTotalMlWorkerCount, setRerankerWorkerCount, setIsInitializingWorkers, setActiveJobCount, setTotalEmbeddingsCount]);
 
     return {
         coordinator,

@@ -386,12 +386,21 @@ export interface WorkerDeviceStatusMessage {
   device: ComputeDevice;
 }
 
+// Message from Worker to Coordinator signalling Phase 2 (reranker) is ready
+export interface WorkerRerankerReadyMessage {
+  type: 'worker_reranker_ready';
+  workerId: string;
+  /** true if the reranker failed to load (worker is still usable for embedding) */
+  error?: boolean;
+}
+
 // Message from Coordinator to App with the overall system compute status
 export interface SystemComputeStatusMessage {
   type: 'system_compute_status';
   device: ComputeDevice;
   mlWorkerCount: number;
   totalMlWorkers: number;
+  rerankerWorkerCount: number;
   isInitializing: boolean;
 }
 
@@ -429,7 +438,7 @@ export interface SearchResultMessage {
     results: SearchResult[];
 }
 
-export type WorkerToCoordinatorMessage = TaskCompleteMessage | TaskErrorMessage | WorkerReadyMessage | WorkerInitializedMessage | WorkerDeviceStatusMessage | SearchMessage | EmbedAndSearchMessage;
+export type WorkerToCoordinatorMessage = TaskCompleteMessage | TaskErrorMessage | WorkerReadyMessage | WorkerInitializedMessage | WorkerDeviceStatusMessage | WorkerRerankerReadyMessage | SearchMessage | EmbedAndSearchMessage;
 
 // Defines a strict mapping between event names and their payload types for the coordinator's event emitter.
 export interface LayoutUpdatedMessage {

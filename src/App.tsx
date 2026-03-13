@@ -46,7 +46,7 @@ import './Modal.css';
 export const App: FC = () => {
   const { appSettings, setAppSettings, modelsList, selectedModel, setSelectedModel, apiKeys, setApiKeys } = useSettingsStore();
   const { fileTree, selectedFile, isDragging } = useFileStore();
-  const { computeDevice, mlWorkerCount, totalMlWorkerCount, isInitializingWorkers } = useComputeStore();
+  const { computeDevice, mlWorkerCount, totalMlWorkerCount, rerankerWorkerCount, isInitializingWorkers } = useComputeStore();
 
   const [viewMode, setViewMode] = useState<ViewMode>('tree');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -444,13 +444,22 @@ export const App: FC = () => {
 
   return (
     <div className='app-container'>
-      {isInitializingWorkers && (
+      {/* Init overlay: visible during Phase 1 (embedding) and Phase 2 (reranker warm-up) */}
+      {(isInitializingWorkers || (totalMlWorkerCount > 0 && rerankerWorkerCount < totalMlWorkerCount)) && (
         <div className="system-progress-overlay">
           <ProgressBar 
             progress={mlWorkerCount} 
             total={totalMlWorkerCount} 
-            label="Activating Intelligence Workers..." 
+            label="Embedding workers online..." 
           />
+          {!isInitializingWorkers && totalMlWorkerCount > 0 && (
+            <ProgressBar 
+              progress={rerankerWorkerCount} 
+              total={totalMlWorkerCount} 
+              label="Rerankers warming up..." 
+              className="system-progress-overlay__reranker"
+            />
+          )}
         </div>
       )}
       <FilePanel

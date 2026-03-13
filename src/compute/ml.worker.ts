@@ -167,18 +167,36 @@ self.onmessage = (event: MessageEvent<CoordinatorToWorkerMessage>) => {
   }
 };
 
+async function initPhase1(): Promise<void> {
+  await EmbeddingPipeline.getInstance();
+  if (isLoggingEnabled) console.log(`[ML Worker ${workerId}] Phase 1 complete — embedding pipeline ready.`);
+  self.postMessage({ type: 'worker_initialized', workerId });
+}
+
+async function initPhase2(): Promise<void> {
+  try {
+    await CustomRerankerPipeline.getInstance();
+    if (isLoggingEnabled) console.log(`[ML Worker ${workerId}] Phase 2 complete — reranker pipeline ready.`);
+    self.postMessage({ type: 'worker_reranker_ready', workerId });
+  } catch (e) {
+    console.error(`[ML Worker ${workerId}] Phase 2 failed — reranker could not be loaded.`, e);
+    // Non-fatal: worker is still usable for embedding tasks.
+    // Emit reranker_ready with an error flag so the coordinator knows.
+    self.postMessage({ type: 'worker_reranker_ready', workerId, error: true });
+  }
+}
+
 async function initializeAndReport() {
   try {
-    if (isLoggingEnabled) console.log(`[ML Worker ${workerId}] Received initialization command.`);
-    await Promise.all([
-      EmbeddingPipeline.getInstance(),
-      CustomRerankerPipeline.getInstance(),
-    ]);
-    if (isLoggingEnabled) console.log(`[ML Worker ${workerId}] All pipelines initialized successfully.`);
-    self.postMessage({ type: 'worker_initialized', workerId });
+    if (isLoggingEnabled) console.log(`[ML Worker ${workerId}] Received initialization command. Starting Phase 1 (embedding)...`);
+    // Phase 1: load embedding pipeline — await this so the worker is ready for tasks ASAP.
+    await initPhase1();
+    // Phase 2: load reranker concurrently in background — intentionally NOT awaited.
+    // The worker is already accepting tasks while this runs.
+    initPhase2();
   } catch (e) {
-    console.error(`[ML Worker ${workerId}] A critical error occurred during pipeline initialization.`, e);
-    // We don't send a message back, the coordinator will time out.
+    console.error(`[ML Worker ${workerId}] Critical error during Phase 1 initialization.`, e);
+    // Do not send worker_initialized — coordinator will handle timeout (future: 5.4).
   }
 }
 

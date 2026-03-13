@@ -9,6 +9,7 @@ interface ComputeState {
   computeDevice: 'gpu' | 'cpu' | 'unknown';
   mlWorkerCount: number;
   totalMlWorkerCount: number;
+  rerankerWorkerCount: number;
   isInitializingWorkers: boolean;
   activeJobCount: number;
   totalEmbeddingsCount: number;
@@ -21,6 +22,7 @@ interface ComputeState {
   setComputeDevice: (device: 'gpu' | 'cpu' | 'unknown') => void;
   setMlWorkerCount: (count: number) => void;
   setTotalMlWorkerCount: (count: number) => void;
+  setRerankerWorkerCount: (count: number) => void;
   setIsInitializingWorkers: (isInitializing: boolean) => void;
   setActiveJobCount: (updater: number | ((prev: number) => number)) => void;
   setTotalEmbeddingsCount: (count: number) => void;
@@ -34,6 +36,7 @@ export const useComputeStore = create<ComputeState>((set) => ({
   computeDevice: 'unknown',
   mlWorkerCount: 0,
   totalMlWorkerCount: 0,
+  rerankerWorkerCount: 0,
   isInitializingWorkers: false,
   activeJobCount: 0,
   totalEmbeddingsCount: 0,
@@ -55,6 +58,8 @@ export const useComputeStore = create<ComputeState>((set) => ({
   setMlWorkerCount: (mlWorkerCount) => set({ mlWorkerCount }),
 
   setTotalMlWorkerCount: (totalMlWorkerCount) => set({ totalMlWorkerCount }),
+
+  setRerankerWorkerCount: (rerankerWorkerCount) => set({ rerankerWorkerCount }),
 
   setIsInitializingWorkers: (isInitializingWorkers) => set({ isInitializingWorkers }),
 

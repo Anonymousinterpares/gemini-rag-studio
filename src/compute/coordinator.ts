@@ -44,6 +44,7 @@ export class ComputeCoordinator {
   private expectedMlWorkerCount = 0;
   private initializingMlWorkerIds = new Set<string>();
   private maxConcurrentInitializations = 3;
+  private rerankerReadyCount = 0;
 
   public on<K extends keyof CoordinatorEventMap>(eventName: K, listener: Listener<CoordinatorEventMap[K]>): void {
     if (!this.listeners.has(eventName)) {
@@ -70,11 +71,14 @@ export class ComputeCoordinator {
     }
   }
 
-  constructor(settings: AppSettings, hardwareConcurrency: number, setActiveJobCount: (updater: (prev: number) => number) => void, vectorStore: VectorStore) {
+  constructor(settings: AppSettings, hardwareConcurrency: number, setActiveJobCount: (updater: (prev: number) => number) => void, vectorStore: VectorStore, safeWorkerCap = Infinity) {
     this.vectorStore = vectorStore;
     this.setActiveJobCount = setActiveJobCount;
     this.maxConcurrentInitializations = Math.min(4, Math.max(2, Math.floor(hardwareConcurrency / 4)));
-    const numMlWorkers = settings.numMlWorkers;
+    const requestedMlWorkers = settings.numMlWorkers;
+    const numMlWorkers = safeWorkerCap < requestedMlWorkers
+      ? (console.warn(`[Coordinator] RAM guard capped ML workers from ${requestedMlWorkers} to ${safeWorkerCap}. To override, change numMlWorkers in settings.`), Math.floor(safeWorkerCap))
+      : requestedMlWorkers;
     this.expectedMlWorkerCount = numMlWorkers;
     const numGpWorkers = Math.max(1, hardwareConcurrency - numMlWorkers);
 
@@ -102,6 +106,17 @@ export class ComputeCoordinator {
       case 'worker_ready':
         if (this.isLoggingEnabled) console.log(`[${new Date().toISOString()}] [Coordinator] Worker script ${message.workerId} has loaded.`);
         this.checkAndTriggerMlInitializations();
+        break;
+      case 'worker_reranker_ready':
+        if (!message.error) {
+          this.rerankerReadyCount++;
+          if (this.isLoggingEnabled) console.log(`[${new Date().toISOString()}] [Coordinator] Worker ${message.workerId} Phase 2 complete (reranker ready). ${this.rerankerReadyCount}/${this.expectedMlWorkerCount} rerankers warm.`);
+        } else {
+          // Still count it — a failed reranker shouldn't stall the progress bar
+          this.rerankerReadyCount++;
+          console.warn(`[${new Date().toISOString()}] [Coordinator] Worker ${message.workerId} Phase 2 failed (reranker). Worker still usable for embedding.`);
+        }
+        this.updateAndEmitSystemStatus();
         break;
       case 'worker_initialized':
         if (this.isLoggingEnabled) console.log(`[${new Date().toISOString()}] [Coordinator] Worker ${message.workerId} has successfully initialized its pipelines.`);
@@ -673,6 +688,7 @@ export class ComputeCoordinator {
     }
   }
 
+
   private updateAndEmitSystemStatus() {
     const overallStatus = this.determineDominantDevice();
 
@@ -684,6 +700,7 @@ export class ComputeCoordinator {
       device: overallStatus,
       mlWorkerCount: initializedMlCount,
       totalMlWorkers: this.expectedMlWorkerCount,
+      rerankerWorkerCount: this.rerankerReadyCount,
       isInitializing
     });
   }
