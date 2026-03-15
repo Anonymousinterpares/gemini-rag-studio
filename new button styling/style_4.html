@@ -1,0 +1,148 @@
+<div style="min-height:260px;display:flex;align-items:center;justify-content:center;background:#07070f;border-radius:12px;">
+  <div style="position:relative;display:inline-flex;">
+    <button id="btn" style="
+      position:relative;overflow:hidden;
+      padding:15px 40px;
+      border-radius:100px;
+      border:1px solid rgba(255,255,255,0.6);
+      background:#d1d1d1;
+      cursor:pointer;
+      font-family:'Inter',system-ui,sans-serif;
+      font-size:12px;font-weight:700;
+      letter-spacing:0.09em;text-transform:uppercase;
+      color:#5A250A;
+      white-space:nowrap;
+      box-shadow:inset 0 1px 0 rgba(255,255,255,0.6);
+      outline:none;
+      transition:background .18s ease, box-shadow .12s ease;
+    ">
+      <canvas id="cvs" style="position:absolute;inset:0;pointer-events:none;border-radius:100px;opacity:0;transition:opacity .18s ease;"></canvas>
+      <span style="position:relative;z-index:1;display:flex;align-items:center;gap:10px;">
+        SEE IN ACTION
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 17 9" style="height:9px;width:17px;color:#5A250A;flex-shrink:0;position:relative;">
+          <path fill="currentColor" fill-rule="evenodd" d="m12.495 0 4.495 4.495-4.495 4.495-.99-.99 2.805-2.805H0v-1.4h14.31L11.505.99z" clip-rule="evenodd"/>
+        </svg>
+      </span>
+    </button>
+  </div>
+</div>
+
+<script>
+const btn = document.getElementById('btn');
+const cvs = document.getElementById('cvs');
+const ctx = cvs.getContext('2d');
+const ORA = '232, 120, 40'; 
+const BTN_BG = '#d1d1d1';
+const BTN_BG_HOVER = '#e2e2e2';
+
+// Color Themes (Center, Inner Core, Fade Out)
+const themeOrange = ['#fffff5f2', '#fffff5f2', '#e8782800']; // Original
+const themeBlue   = ['#eef5fff2', '#d6e4f0f2', '#3a5a7800']; // Pastel dark blue
+const themeGreen  = ['#f2fcebf2', '#d8ebd0f2', '#3c5a3800']; // Pastel dark green
+const themeRose   = ['#fff0f5f2', '#f8d2e0f2', '#7a425400']; // Pastel dark rose
+
+// Set the active theme here (change this to swap colors)
+const activeTheme = themeOrange;
+
+let mx = 0, my = 0, inside = false;
+
+function resize() {
+  cvs.width  = btn.offsetWidth;
+  cvs.height = btn.offsetHeight;
+}
+resize();
+new ResizeObserver(resize).observe(btn);
+
+function drawSpot() {
+  const W = cvs.width, H = cvs.height;
+  ctx.clearRect(0, 0, W, H);
+  if (!inside) return;
+
+  ctx.save();
+  // Clip to button shape
+  ctx.beginPath();
+  ctx.roundRect(0, 0, W, H, H / 2);
+  ctx.clip();
+
+  // Dimensions for the oval glow effect
+  const glowWidth = 300;
+  const glowHeight = H * 6; // Increase this multiplier (or use a fixed number like 200) to make it taller
+  
+  // Translate to mouse position and scale to create an oval shape
+  ctx.translate(mx, my);
+  ctx.scale(1, glowHeight / glowWidth);
+  
+  // Radial gradient creates a circle, but the scale turns it into an oval
+  const g = ctx.createRadialGradient(0, 0, 0, 0, 0, glowWidth / 2);
+  
+  g.addColorStop(0.1, activeTheme[0]); // Brightest center
+  g.addColorStop(0.2, activeTheme[1]); // Solid inner core
+  g.addColorStop(0.9, activeTheme[2]); // Fades out
+  
+  ctx.fillStyle = g;
+  // Fill an area large enough to cover the scaled gradient
+  ctx.fillRect(-glowWidth / 2, -glowWidth / 2, glowWidth, glowWidth); 
+  ctx.restore();
+
+  requestAnimationFrame(drawSpot);
+}
+
+btn.addEventListener('mouseenter', () => {
+  inside = true;
+  cvs.style.opacity = '1';
+  btn.style.background = BTN_BG_HOVER;
+  requestAnimationFrame(drawSpot);
+});
+
+btn.addEventListener('mousemove', e => {
+  const r   = btn.getBoundingClientRect();
+  mx = e.clientX - r.left;
+  my = e.clientY - r.top;
+  const W   = r.width;
+
+  // How close the mouse needs to be to trigger the glow (distance)
+  const edgeDistance = 3; 
+  const proxL = Math.max(0, 1 - (mx / W) * edgeDistance);
+  const proxR = Math.max(0, 1 - ((W - mx) / W) * edgeDistance);
+
+  // --- OUTER ORANGE GLOW SIZE ---
+
+  // TWEAK THESE 3 VARIABLES TO CONTROL HOW MUCH OF THE EDGE IS HIGHLIGHTED:
+  
+  // 1. Blur Radius: Lower this (e.g. 15) so the glow doesn't bleed along the top and bottom length!
+  const maxBlur = 15; 
+  // 2. Spread Radius: Keep this NEGATIVE (e.g. -8) to shrink the shadow so it only hugs the curved tip.
+  const maxSpread = -8;
+  // 3. Horizontal Offset: How far left/right the shadow gets pushed out.
+  const maxOffset = 25;
+  
+  const blurL = Math.round(proxL * maxBlur);
+  const blurR = Math.round(proxR * maxBlur);
+  const spreadL = Math.round(proxL * maxSpread);
+  const spreadR = Math.round(proxR * maxSpread);
+  const offsetL = Math.round(proxL * maxOffset);
+  const offsetR = Math.round(proxR * maxOffset);
+
+  const aL = (proxL * 0.72).toFixed(2);
+  const aR = (proxR * 0.72).toFixed(2);
+
+  const shadows = [
+    `inset 0 1px 0 rgba(255,255,255,0.75)`,
+    `0 0 20px 4px rgba(${ORA},0.25)` // Note: This is an ambient base shadow around the whole button.
+  ];
+  if (proxL > 0.02) shadows.push(`-${offsetL}px 0 ${blurL}px ${spreadL}px rgba(${ORA},${aL})`);
+  if (proxR > 0.02) shadows.push(` ${offsetR}px 0 ${blurR}px ${spreadR}px rgba(${ORA},${aR})`);
+  btn.style.boxShadow = shadows.join(', ');
+});
+
+btn.addEventListener('mouseleave', () => {
+  inside = false;
+  cvs.style.opacity = '0';
+  btn.style.background = BTN_BG;
+  btn.style.boxShadow  = 'inset 0 1px 0 rgba(255,255,255,0.6)';
+  ctx.clearRect(0, 0, cvs.width, cvs.height);
+});
+
+btn.addEventListener('mousedown', () => btn.style.transform = 'scale(0.97)');
+btn.addEventListener('mouseup',   () => btn.style.transform = 'scale(1)');
+</script>

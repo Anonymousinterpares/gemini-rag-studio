@@ -17,16 +17,16 @@
   --deep-green: #27AE60;
   --gradient-bg: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
 
-  --panel-bg-color: #1e1e1e;
-  --message-bg-color: #2c2c2c;
-  --input-bg-color: #252525;
-  --avatar-bg-color: #383838;
-  --hover-bg-color: #2a2a2a;
-  --source-link-bg: #252525;
+  --panel-bg-color: rgba(30, 30, 30, 0.7);
+  --message-bg-color: rgba(44, 44, 44, 0.6);
+  --input-bg-color: rgba(37, 37, 37, 0.8);
+  --avatar-bg-color: rgba(56, 56, 56, 0.6);
+  --hover-bg-color: rgba(42, 42, 42, 0.6);
+  --source-link-bg: rgba(37, 37, 37, 0.6);
 
   --text-color: rgba(255, 255, 255, 0.87);
   --text-color-secondary: rgba(255, 255, 255, 0.6);
-  --border-color: #363636;
+  --border-color: rgba(54, 54, 54, 0.5);
 
   font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.5;
@@ -34,7 +34,7 @@
 
   color-scheme: dark;
   color: var(--text-color);
-  background-color: #121212;
+  background-color: transparent;
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;

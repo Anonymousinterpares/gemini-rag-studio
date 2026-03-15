@@ -188,13 +188,17 @@ export const useMapStore = create<MapState>((set, get) => ({
             // Add new (dedup guard)
             if (add.length > 0) {
                 const existingIds = new Set(nodes.map(n => n.id));
-                const truly_new = add.filter(n => {
-                    if (existingIds.has(n.id)) {
-                        console.warn(`[MapStore] Dedup: node "${n.id}" already exists — skipped.`);
-                        return false;
+                const uniqueIncoming = new Map<string, MapNode>();
+                for (const n of add) {
+                    if (!existingIds.has(n.id) && !uniqueIncoming.has(n.id)) {
+                        uniqueIncoming.set(n.id, n);
+                    } else if (!uniqueIncoming.has(n.id)) {
+                        console.warn(`[MapStore] Dedup: node "${n.id}" already exists in store — skipped.`);
+                    } else {
+                        console.warn(`[MapStore] Dedup: node "${n.id}" duplicated in incoming batch — skipped.`);
                     }
-                    return true;
-                });
+                }
+                const truly_new = Array.from(uniqueIncoming.values());
                 truly_new.forEach(n => changes.added.push(n.id));
                 nodes = [...nodes, ...truly_new];
             }

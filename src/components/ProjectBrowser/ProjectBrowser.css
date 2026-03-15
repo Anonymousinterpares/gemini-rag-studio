@@ -4,7 +4,7 @@
     padding: 40px;
     height: 100%;
     width: 100%;
-    background-color: var(--bg-primary);
+    background-color: transparent;
     color: var(--text-color);
     box-sizing: border-box;
     overflow-y: auto;

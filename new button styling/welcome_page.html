@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RAG Studio - Intro</title>
+  
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://unpkg.com/framer-motion@10.16.4/dist/framer-motion.js"></script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&family=Outfit:wght@300;400;600&family=Syne:wght@800&family=Space+Grotesk:wght@500&display=swap" rel="stylesheet">
+
+  <style>
+    body { background-color: #030306; color: white; margin: 0; padding: 0; overflow: hidden; width: 100vw; height: 100vh; font-family: 'Inter', sans-serif; }
+    #root { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
+    
+    .video-full { position: fixed; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 0; opacity: 0.5; display: block; filter: brightness(0.8) contrast(1.2); }
+    .overlay-fx { position: fixed; inset: 0; background: radial-gradient(circle at center, transparent 0%, #030306 100%); z-index: 1; pointer-events: none; }
+    
+    .studio-logo {
+      /* TWEAK VERTICAL POSITION: Negative numbers move it up closer to RAG, positive moves it down */
+      margin-top: 100px;
+
+      /* TWEAK GLOW INTENSITY: Adjust these opacity values (0.0 to 1.0) to make the glow stronger or softer */
+      --glow-inner-opacity: 0.8;
+      --glow-outer-opacity: 0.5;
+      text-shadow: 0 0 30px rgba(255, 215, 0, var(--glow-inner-opacity)), 
+                   0 0 60px rgba(255, 215, 0, var(--glow-outer-opacity));
+
+      font-family: 'Outfit', sans-serif;
+      font-weight: 300;
+      font-size: clamp(35px, 6vw, 85px);
+      color: #FFD700;
+      letter-spacing: 0.25em;
+      text-transform: uppercase;
+      z-index: 30;
+    }
+
+    /* Red font, White border, Outline style */
+    .enter-btn {
+      font-family: 'Outfit', sans-serif;
+      font-weight: 400;
+      font-size: 18px;
+      letter-spacing: 0.09em;
+      padding: 20px 60px;
+      border-radius: 100px;
+      background: rgba(28, 69, 233, 0.2);
+      border: 2px solid rgba(255, 255, 255, 0.34);
+      color: #a52222;
+      cursor: pointer;
+      position: relative;
+      overflow: hidden;
+      transition: all 4s cubic-bezier(0.2, 0.8, 0.2, 1);
+      text-transform: uppercase;
+      outline: none;
+      --neon-glow: #1c45e9;
+    }
+    
+    @keyframes neon-pulse {
+      0%, 100% { box-shadow: 0 0 15px var(--neon-glow), inset 0 0 5px var(--neon-glow); border-color: rgba(255,255,255,0.34); }
+      50% { box-shadow: 0 0 30px var(--neon-glow), inset 0 0 10px var(--neon-glow); border-color: rgba(255,255,255,0.6); }
+    }
+    .animate-neon { animation: neon-pulse 2s ease-in-out infinite; }
+
+    .enter-btn:active { transform: scale(0.97); }
+
+    #debug-ui { position: fixed; top: 10px; left: 10px; color: rgba(255,255,255,0.1); font-size: 9px; z-index: 9999; pointer-events: none; font-family: monospace; }
+    canvas { touch-action: none; }
+  </style>
+</head>
+<body>
+  <div id="debug-ui">CORE_SYSTEM_ACTIVE // V1.0.5</div>
+  <div id="root"></div>
+
+  <script type="text/babel" data-presets="react">
+    const { useState, useEffect, useRef } = React;
+    const Motion = window.Motion || window.framerMotion || {};
+    const M = Motion.motion || { div: (p) => <div {...p} />, span: (p) => <span {...p} />, button: (p) => <button {...p} /> };
+
+    // --- Helpers ---
+    const hexToRgb = (hex) => {
+      const r = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+      return r ? `${parseInt(r[1], 16)},${parseInt(r[2], 16)},${parseInt(r[3], 16)}` : '255,255,255';
+    };
+
+    // --- Button Electric System ---
+    const ButtonElectric = (() => {
+      let bolts = [], lastSpawn = 0;
+      const rand = (a, b) => a + Math.random() * (b - a);
+
+      function perimeter(W, H) {
+        const p = Math.random() * 2 * (W + H);
+        if (p < W) return { x: p, y: 0 };
+        if (p < W + H) return { x: W, y: p - W };
+        if (p < 2 * W + H) return { x: W - (p - W - H), y: H };
+        return { x: 0, y: H - (p - 2 * W - H) };
+      }
+
+      function segment(x1, y1, x2, y2, rough, depth) {
+        if (depth <= 0) return [{ x: x1, y: y1 }, { x: x2, y: y2 }];
+        const mx = (x1 + x2) * 0.5 + (Math.random() - 0.5) * rough;
+        const my = (y1 + y2) * 0.5 + (Math.random() - 0.5) * rough;
+        return [
+          ...segment(x1, y1, mx, my, rough * 0.58, depth - 1),
+          ...segment(mx, my, x2, y2, rough * 0.58, depth - 1),
+        ];
+      }
+
+      function spawnBolt(W, H) {
+        const p1 = perimeter(W, H), p2 = perimeter(W, H);
+        const rough = Math.min(W, H) * (0.18 + Math.random() * 0.28);
+        const main = segment(p1.x, p1.y, p2.x, p2.y, rough, 5);
+        const branches = [];
+        const nb = 1 + Math.floor(Math.random() * 3);
+        for (let i = 0; i < nb; i++) {
+          const idx = Math.floor(main.length * (0.25 + Math.random() * 0.5));
+          const pt = main[idx];
+          const ang = Math.atan2(p2.y - p1.y, p2.x - p1.x) + rand(-1.2, 1.2);
+          const len = rand(12, 40);
+          branches.push(segment(pt.x, pt.y, pt.x + Math.cos(ang) * len, pt.y + Math.sin(ang) * len, len * 0.4, 3));
+        }
+        return { main, branches, born: performance.now(), life: rand(160, 320) };
+      }
+
+      function drawPath(ctx, path, alpha, coreW, colRgb, glowBlur) {
+        if (path.length < 2) return;
+        ctx.save();
+        ctx.globalAlpha = alpha * 0.55;
+        ctx.strokeStyle = `rgba(${colRgb},1)`;
+        ctx.lineWidth = coreW * 4;
+        ctx.lineCap = ctx.lineJoin = 'round';
+        ctx.shadowColor = `rgba(${colRgb},1)`;
+        ctx.shadowBlur = glowBlur * 2.5;
+        ctx.beginPath(); ctx.moveTo(path[0].x, path[0].y);
+        for (let i = 1; i < path.length; i++) ctx.lineTo(path[i].x, path[i].y);
+        ctx.stroke();
+        
+        ctx.globalAlpha = alpha * 0.75;
+        ctx.strokeStyle = `rgba(200,225,255,1)`;
+        ctx.lineWidth = coreW * 1.8;
+        ctx.shadowBlur = glowBlur;
+        ctx.beginPath(); ctx.moveTo(path[0].x, path[0].y);
+        for (let i = 1; i < path.length; i++) ctx.lineTo(path[i].x, path[i].y);
+        ctx.stroke();
+        
+        ctx.globalAlpha = alpha;
+        ctx.strokeStyle = 'rgba(255,255,255,1)';
+        ctx.lineWidth = coreW;
+        ctx.shadowBlur = 0;
+        ctx.beginPath(); ctx.moveTo(path[0].x, path[0].y);
+        for (let i = 1; i < path.length; i++) ctx.lineTo(path[i].x, path[i].y);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      return {
+        render(ctx, W, H, mouseX, mouseY, btn) {
+          const now = performance.now();
+          if (now - lastSpawn > rand(65, 145)) {
+            bolts.push(spawnBolt(W, H));
+            lastSpawn = now;
+          }
+          bolts = bolts.filter(b => now - b.born < b.life);
+
+          // Spot effect
+          const coA = Math.min(0.55, bolts.length * 0.14);
+          if (coA > 0.01) {
+            const cg = ctx.createRadialGradient(mouseX, mouseY, 0, mouseX, mouseY, Math.max(W, H) * 0.75);
+            cg.addColorStop(0, `rgba(100,160,255,${(coA * 0.35).toFixed(2)})`);
+            cg.addColorStop(0.35, `rgba(60,100,220,${(coA * 0.18).toFixed(2)})`);
+            cg.addColorStop(1, 'rgba(0,0,0,0)');
+            ctx.fillStyle = cg;
+            ctx.beginPath(); ctx.roundRect(0, 0, W, H, H / 2); ctx.fill();
+          }
+
+          for (const b of bolts) {
+            const age = (now - b.born) / b.life;
+            const alpha = age < 0.12 ? age / 0.12 : 1 - ((age - 0.12) / 0.88);
+            drawPath(ctx, b.main, alpha, 1.3, '120,180,255', 10);
+            for (const br of b.branches) drawPath(ctx, br, alpha * 0.55, 0.7, '100,160,255', 6);
+          }
+        },
+        reset() { bolts = []; }
+      };
+    })();
+
+    // --- Logo Electric System (Syne RAG) ---
+    const LogoElectric = {
+      bolts: [],
+      lastSpawn: 0,
+      createFractalPoints(x1, y1, x2, y2, depth = 4) {
+        let pts = [{x: x1, y: y1}, {x: x2, y: y2}];
+        for(let i=0; i<depth; i++) {
+          let next = [];
+          for(let j=0; j<pts.length-1; j++) {
+            const p1 = pts[j], p2 = pts[j+1];
+            const mx = (p1.x + p2.x)/2, my = (p1.y + p2.y)/2;
+            const dist = Math.sqrt((p2.x-p1.x)**2 + (p2.y-p1.y)**2);
+            const angle = Math.atan2(p2.y-p1.y, p2.x-p1.x) + Math.PI/2;
+            const offset = (Math.random()-0.5) * dist * 0.6;
+            next.push(p1, { x: mx + Math.cos(angle)*offset, y: my + Math.sin(angle)*offset });
+          }
+          next.push(pts[pts.length-1]);
+          pts = next;
+        }
+        return pts;
+      },
+      render(ctx, textBounds) {
+        const now = performance.now();
+        if (now - this.lastSpawn > 60 && textBounds) {
+          const x1 = textBounds.x + Math.random() * textBounds.w;
+          const y1 = textBounds.y + Math.random() * textBounds.h;
+          const x2 = x1 + (Math.random()-0.5) * 200;
+          const y2 = y1 + (Math.random()-0.5) * 200;
+          this.bolts.push({ points: this.createFractalPoints(x1, y1, x2, y2), born: now, life: 150 + Math.random() * 250, width: 1 + Math.random() * 2 });
+          this.lastSpawn = now;
+        }
+        this.bolts = this.bolts.filter(b => now - b.born < b.life);
+        ctx.save();
+        this.bolts.forEach(b => {
+          const alpha = 1 - (now - b.born)/b.life;
+          ctx.beginPath();
+          ctx.moveTo(b.points[0].x, b.points[0].y);
+          for(let i=1; i<b.points.length; i++) ctx.lineTo(b.points[i].x, b.points[i].y);
+          ctx.strokeStyle = `rgba(255, 255, 255, ${alpha})`;
+          ctx.lineWidth = b.width;
+          ctx.shadowBlur = 15;
+          ctx.shadowColor = '#4d7fff';
+          ctx.stroke();
+        });
+        ctx.restore();
+      }
+    };
+
+    function App() {
+      const [ready, setReady] = useState(false);
+      const [showBtn, setShowBtn] = useState(false);
+      const [videoDone, setVideoDone] = useState(false);
+      
+      const logoCanvasRef = useRef(null);
+      const btnCanvasRef = useRef(null);
+      const btnRef = useRef(null);
+      const mousePos = useRef({ x: 0, y: 0 });
+      const [isHoveringBtn, setIsHoveringBtn] = useState(false);
+      const [ragImage, setRagImage] = useState(null);
+
+      useEffect(() => {
+        const img = new Image();
+        img.src = 'RAG.png';
+        img.onload = () => setRagImage(img);
+      }, []);
+
+      useEffect(() => {
+        const timer = setTimeout(() => setVideoDone(true), 6000);
+        return () => clearTimeout(timer);
+      }, []);
+
+      useEffect(() => {
+        if (videoDone) setTimeout(() => setReady(true), 100);
+      }, [videoDone]);
+
+      // Logo Animation Loop
+      useEffect(() => {
+        if (ready && logoCanvasRef.current && ragImage) {
+          const cvs = logoCanvasRef.current;
+          const ctx = cvs.getContext('2d');
+          let raf;
+          let startTime = performance.now();
+          
+          const draw = () => {
+            const now = performance.now();
+            // 1500ms smooth fade-in curve
+            const alpha = Math.min(1, Math.max(0, (now - startTime) / 1500));
+            
+            const W = window.innerWidth, H = window.innerHeight;
+            if (cvs.width !== W || cvs.height !== H) { cvs.width = W; cvs.height = H; }
+            ctx.clearRect(0, 0, W, H);
+            
+            ctx.globalAlpha = alpha;
+            
+            // Responsive scaling preserving the PNG aspect ratio
+            const targetW = Math.min(W * 0.75, 1200); // Tweak 0.75 (75% of screen) and 1200 (max pixels)
+            const imgAspect = ragImage.width / ragImage.height;
+            const targetH = targetW / imgAspect;
+            const tx = W/2 - targetW/2;
+            const ty = H/2 - targetH/2 - 40;
+            
+            ctx.save();
+            ctx.shadowBlur = 40; ctx.shadowColor = 'rgba(28, 69, 233, 0.8)';
+            ctx.drawImage(ragImage, tx, ty, targetW, targetH); // Ambient broad glow
+            ctx.shadowBlur = 5; ctx.shadowColor = '#709bff';
+            ctx.drawImage(ragImage, tx, ty, targetW, targetH); // Tighter stroke glow
+            ctx.globalCompositeOperation = 'source-atop';
+            LogoElectric.render(ctx, { x: tx, y: ty, w: targetW, h: targetH });
+            ctx.restore();
+            raf = requestAnimationFrame(draw);
+          };
+          raf = requestAnimationFrame(draw);
+          setTimeout(() => setShowBtn(true), 2000);
+          return () => cancelAnimationFrame(raf);
+        }
+      }, [ready, ragImage]);
+
+      // Button Animation Loop
+      useEffect(() => {
+        if (showBtn && btnCanvasRef.current) {
+          const cvs = btnCanvasRef.current;
+          const ctx = cvs.getContext('2d');
+          
+          const resize = () => {
+            if (btnRef.current) {
+              cvs.width = btnRef.current.offsetWidth;
+              cvs.height = btnRef.current.offsetHeight;
+            }
+          };
+          resize();
+          const ro = new ResizeObserver(resize);
+          if (btnRef.current) ro.observe(btnRef.current);
+
+          let raf;
+          const loop = () => {
+            const W = cvs.width, H = cvs.height;
+            ctx.clearRect(0, 0, W, H);
+            if (isHoveringBtn) {
+              ButtonElectric.render(ctx, W, H, mousePos.current.x, mousePos.current.y, btnRef.current);
+            }
+            raf = requestAnimationFrame(loop);
+          };
+          loop();
+          return () => {
+            cancelAnimationFrame(raf);
+            ro.disconnect();
+          };
+        }
+      }, [showBtn, isHoveringBtn]);
+
+      const handleBtnMouseMove = (e) => {
+        const rect = btnRef.current.getBoundingClientRect();
+        mousePos.current = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+      };
+
+      return (
+        <div className="w-full h-screen relative flex flex-col items-center justify-center overflow-hidden bg-[#030306]">
+          <video className="video-full" src="background_1.mp4" autoPlay muted playsInline onEnded={() => setVideoDone(true)} onError={() => setVideoDone(true)} />
+          <div className="overlay-fx" />
+          
+          {ready && (
+            <div className="flex flex-col items-center z-10 w-full h-full justify-center">
+              <canvas ref={logoCanvasRef} className="absolute inset-0 pointer-events-none" style={{ filter: 'drop-shadow(0 0 30px rgba(28, 69, 233, 0.4))' }} />
+              
+              <M.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 1.5, ease: "easeOut", delay: 0.5 }} className="flex flex-col items-center mt-[15vh]">
+                <div className="h-[20vh]" />
+                <M.span initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 1.2, duration: 1 }} className="studio-logo">Studio</M.span>
+
+                <div className="mt-24 h-24 flex items-center justify-center">
+                  {showBtn && (
+                    <M.button 
+                      ref={btnRef}
+                      initial={{ opacity: 0, scale: 0.8 }} 
+                      animate={{ opacity: 1, scale: 1 }} 
+                      transition={{ duration: 0.8, ease: "backOut" }}
+                      className="enter-btn animate-neon"
+                      onMouseEnter={() => { setIsHoveringBtn(true); btnCanvasRef.current.style.opacity = 1; }}
+                      onMouseLeave={() => { setIsHoveringBtn(false); btnCanvasRef.current.style.opacity = 0; ButtonElectric.reset(); }}
+                      onMouseMove={handleBtnMouseMove}
+                      onClick={() => {
+                        const btn = btnRef.current;
+                        btn.style.opacity = 0;
+                        btn.style.transform = 'scale(2)';
+                        setTimeout(() => alert("Entering RAG Studio..."), 500);
+                      }}
+                    >
+                      <canvas 
+                        ref={btnCanvasRef} 
+                        className="absolute inset-0 pointer-events-none opacity-0 transition-opacity duration-200" 
+                        style={{ borderRadius: '100px' }}
+                      />
+                      <span className="relative z-10">ENTER EXPERIENCE</span>
+                    </M.button>
+                  )}
+                </div>
+              </M.div>
+            </div>
+          )}
+          {!ready && <div className="z-50 text-[10px] tracking-[0.5em] text-blue-400/50 absolute bottom-10 uppercase animate-pulse">Initializing Core...</div>}
+        </div>
+      );
+    }
+
+    window.onload = () => {
+      document.fonts.ready.then(() => {
+        try {
+          const root = ReactDOM.createRoot(document.getElementById('root'));
+          root.render(<App />);
+        } catch(e) {
+          document.getElementById('debug-ui').innerText = "FATAL: " + e.message;
+        }
+      });
+    };
+  </script>
+</body>
+</html>

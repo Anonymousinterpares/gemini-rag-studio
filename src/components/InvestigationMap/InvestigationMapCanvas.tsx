@@ -613,6 +613,8 @@ const InvestigationMapCanvasInner: FC<Props> = ({ onOpenDossierForNode, onOpenFi
                                                         } else if (src.type === 'document') {
                                                             // DEEP LINKING: Use fileId and chunkIndex if available
                                                                 if (src.fileId && src.parentChunkIndex !== undefined) {
+                                                                    // MANDATORY: ensure start/end are passed here. 
+                                                                    // These are required for the yellow highlighting in the text viewer.
                                                                     onOpenFileChunk?.(src.fileId, src.parentChunkIndex, src.start, src.end, src.snippet);
                                                                 } else {
                                                                     // Fallback to label or url match

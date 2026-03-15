@@ -1,0 +1,75 @@
+/* 
+ * Button Custom Styles
+ * 
+ * This file contains the CSS variables and base styles for your customized component.
+ * Some complex effects (like Canvas particles, Magnetic interactions, or Framer Motion physics) 
+ * require JavaScript/React to function fully.
+ * 
+ * ==========================================
+ * ENGINE RECONSTRUCTION STATE
+ * ==========================================
+ * {
+ *   "baseColor": "#4372fe",
+ *   "baseAlpha": 88,
+ *   "hoverBoost": 8,
+ *   "glowColor": "#1631fe",
+ *   "spotAlpha": 72,
+ *   "spotRadius": 90,
+ *   "outerGlow": 38,
+ *   "edgeAlpha": 78,
+ *   "edgeSpread": 55,
+ *   "fontColor": "#ffffff",
+ *   "fontSize": 14,
+ *   "fontWeight": 100,
+ *   "tracking": 19,
+ *   "borderColor": "#0011ff",
+ *   "borderAlpha": 100,
+ *   "padH": 40,
+ *   "padV": 15,
+ *   "fontFamily": "Space Grotesk",
+ *   "backgroundType": "solid",
+ *   "gradientColor2": "#ff9a9e",
+ *   "shape": "pill",
+ *   "filling": "solid",
+ *   "effectMode": "electric",
+ *   "animation": "none",
+ *   "interaction": "standard",
+ *   "particleEffect": "none"
+ * }
+ * ==========================================
+ */
+
+:root {
+  --button-base-color: #4372fe;
+  --button-base-alpha: 88;
+  --button-hover-boost: 8px;
+  --button-glow-color: #1631fe;
+  --button-spot-alpha: 72;
+  --button-spot-radius: 90px;
+  --button-outer-glow: 38px;
+  --button-edge-alpha: 78;
+  --button-edge-spread: 55px;
+  --button-font-color: #ffffff;
+  --button-font-size: 14px;
+  --button-font-weight: 100;
+  --button-tracking: 19px;
+  --button-border-color: rgb(247, 242, 0);
+  --button-border-alpha: 100;
+  --button-pad-h: 40px;
+  --button-pad-v: 15px;
+  --button-font-family: Space Grotesk;
+  --button-background-type: solid;
+  --button-gradient-color2: #ff9a9e;
+  --button-shape: pill;
+  --button-filling: solid;
+  --button-effect-mode: electric;
+  --button-animation: none;
+  --button-interaction: standard;
+  --button-particle-effect: none;
+}
+
+
+.button {
+  /* Apply your CSS variables here */
+  transition: all 0.3s ease;
+}

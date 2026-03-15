@@ -232,17 +232,58 @@ export function autoLayout(nodes: MapNode[], edges: MapEdge[], direction: 'TB' |
 export function applyToolCalls(
     toolCalls: NonNullable<LlmResponse['toolCalls']>,
     mapStore: MapState,
-    nodeLayoutFn: (nodes: NodeInit[]) => MapNode[]
+    nodeLayoutFn: (nodes: NodeInit[], currentCount: number) => MapNode[],
+    sourceRef: MapNodeSource[] = []
 ) {
+    console.log(`[applyToolCalls] Processing ${toolCalls.length} calls. SourceRef size: ${sourceRef.length}`);
+
+    const refineSources = (incoming: MapNodeSource[]): MapNodeSource[] => {
+        return incoming.map(src => {
+            if (src.type === 'document') {
+                const match = sourceRef.find(ref => {
+                    const coordMatch = ref.fileId === src.fileId && ref.start === src.start && ref.end === src.end;
+                    if (coordMatch) return true;
+                    if (src.snippet && ref.snippet) {
+                        const s1 = src.snippet.toLowerCase().replace(/[^a-z0-9]/g, '');
+                        const s2 = ref.snippet.toLowerCase().replace(/[^a-z0-9]/g, '');
+                        if (s1.includes(s2) || s2.includes(s1)) return true;
+                    }
+                    if (src.fileId && ref.fileId === src.fileId && !src.snippet) return true;
+                    return false;
+                });
+
+                if (match) {
+                    console.log(`[refineSources] Metadata restored for: ${src.label || match.label}`);
+                    return {
+                        ...src,
+                        fileId: match.fileId,
+                        start: match.start,
+                        end: match.end,
+                        parentChunkIndex: match.parentChunkIndex
+                    };
+                } else {
+                    console.warn(`[refineSources] Metadata NOT found for source snippet: ${src.snippet?.substring(0, 30)}...`);
+                }
+            }
+            return src;
+        });
+    };
+
     for (const tc of toolCalls) {
         try {
+            console.log(`[applyToolCalls] Executing tool: ${tc.function.name}`);
             const args = JSON.parse(tc.function.arguments);
+            const latestState = useMapStore.getState();
+
             switch (tc.function.name) {
                 case 'add_map_nodes': {
-                    const existingIds = new Set(mapStore.nodes.map((n: MapNode) => n.id));
+                    const existingIds = new Set(latestState.nodes.map((n: MapNode) => n.id));
                     const filtered = (args.nodes || []).filter((n: NodeInit) => !existingIds.has(n.id));
-                    const newNodes = nodeLayoutFn(filtered).map(n => {
-                        const { deduplicated, uniqueCount } = deduplicateSources(n.data.sources || []);
+                    console.log(`[add_map_nodes] Adding ${filtered.length}/${args.nodes?.length || 0} unique nodes.`);
+
+                    const newNodes = nodeLayoutFn(filtered, latestState.nodes.length).map(n => {
+                        const refined = refineSources(n.data.sources || []);
+                        const { deduplicated, uniqueCount } = deduplicateSources(refined);
                         return { ...n, data: { ...n.data, sources: deduplicated, citationCount: uniqueCount } };
                     });
                     mapStore.patchNodes({ add: newNodes });
@@ -250,7 +291,7 @@ export function applyToolCalls(
                 }
                 case 'update_map_node': {
                     const { id, label, entityType, description, timestamp, certaintyScore, tags, sources } = args;
-                    const existingNode = mapStore.nodes.find((n: MapNode) => n.id === id);
+                    const existingNode = latestState.nodes.find((n: MapNode) => n.id === id);
                     if (existingNode) {
                         const patch: (Partial<MapNode['data']> & { id: string }) = { id };
                         if (label) patch.label = label;
@@ -260,19 +301,24 @@ export function applyToolCalls(
                         if (certaintyScore !== undefined) patch.certaintyScore = certaintyScore;
                         if (tags) patch.tags = tags;
                         if (sources) {
-                            const { deduplicated, uniqueCount } = deduplicateSources(sources);
+                            const refinedIncoming = refineSources(sources);
+                            const mergedSources = [...(existingNode.data.sources || []), ...refinedIncoming];
+                            const { deduplicated, uniqueCount } = deduplicateSources(mergedSources);
                             patch.sources = deduplicated;
                             patch.citationCount = uniqueCount;
+                            console.log(`[update_map_node] Appending sources to ${id}. Total: ${uniqueCount}`);
                         }
                         mapStore.patchNodes({ update: [patch] });
                     }
                     break;
                 }
                 case 'add_map_edges': {
-                    const newEdges = (args.edges || []).map((e: { source: string; target: string; label: string; connectionType?: string; certainty?: string }) => ({
+                    const edgesFromLlm = args.edges || [];
+                    console.log(`[add_map_edges] Adding ${edgesFromLlm.length} edges.`);
+                    const newEdges = edgesFromLlm.map((e: { source: string; target: string; label: string; connectionType?: string; certainty?: string }) => ({
                         id: `edge-${Date.now()}-${Math.random().toString(36).slice(2)}`,
                         source: e.source, target: e.target, label: e.label,
-                        data: { connectionType: e.connectionType || 'related_to', certainty: e.certainty || 'confirmed' }
+                        data: { connectionType: e.connectionType || 'related_to', certainty: e.certainty || (e as Record<string, string>).certainity || 'confirmed' }
                     }));
                     mapStore.patchEdges({ add: newEdges });
                     break;
@@ -282,16 +328,14 @@ export function applyToolCalls(
                     break;
                 }
             }
-        } catch (e) { console.error('[applyToolCalls] Error:', e); }
+        } catch (e) { console.error('[applyToolCalls] Tool loop failed:', e); }
     }
 }
 
-export const SYSTEM_BASE = `You are a forensic mapping assistant.
-CRITICAL: ONLY respond to tool calls. NO text. 
-1. Use IDs from the existing list.
-2. Ground everything in the provided context. 
-3. Fix typos in labels using update_map_node.
-4. When adding or updating document sources, you MUST include the start and end byte offsets.`;
+export const SYSTEM_BASE = `You are a forensic mapping assistant. Respond ONLY with tool calls. Ground everything in the Evidence.
+1. Use kebab-case for IDs.
+2. Cite documents by file name and snippet. System restores byte offsets automatically.
+3. Don't add edges during the IDENTITY phase.`;
 
 // ─── Research ─────────────────────────────────────────────────────────────────
 
@@ -307,7 +351,7 @@ export async function buildResearchContext(opts: {
         vectorStore: React.MutableRefObject<import('../rag/pipeline').VectorStore | null>;
         queryEmbeddingResolver: React.MutableRefObject<((value: number[]) => void) | null>;
     };
-}) {
+}): Promise<{ context: string; sourceRef: MapNodeSource[] }> {
     const { cleanInstruction, mapStore, apiKey, selectedModel, files, chatHistory, config } = opts;
     const allRawContexts: {
         label: string;
@@ -317,17 +361,15 @@ export async function buildResearchContext(opts: {
         start?: number;
         end?: number;
         parentChunkIndex?: number;
+        embedding?: number[];
     }[] = [];
 
-    // Simple search queries extraction
     const searchQueries = [cleanInstruction.substring(0, 200)];
 
-    // Ingest Chat (Grounding)
     if (chatHistory?.length) {
         allRawContexts.push({ label: 'Recent Chat', chunk: chatHistory.slice(-10).map(m => `[${m.role}]: ${m.content}`).join('\n') });
     }
 
-    // Web Search
     if (mapStore.isWebActive) {
         try {
             const results = await searchWeb(searchQueries[0]);
@@ -335,20 +377,20 @@ export async function buildResearchContext(opts: {
         } catch (e) { console.error('Web search error', e); }
     }
 
-    // RAG Search
     if (mapStore.isRagActive && config?.coordinator.current && config?.vectorStore.current) {
         try {
             const queryEmbeddingPromise = new Promise<number[]>((resolve) => { if (config.queryEmbeddingResolver) config.queryEmbeddingResolver.current = resolve; });
             config.coordinator.current.addJob('Map RAG', [{ id: `rag-${Date.now()}`, priority: TaskPriority.P1_Primary, payload: { type: TaskType.EmbedQuery, query: searchQueries[0] } }]);
             const queryEmbedding = await queryEmbeddingPromise;
-            const results = config.vectorStore.current.search(queryEmbedding, 10);
+            const results = config.vectorStore.current.search(queryEmbedding, 15);
             results.forEach((r: SearchResult) => allRawContexts.push({
                 label: files.find(f => f.id === r.id)?.name || r.id,
                 chunk: r.chunk,
                 id: r.id,
                 start: r.start,
                 end: r.end,
-                parentChunkIndex: r.parentChunkIndex
+                parentChunkIndex: r.parentChunkIndex,
+                embedding: r.embedding
             }));
         } catch (e) { console.error('RAG error', e); }
     }
@@ -361,30 +403,26 @@ export async function buildResearchContext(opts: {
         fileId: c.id,
         start: c.start,
         end: c.end,
-        parentChunkIndex: c.parentChunkIndex
+        parentChunkIndex: c.parentChunkIndex,
+        embedding: c.embedding
     })));
 
-    // Synthesis Turn
     const synthesisPrompt = `Goal: ${cleanInstruction}\nEvidence:\n${dedup.deduplicated.map((d, i) => {
         const meta = d.type === 'document' ? ` [OFFSETS: ${d.start}-${d.end}, CHUNK: ${d.parentChunkIndex}]` : '';
         return `[REF_${i}] ${d.label}: ${d.snippet}${meta}`;
-    }).join('\n---\n')}\n\nProduce a Unified Investigation Brief.`;
+    }).join('\n---\n')}\n\nProduce a Unified Investigation Brief for forensic mapping.`;
 
     const synthResponse = await generateContent(selectedModel, apiKey, [{ role: 'user', content: synthesisPrompt }], []);
 
     const sourceTable = dedup.deduplicated.map((d, i) => {
-        const obj = {
-            name: d.label,
-            url: d.url,
-            fileId: d.fileId,
-            start: d.start,
-            end: d.end,
-            parentChunkIndex: d.parentChunkIndex
-        };
+        const obj = { name: d.label, url: d.url, fileId: d.fileId };
         return `REF_${i}: ${JSON.stringify(obj)}`;
     }).join('\n');
 
-    return `SOURCE TABLE:\n${sourceTable}\n\nBRIEF:\n${synthResponse.text || ''}`;
+    return { 
+        context: `SOURCE TABLE:\n${sourceTable}\n\nBRIEF:\n${synthResponse.text || ''}`,
+        sourceRef: dedup.deduplicated
+    };
 }
 
 // ─── Pipeline ──────────────────────────────────────────────────────────────────
@@ -410,62 +448,48 @@ export async function runMappingPipeline(opts: {
     const { instruction, apiKey, selectedModel, files, chatHistory, config, onProgress } = opts;
 
     try {
-        // Initial state
         let currentMapState = useMapStore.getState();
 
-        if (onProgress) {
-            onProgress('Researching context...');
-            currentMapState.refreshLock();
-        }
-        const context = await buildResearchContext({ cleanInstruction: instruction, mapStore: currentMapState, apiKey, selectedModel, files, chatHistory, config });
+        if (onProgress) { onProgress('Researching context...'); currentMapState.refreshLock(); }
+        const { context, sourceRef } = await buildResearchContext({ cleanInstruction: instruction, mapStore: currentMapState, apiKey, selectedModel, files, chatHistory, config });
 
         const getExistingNodesPrompt = (state: MapState) => state.nodes.map((n: MapNode) => `${n.id}: ${n.data.label} (${n.data.entityType})`).join('\n');
 
         // TURN 1: Nodes
-        if (onProgress) {
-            onProgress('Verifying entities (Turn 1/2)...');
-            currentMapState.refreshLock();
-        }
-        const userContentTurn1 = `SOURCE:\n${instruction}\n\nEVIDENCE:\n${context}\n\nEXISTING NODES:\n${getExistingNodesPrompt(currentMapState)}`;
+        if (onProgress) { onProgress('Verifying entities (Turn 1/2)...'); currentMapState.refreshLock(); }
+        const userContentTurn1 = `GOAL: ${instruction}\n\nEVIDENCE:\n${context}\n\nEXISTING NODES:\n${getExistingNodesPrompt(currentMapState)}`;
         const turn1 = await generateContent(selectedModel, apiKey, [
-            { role: 'system', content: `${SYSTEM_BASE}\nTask: IDENTITY. Add or update nodes. Fix typos in labels. DO NOT add edges. Cite document sources WITH offsets from the SOURCE TABLE.` },
+            { role: 'system', content: `${SYSTEM_BASE}\nTASK: IDENTITY. Analyze context. Add nodes or update existing ones with sources. Cite via file name/snippet.` },
             { role: 'user', content: userContentTurn1 }
         ], [ADD_NODES_TOOL, UPDATE_NODE_TOOL]);
 
         if (turn1.toolCalls?.length) {
-            applyToolCalls(turn1.toolCalls, currentMapState, (n) => gridLayout(n, currentMapState.nodes.length));
+            applyToolCalls(turn1.toolCalls, currentMapState, (nodes, count) => gridLayout(nodes, count), sourceRef);
         }
-
-        // RE-FETCH LIVE STATE after Turn 1 updates
-        currentMapState = useMapStore.getState();
 
         // TURN 2: Edges
-        if (onProgress) {
-            onProgress('Discovering connections (Turn 2/2)...');
-            currentMapState.refreshLock();
-        }
-        const userContentTurn2 = `SOURCE:\n${instruction}\n\nEVIDENCE:\n${context}\n\nNODES TO CONNECT (USE THESE EXACT IDs):\n${getExistingNodesPrompt(currentMapState)}`;
+        currentMapState = useMapStore.getState();
+        if (onProgress) { onProgress('Discovering connections (Turn 2/2)...'); currentMapState.refreshLock(); }
+        const userContentTurn2 = `GOAL: ${instruction}\n\nEVIDENCE:\n${context}\n\nNODES TO CONNECT (USE THESE EXACT IDs):\n${getExistingNodesPrompt(currentMapState)}`;
         const turn2 = await generateContent(selectedModel, apiKey, [
-            { role: 'system', content: `${SYSTEM_BASE}\nTask: TOPOLOGY. Add or remove edges between nodes. DO NOT add nodes.` },
+            { role: 'system', content: `${SYSTEM_BASE}\nTASK: TOPOLOGY. Connect the identified nodes based on evidence. Respond ONLY with tool calls.` },
             { role: 'user', content: userContentTurn2 }
         ], [ADD_EDGES_TOOL, REMOVE_EDGE_TOOL]);
 
         if (turn2.toolCalls?.length) {
-            applyToolCalls(turn2.toolCalls, currentMapState, (n) => gridLayout(n, currentMapState.nodes.length));
+            applyToolCalls(turn2.toolCalls, currentMapState, (nodes, count) => gridLayout(nodes, count), sourceRef);
         }
-
-        // RE-FETCH LIVE STATE for Final Snap
-        currentMapState = useMapStore.getState();
 
         // Final Snap
-        if (onProgress) {
-            onProgress('Finalizing layout...');
-            currentMapState.refreshLock();
-        }
+        currentMapState = useMapStore.getState();
+        if (onProgress) { onProgress('Finalizing layout...'); currentMapState.refreshLock(); }
         const finalNodes = currentMapState.nodes.map((n: MapNode) => ({ ...n, data: { ...n.data, mass: calculateNodeMass(n, currentMapState.edges) } }));
         currentMapState.loadMap(autoLayout(finalNodes, currentMapState.edges, 'LR'), currentMapState.edges);
         currentMapState.persistToDB();
 
         return { success: true, totalChanges: (turn1.toolCalls?.length || 0) + (turn2.toolCalls?.length || 0) };
-    } catch (e) { return { success: false, error: String(e) }; }
+    } catch (e) { 
+        console.error('[runMappingPipeline] Pipeline error:', e);
+        return { success: false, error: String(e) }; 
+    }
 }

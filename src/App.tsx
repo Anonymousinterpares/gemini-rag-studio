@@ -1,4 +1,4 @@
-import { useState, useEffect, FC, useMemo, useCallback } from 'react';
+import { useState, useEffect, useLayoutEffect, FC, useMemo, useCallback } from 'react';
 import { getStoredDirectoryHandle, storeDirectoryHandle, clearStoredDirectoryHandle } from './utils/db';
 import { useFileState, useCompute, useChat } from './hooks';
 import { AppFile, ViewMode, SearchResult, Model } from './types';
@@ -43,7 +43,11 @@ import './style.css';
 import './progress-bar.css';
 import './Modal.css';
 
-export const App: FC = () => {
+import { WelcomePage } from './components/WelcomePage';
+import { GlobalBackground } from './components/GlobalBackground';
+import { motion, AnimatePresence } from 'framer-motion';
+
+const MainApp: FC = () => {
   const { appSettings, setAppSettings, modelsList, selectedModel, setSelectedModel, apiKeys, setApiKeys } = useSettingsStore();
   const { fileTree, selectedFile, isDragging } = useFileStore();
   const { computeDevice, mlWorkerCount, totalMlWorkerCount, rerankerWorkerCount, isInitializingWorkers } = useComputeStore();
@@ -64,6 +68,7 @@ export const App: FC = () => {
   const [isMapPanelOpen, setIsMapPanelOpen] = useState(false);
   const [rootDirectoryHandle, setRootDirectoryHandle] = useState<FileSystemDirectoryHandle | null>(null);
 
+  // Initialize heavy compute workers ONLY when this component mounts
   const { coordinator, vectorStore, queryEmbeddingResolver, rerankPromiseResolver } = useCompute(docFontSize);
 
   const chatConfig = useMemo(() => ({
@@ -101,7 +106,6 @@ export const App: FC = () => {
     redoStack: cfRedoStack
   } = useCaseFileStore();
   const { handleLoadCaseFile } = useCaseFileIO();
-  // Chat redo lives in useChatStore (separate from useChat return)
   const { redo: redoChatFn, redoStack: chatRedoStack } = useChatStore();
 
   const {
@@ -144,9 +148,6 @@ export const App: FC = () => {
     saveAndRerunAction(idx, editingContent);
     setEditingIndex(null);
     setEditingContent('');
-    // Wait a tick for the store to update or pass the new history explicitly if handleRerunQuery allowed it.
-    // Since handleRerunQuery uses chatHistory from the hook, we need to make sure it's updated.
-    // Alternatively, we can call submitQuery directly with the new history.
     const newHistory = useChatStore.getState().chatHistory;
     await submitQuery(editingContent, newHistory.slice(0, idx));
   }, [editingContent, saveAndRerunAction, submitQuery]);
@@ -157,13 +158,10 @@ export const App: FC = () => {
 
   const { files, setFiles, clearFiles } = useFileStore();
 
-  // ── Map Integration ───────────────────────────────────────────────────────
   const { handleMapInstruction, isMapProcessing } = useMapAI({ coordinator, vectorStore, queryEmbeddingResolver });
 
   useEffect(() => {
     useMapStore.getState().setIsRagEnabled(files.length > 0);
-    const { isRagActive, isWebActive, isDeepActive } = useMapStore.getState();
-    console.log('[App] setIsRagEnabled fired. files:', files.length, '→ flags:', { isRagActive, isWebActive, isDeepActive });
   }, [files.length]);
 
   const uiConfig = useMemo(() => ({
@@ -194,29 +192,25 @@ export const App: FC = () => {
 
   useMigration();
 
-  // Initialize sessions on mount
   useEffect(() => {
     initSessions();
   }, [initSessions]);
 
-  // Debounced auto-save
   useEffect(() => {
     if (!activeSessionId) return;
-
     const token = setTimeout(() => {
       autoSaveCurrentSession(activeSessionId, chatHistory, tokenUsage);
     }, 2000);
-
     return () => clearTimeout(token);
   }, [activeSessionId, chatHistory, tokenUsage, autoSaveCurrentSession]);
 
   const { activeProjectId, setActiveProject } = useProjectStore();
 
-  // ── Project Switching Logic ──────────────────────────────────────────────
+  useLayoutEffect(() => {
+    setActiveProject(null);
+  }, [setActiveProject]);
+
   useEffect(() => {
-    // Narrow dependency array to activeProjectId to avoid render loops from unstable hook functions.
-    // We call everything within the effect; dependencies like addFilesAndEmbed are unstable 
-    // because they depend on the files state we modify here.
     if (!activeProjectId) {
       clearFiles();
       vectorStore?.current?.clear();
@@ -231,8 +225,6 @@ export const App: FC = () => {
     }
 
     const switchProject = async () => {
-      console.log(`[App] Switching to project: ${activeProjectId}`);
-
       clearFiles();
       vectorStore?.current?.clear();
       useChatStore.getState().setActiveSessionId(null);
@@ -274,11 +266,9 @@ export const App: FC = () => {
   const dossierAIRefs = { vectorStore, coordinator, queryEmbeddingResolver, chatHistory };
   const { generateContextualDossier } = useDossierAI(dossierAIRefs);
 
-  // ── Combined undo / redo ────────────────────────────────
   const handleUndo = () => { undo(); undoCaseFile(); };
   const handleRedo = () => { redoChatFn(); redoCaseFile(); };
 
-  // Keyboard shortcuts: Ctrl+Z = undo, Ctrl+Y / Ctrl+Shift+Z = redo
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !isLoading) {
@@ -317,8 +307,6 @@ export const App: FC = () => {
       coordinator.current.setMlWorkerCount(appSettings.numMlWorkers);
     }
   }, [appSettings.isLoggingEnabled, appSettings.numMlWorkers, coordinator]);
-
-
 
   useEffect(() => {
     if (activeJobCount > 0) setIsEmbedding(true);
@@ -365,7 +353,6 @@ export const App: FC = () => {
     handleDeleteSelectionComment, setActiveCommentInput, setCommentText,
     handleCopy, handleDownloadAction, handleStartEdit,
     handleSourceClick,
-    // "handleRedo" in MessageItemHandlers = per-message re-run (renamed to avoid collision)
     handleRedo: handleRerunQuery,
     handleRemoveMessage, handleMouseUp,
     onUpdateMapFromMessage: (content: string) => {
@@ -374,28 +361,24 @@ export const App: FC = () => {
     },
     isMapProcessing,
     onOpenInCaseFile: (content: string, title?: string) => {
-      // Strip the <!--searchResults:…--> annotation (may span multiple lines)
       const clean = content.replace(/<!--searchResults:[\s\S]*?-->/g, '').trim();
       import('./utils/caseFileUtils').then(({ parseCaseFileFromMarkdown }) => {
-        // 1. Try to parse as a proper CaseFile JSON — the LLM often outputs this structure directly
         try {
           const parsed = JSON.parse(clean);
           if (parsed.version === 1 && Array.isArray(parsed.sections)) {
-            // Ensure section content strings have real newlines (LLM may use \\n inside JSON)
             const normalized = {
               ...parsed,
               sections: parsed.sections.map((s: import('./types').CaseFileSection) => ({
                 ...s,
-                content: (s.content as string)
-                  .replace(/\\n/g, '\n')
-                  .replace(/\\t/g, '    ')
+                content: (s.content as string).replace(/\\n/g, '\n').replace(/\\t/g, '    ')
               }))
             };
             useCaseFileStore.getState().loadCaseFile(normalized);
-            return; // loadCaseFile already opens the overlay
+            return;
           }
-        } catch { /* not JSON – fall through to markdown */ }
-        // 2. Parse as plain Markdown
+        } catch {
+          // Ignore parsing errors, fall through to markdown parsing
+        }
         const cf = parseCaseFileFromMarkdown(clean, title ?? 'Case File');
         useCaseFileStore.getState().loadCaseFile(cf);
       });
@@ -433,191 +416,229 @@ export const App: FC = () => {
     handleSourceClick(e);
   }, [handleSourceClick, isDossierOpen]);
 
-  if (!activeProjectId) {
-    return (
-      <div style={{ width: '100vw', height: '100vh', display: 'flex' }}>
-        <ProjectBrowser />
-        <ToastContainer />
-      </div>
-    );
-  }
-
   return (
-    <div className='app-container'>
-      {/* Init overlay: visible during Phase 1 (embedding) and Phase 2 (reranker warm-up) */}
-      {(isInitializingWorkers || (totalMlWorkerCount > 0 && rerankerWorkerCount < totalMlWorkerCount)) && (
-        <div className="system-progress-overlay">
-          <ProgressBar 
-            progress={mlWorkerCount} 
-            total={totalMlWorkerCount} 
-            label="Embedding workers online..." 
+    <>
+      {!activeProjectId ? (
+        <div style={{ width: '100vw', height: '100vh', display: 'flex', background: 'transparent' }}>
+          <ProjectBrowser />
+          <ToastContainer />
+        </div>
+      ) : (
+        <>
+          {(isInitializingWorkers || (totalMlWorkerCount > 0 && rerankerWorkerCount < totalMlWorkerCount)) && (
+            <div className="system-progress-overlay">
+              <ProgressBar progress={mlWorkerCount} total={totalMlWorkerCount} label="Embedding workers online..." />
+              {!isInitializingWorkers && totalMlWorkerCount > 0 && (
+                <ProgressBar progress={rerankerWorkerCount} total={totalMlWorkerCount} label="Rerankers warming up..." className="system-progress-overlay__reranker" />
+              )}
+            </div>
+          )}
+          <FilePanel
+            showSettings={showSettings} setShowSettings={setShowSettings}
+            glowType={glowType} isDragging={isDragging} handleDropValidate={handleDropValidate}
+            files={files} activeJobCount={activeJobCount} isLoading={isLoading} isEmbedding={isEmbedding}
+            showRejectionBubble={showRejectionBubble} showDropVideo={showDropVideo} dropVideoSrc={dropVideoSrc}
+            setShowDropVideo={setShowDropVideo} handleClearFiles={handleClearFiles}
+            initialChatHistory={initialChatHistory} handleClearConversation={handleClearConversation}
+            chatHistory={chatHistory} handleClear={handleClear}
+            computeDevice={computeDevice} mlWorkerCount={mlWorkerCount} viewMode={viewMode}
+            setViewMode={setViewMode} fileTree={fileTree} handleShowSum={handleShowSum}
+            onOpenExplorer={onOpenExplorer} isPinned={isPinned} setIsPinned={setIsPinned}
+            onBackToProjects={() => setActiveProject(null)}
           />
-          {!isInitializingWorkers && totalMlWorkerCount > 0 && (
-            <ProgressBar 
-              progress={rerankerWorkerCount} 
-              total={totalMlWorkerCount} 
-              label="Rerankers warming up..." 
-              className="system-progress-overlay__reranker"
+          <ChatPanel
+            appSettings={appSettings} setAppSettings={setAppSettings}
+            backgroundImages={backgroundImages} handleSourceClick={handleSourceClick}
+            chatHistory={chatHistory} isLoading={isLoading} isEmbedding={isEmbedding}
+            editingIndex={editingIndex} editingContent={editingContent} setEditingContent={setEditingContent}
+            activeCommentInput={activeCommentInput} commentText={commentText}
+            hoveredSelectionId={hoveredSelectionId} rootDirectoryHandle={rootDirectoryHandle}
+            caseFileState={caseFileState} handlers={messageHandlers}
+            userInput={userInput} setUserInput={setUserInput} activeJobCount={activeJobCount}
+            files={files} handleSubmit={handleSubmit} stopGeneration={stopGeneration}
+            setCaseFileState={setCaseFileState} submitQuery={submitQuery} tokenUsage={tokenUsage}
+            currentContextTokens={currentContextTokens}
+            undo={handleUndo} redo={handleRedo}
+            canUndo={historyStack.length > 0 || cfUndoStack.length > 0}
+            canRedo={chatRedoStack.length > 0 || cfRedoStack.length > 0}
+            onLoadCaseFile={handleLoadCaseFile}
+            onOpenCaseFile={() => setOverlayOpen(true)}
+            hasCaseFile={!!caseFile}
+            isDossierOpen={isDossierOpen}
+            setIsDossierOpen={setIsDossierOpen}
+            isMapPanelOpen={isMapPanelOpen}
+            setIsMapPanelOpen={setIsMapPanelOpen}
+            computeDevice={computeDevice}
+          />
+
+          {isMapPanelOpen && (
+            <div className="investigation-map-panel-wrapper">
+              <InvestigationMapPanel
+                onClose={() => setIsMapPanelOpen(false)}
+                onOpenDossierForNode={(dossierId) => {
+                  useDossierStore.getState().setActiveDossier(dossierId);
+                  setIsDossierOpen(true);
+                }}
+                onOpenFileChunk={(fileId, chunkIndex, start = 0, end = 0, snippet = '') => {
+                  const file = files.find(f => f.id === fileId);
+                  if (file) {
+                    const docViewerChunk = { id: fileId, parentChunkIndex: chunkIndex, start, end, chunk: snippet, similarity: 0 };
+                    setActiveSource({ file, chunks: [docViewerChunk] });
+                    setIsModalOpen(true);
+                  } else {
+                    useToastStore.getState().addToast('Source file not found in current knowledge base.', 'warning');
+                  }
+                }}
+                coordinator={coordinator}
+                vectorStore={vectorStore}
+                queryEmbeddingResolver={queryEmbeddingResolver}
+              />
+            </div>
+          )}
+
+          <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} isSplitView={isSplitView}>
+            <MemoizedDocViewer
+              coordinator={coordinator.current}
+              selectedFile={activeSource?.file ?? selectedFile}
+              chunksToHighlight={activeSource?.chunks ?? []}
+              docFontSize={docFontSize}
+              setDocFontSize={setDocFontSize}
+            />
+          </Modal>
+          <EmbeddingCacheModal isOpen={isCacheModalOpen} onClose={() => setIsCacheModalOpen(false)} />
+          {summaryFile && <SummaryModal isOpen={isSummaryModalOpen} onClose={() => setIsSummaryModalOpen(false)} summary={currentSummary} fileName={summaryFile.name} />}
+          <CustomFileExplorer isOpen={isExplorerOpen} onClose={() => setIsExplorerOpen(false)} rootDirectoryHandle={rootDirectoryHandle} onFilesSelected={async (items) => {
+            const toAdd = await processExplorerItems(items);
+            addFilesAndEmbed(toAdd); setIsExplorerOpen(false);
+          }} />
+          <RecoveryDialogContainer availableModels={modelsList} currentModel={selectedModel} apiKeys={apiKeys} onModelChange={(m: Model, k?: string) => { setSelectedModel(m); if (k) setApiKeys(prev => ({ ...prev, [m.provider]: k })); }} />
+
+          <CaseFilePanel
+            renderModelMessage={(content) => renderModelMessage(content)}
+            onResolveComment={async (cf, sId, comment) => {
+              await submitCaseFileComment(cf, sId, comment, (resolvedSectionId, commentId, newContent) => {
+                useCaseFileStore.getState().resolveComment(resolvedSectionId, commentId, newContent);
+              });
+            }}
+          />
+          {isDossierOpen && (
+            <DossierPanel
+              isOpen={isDossierOpen}
+              onClose={() => {
+                setIsDossierOpen(false);
+                setIsSplitView(false);
+              }}
+              isSplitView={isSplitView}
+              onToggleSplitView={() => setIsSplitView(!isSplitView)}
+              vectorStore={vectorStore}
+              coordinator={coordinator}
+              queryEmbeddingResolver={queryEmbeddingResolver}
+              chatHistory={chatHistory}
+              renderModelMessage={renderModelMessage}
+              handleSourceClick={wrappedHandleSourceClick}
             />
           )}
-        </div>
-      )}
-      <FilePanel
-        showSettings={showSettings} setShowSettings={setShowSettings}
-        glowType={glowType} isDragging={isDragging} handleDropValidate={handleDropValidate}
-        files={files} activeJobCount={activeJobCount} isLoading={isLoading} isEmbedding={isEmbedding}
-        showRejectionBubble={showRejectionBubble} showDropVideo={showDropVideo} dropVideoSrc={dropVideoSrc}
-        setShowDropVideo={setShowDropVideo} handleClearFiles={handleClearFiles}
-        initialChatHistory={initialChatHistory} handleClearConversation={handleClearConversation}
-        chatHistory={chatHistory} handleClear={handleClear}
-        computeDevice={computeDevice} mlWorkerCount={mlWorkerCount} viewMode={viewMode}
-        setViewMode={setViewMode} fileTree={fileTree} handleShowSum={handleShowSum}
-        onOpenExplorer={onOpenExplorer}
-        isPinned={isPinned}
-        setIsPinned={setIsPinned}
-        onBackToProjects={() => setActiveProject(null)}
-      />
-      <ChatPanel
-        appSettings={appSettings} setAppSettings={setAppSettings}
-        backgroundImages={backgroundImages} handleSourceClick={handleSourceClick}
-        chatHistory={chatHistory} isLoading={isLoading} isEmbedding={isEmbedding}
-        editingIndex={editingIndex} editingContent={editingContent} setEditingContent={setEditingContent}
-        activeCommentInput={activeCommentInput} commentText={commentText}
-        hoveredSelectionId={hoveredSelectionId} rootDirectoryHandle={rootDirectoryHandle}
-        caseFileState={caseFileState} handlers={messageHandlers}
-        userInput={userInput} setUserInput={setUserInput} activeJobCount={activeJobCount}
-        files={files} handleSubmit={handleSubmit} stopGeneration={stopGeneration}
-        setCaseFileState={setCaseFileState} submitQuery={submitQuery} tokenUsage={tokenUsage}
-        currentContextTokens={currentContextTokens}
-        undo={handleUndo} redo={handleRedo}
-        canUndo={historyStack.length > 0 || cfUndoStack.length > 0}
-        canRedo={chatRedoStack.length > 0 || cfRedoStack.length > 0}
-        onLoadCaseFile={handleLoadCaseFile}
-        onOpenCaseFile={() => setOverlayOpen(true)}
-        hasCaseFile={!!caseFile}
-        isDossierOpen={isDossierOpen}
-        setIsDossierOpen={setIsDossierOpen}
-        isMapPanelOpen={isMapPanelOpen}
-        setIsMapPanelOpen={setIsMapPanelOpen}
-        computeDevice={computeDevice}
-      />
 
-      {isMapPanelOpen && (
-        <div className="investigation-map-panel-wrapper">
-          <InvestigationMapPanel
-            onClose={() => setIsMapPanelOpen(false)}
-            onOpenDossierForNode={(dossierId) => {
-              useDossierStore.getState().setActiveDossier(dossierId);
-              setIsDossierOpen(true);
-            }}
-            onOpenFileChunk={(fileId, chunkIndex, start = 0, end = 0, snippet = '') => {
-              const file = files.find(f => f.id === fileId);
-              if (file) {
-                const docViewerChunk = { id: fileId, parentChunkIndex: chunkIndex, start, end, chunk: snippet, similarity: 0 };
-                setActiveSource({ file, chunks: [docViewerChunk] });
-                setIsModalOpen(true);
-              } else {
-                useToastStore.getState().addToast('Source file not found in current knowledge base.', 'warning');
-              }
-            }}
-            coordinator={coordinator}
-            vectorStore={vectorStore}
-            queryEmbeddingResolver={queryEmbeddingResolver}
-          />
-        </div>
-      )}
-
-      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} isSplitView={isSplitView}>
-        <MemoizedDocViewer
-          coordinator={coordinator.current}
-          selectedFile={activeSource?.file ?? selectedFile}
-          chunksToHighlight={activeSource?.chunks ?? []}
-          docFontSize={docFontSize}
-          setDocFontSize={setDocFontSize}
-        />
-      </Modal>
-      <EmbeddingCacheModal isOpen={isCacheModalOpen} onClose={() => setIsCacheModalOpen(false)} />
-      {summaryFile && <SummaryModal isOpen={isSummaryModalOpen} onClose={() => setIsSummaryModalOpen(false)} summary={currentSummary} fileName={summaryFile.name} />}
-      <CustomFileExplorer isOpen={isExplorerOpen} onClose={() => setIsExplorerOpen(false)} rootDirectoryHandle={rootDirectoryHandle} onFilesSelected={async (items) => {
-        const toAdd = await processExplorerItems(items);
-        addFilesAndEmbed(toAdd); setIsExplorerOpen(false);
-      }} />
-      <RecoveryDialogContainer availableModels={modelsList} currentModel={selectedModel} apiKeys={apiKeys} onModelChange={(m: Model, k?: string) => { setSelectedModel(m); if (k) setApiKeys(prev => ({ ...prev, [m.provider]: k })); }} />
-
-      <CaseFilePanel
-        renderModelMessage={(content) => renderModelMessage(content)}
-        onResolveComment={async (cf, sId, comment) => {
-          await submitCaseFileComment(cf, sId, comment, (resolvedSectionId, commentId, newContent) => {
-            useCaseFileStore.getState().resolveComment(resolvedSectionId, commentId, newContent);
-          });
-        }}
-      />
-      {isDossierOpen && (
-        <DossierPanel
-          isOpen={isDossierOpen}
-          onClose={() => {
-            setIsDossierOpen(false);
-            setIsSplitView(false);
-          }}
-          isSplitView={isSplitView}
-          onToggleSplitView={() => setIsSplitView(!isSplitView)}
-          vectorStore={vectorStore}
-          coordinator={coordinator}
-          queryEmbeddingResolver={queryEmbeddingResolver}
-          chatHistory={chatHistory}
-          renderModelMessage={renderModelMessage}
-          handleSourceClick={wrappedHandleSourceClick}
-        />
-      )}
-
-
-      {selectionPopover && (
-        <div className="selection-popover" style={{ top: selectionPopover.top, left: selectionPopover.left }}>
-          {selectionPopover.commentInputOpen ? (
-            // Inline comment form
-            <div className="selection-popover-form" onMouseDown={e => e.stopPropagation()}>
-              <textarea
-                className="selection-popover-textarea"
-                autoFocus
-                placeholder="Enter your comment…"
-                value={commentDraft}
-                onChange={e => setCommentDraft(e.target.value)}
-                rows={3}
-                onKeyDown={e => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    handleAddSelectionComment(selectionPopover.msgIndex, selectionPopover.text, selectionPopover.sectionId, commentDraft);
-                  }
-                  if (e.key === 'Escape') setCommentDraft('');
-                }}
-              />
-              <div className="selection-popover-actions">
-                <button
-                  className="button"
-                  onClick={() => handleAddSelectionComment(selectionPopover.msgIndex, selectionPopover.text, selectionPopover.sectionId, commentDraft)}
-                  disabled={!commentDraft.trim()}
-                >Save</button>
-                <button className="button secondary" onClick={() => setCommentDraft('')}>Clear</button>
-              </div>
-            </div>
-          ) : (
-            // Initial button
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <button className="selection-popover-btn" onClick={handleOpenSelectionCommentInput}>
-                <Edit2 size={14} /> Review Selection
-              </button>
-              <button className="selection-popover-btn" onClick={() => {
-                generateContextualDossier(selectionPopover.text);
-                setSelectionPopover(null);
-              }}>
-                <FileText size={14} /> Compile Dossier
-              </button>
+          {selectionPopover && (
+            <div className="selection-popover" style={{ top: selectionPopover.top, left: selectionPopover.left }}>
+              {selectionPopover.commentInputOpen ? (
+                <div className="selection-popover-form" onMouseDown={e => e.stopPropagation()}>
+                  <textarea
+                    className="selection-popover-textarea"
+                    autoFocus
+                    placeholder="Enter your comment…"
+                    value={commentDraft}
+                    onChange={e => setCommentDraft(e.target.value)}
+                    rows={3}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        handleAddSelectionComment(selectionPopover.msgIndex, selectionPopover.text, selectionPopover.sectionId, commentDraft);
+                      }
+                      if (e.key === 'Escape') setCommentDraft('');
+                    }}
+                  />
+                  <div className="selection-popover-actions">
+                    <button className="button" onClick={() => handleAddSelectionComment(selectionPopover.msgIndex, selectionPopover.text, selectionPopover.sectionId, commentDraft)} disabled={!commentDraft.trim()}>Save</button>
+                    <button className="button secondary" onClick={() => setCommentDraft('')}>Clear</button>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <button className="selection-popover-btn" onClick={handleOpenSelectionCommentInput}>
+                    <Edit2 size={14} /> Review Selection
+                  </button>
+                  <button className="selection-popover-btn" onClick={() => {
+                    generateContextualDossier(selectionPopover.text);
+                    setSelectionPopover(null);
+                  }}>
+                    <FileText size={14} /> Compile Dossier
+                  </button>
+                </div>
+              )}
             </div>
           )}
-        </div>
-      )}
 
-      <ToastContainer />
+          <ToastContainer />
+        </>
+      )}
+    </>
+  );
+};
+
+export const App: FC = () => {
+  const [showWelcome, setShowWelcome] = useState(true);
+  const [videoDone, setVideoDone] = useState(false);
+
+  return (
+    <div className='app-container' style={{ background: 'transparent' }}>
+      <GlobalBackground 
+        videoSrc="/assets/background_1.mp4" 
+        onVideoEnd={() => setVideoDone(true)} 
+      />
+      
+      <AnimatePresence mode="wait">
+        {showWelcome && (
+          <motion.div
+            key="welcome"
+            initial={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.8 }}
+            style={{ 
+              position: 'fixed', 
+              inset: 0, 
+              zIndex: 1000, 
+              backgroundColor: 'transparent',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              pointerEvents: 'auto'
+            }}
+          >
+            <WelcomePage 
+              onEnter={() => setShowWelcome(false)} 
+              videoDone={videoDone} 
+              setVideoDone={setVideoDone} 
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <motion.div 
+        initial={{ opacity: 0 }}
+        animate={{ opacity: showWelcome ? 0 : 1 }} 
+        transition={{ duration: 1.2, ease: "easeOut" }}
+        style={{ 
+          width: '100%', 
+          height: '100%', 
+          display: 'flex', 
+          background: 'transparent',
+          pointerEvents: showWelcome ? 'none' : 'auto',
+          visibility: showWelcome ? 'hidden' : 'visible'
+        }}
+      >
+        {!showWelcome && <MainApp />}
+      </motion.div>
     </div>
   );
 };

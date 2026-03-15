@@ -1,0 +1,1032 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Button - Standalone Component</title>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- React & ReactDOM -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  
+  <!-- Babel Standalone -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  
+  <!-- Framer Motion -->
+  <script src="https://unpkg.com/framer-motion@10.16.4/dist/framer-motion.js"></script>
+  
+  <!-- Lucide Icons -->
+  <script>window.react = window.React;</script>
+  <script src="https://unpkg.com/lucide-react@0.292.0/dist/umd/lucide-react.js"></script>
+
+  <style>
+    body {
+      background-color: #030306;
+      color: white;
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Inter', sans-serif;
+    }
+    
+    /* Hide the tweaker UI controls so only the component is visible */
+    .grid.grid-cols-1.md\:grid-cols-2 { display: none !important; }
+    .flex.justify-end.mt-6 { display: none !important; }
+    
+    /* Ensure the container centers the component nicely */
+    .w-full.flex.flex-col.items-center.gap-0.pt-10.px-10 {
+      padding: 0 !important;
+    }
+    .mb-16 {
+      margin-bottom: 0 !important;
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel" data-presets="react,typescript">
+    const { useState, useEffect, useRef } = React;
+    const { motion, AnimatePresence, useAnimation } = window.Motion;
+    const { Check, X, Power, Info, AlertTriangle, ChevronDown } = window.LucideReact;
+
+    // --- Dummy Functions for hidden buttons ---
+    const downloadCSS = () => console.log("CSS download disabled in standalone mode");
+    const downloadHTML = () => console.log("HTML download disabled in standalone mode");
+
+    // --- Canvas Effects ---
+    const hexToRgb = (hex: string) => {
+  const r = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  return r ? `${parseInt(r[1], 16)},${parseInt(r[2], 16)},${parseInt(r[3], 16)}` : '255,255,255';
+};
+
+const lightenHex = (hex: string, pct: number) => {
+  const r = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  if (!r) return hex;
+  const clamp = (v: number) => Math.min(255, Math.round(v + v * (pct / 100)));
+  return '#' + [parseInt(r[1], 16), parseInt(r[2], 16), parseInt(r[3], 16)]
+    .map(c => clamp(c).toString(16).padStart(2, '0')).join('');
+};
+
+const rand = (a: number, b: number) => a + Math.random() * (b - a);
+
+const Electric = (() => {
+  let bolts: any[] = [], lastSpawn = 0;
+
+  function perimeter(W: number, H: number) {
+    const p = Math.random() * 2 * (W + H);
+    if (p < W) return { x: p, y: 0 };
+    if (p < W + H) return { x: W, y: p - W };
+    if (p < 2 * W + H) return { x: W - (p - W - H), y: H };
+    return { x: 0, y: H - (p - 2 * W - H) };
+  }
+
+  function segment(x1: number, y1: number, x2: number, y2: number, rough: number, depth: number): any[] {
+    if (depth <= 0) return [{ x: x1, y: y1 }, { x: x2, y: y2 }];
+    const mx = (x1 + x2) * 0.5 + (Math.random() - 0.5) * rough;
+    const my = (y1 + y2) * 0.5 + (Math.random() - 0.5) * rough;
+    return [
+      ...segment(x1, y1, mx, my, rough * 0.58, depth - 1),
+      ...segment(mx, my, x2, y2, rough * 0.58, depth - 1),
+    ];
+  }
+
+  function spawnBolt(W: number, H: number) {
+    const p1 = perimeter(W, H), p2 = perimeter(W, H);
+    const rough = Math.min(W, H) * (0.18 + Math.random() * 0.28);
+    const main = segment(p1.x, p1.y, p2.x, p2.y, rough, 5);
+    const branches = [];
+    const nb = 1 + Math.floor(Math.random() * 3);
+    for (let i = 0; i < nb; i++) {
+      const idx = Math.floor(main.length * (0.25 + Math.random() * 0.5));
+      const pt = main[idx];
+      const ang = Math.atan2(p2.y - p1.y, p2.x - p1.x) + rand(-1.2, 1.2);
+      const len = rand(12, 40);
+      branches.push(segment(pt.x, pt.y, pt.x + Math.cos(ang) * len, pt.y + Math.sin(ang) * len, len * 0.4, 3));
+    }
+    return { main, branches, born: performance.now(), life: rand(160, 320) };
+  }
+
+  function drawPath(ctx: CanvasRenderingContext2D, path: any[], alpha: number, coreW: number, colRgb: string, glowBlur: number) {
+    if (path.length < 2) return;
+    ctx.save();
+    ctx.globalAlpha = alpha * 0.55;
+    ctx.strokeStyle = `rgba(${colRgb},1)`;
+    ctx.lineWidth = coreW * 4;
+    ctx.lineCap = ctx.lineJoin = 'round';
+    ctx.shadowColor = `rgba(${colRgb},1)`;
+    ctx.shadowBlur = glowBlur * 2.5;
+    ctx.beginPath(); ctx.moveTo(path[0].x, path[0].y);
+    for (let i = 1; i < path.length; i++) ctx.lineTo(path[i].x, path[i].y);
+    ctx.stroke();
+    
+    ctx.globalAlpha = alpha * 0.75;
+    ctx.strokeStyle = `rgba(200,225,255,1)`;
+    ctx.lineWidth = coreW * 1.8;
+    ctx.shadowBlur = glowBlur;
+    ctx.beginPath(); ctx.moveTo(path[0].x, path[0].y);
+    for (let i = 1; i < path.length; i++) ctx.lineTo(path[i].x, path[i].y);
+    ctx.stroke();
+    
+    ctx.globalAlpha = alpha;
+    ctx.strokeStyle = 'rgba(255,255,255,1)';
+    ctx.lineWidth = coreW;
+    ctx.shadowBlur = 0;
+    ctx.beginPath(); ctx.moveTo(path[0].x, path[0].y);
+    for (let i = 1; i < path.length; i++) ctx.lineTo(path[i].x, path[i].y);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  return {
+    reset() { bolts = []; lastSpawn = 0; },
+    render(ctx: CanvasRenderingContext2D, W: number, H: number, mouseX: number, mouseY: number, btn: HTMLElement) {
+      const now = performance.now();
+      if (now - lastSpawn > rand(65, 145)) {
+        bolts.push(spawnBolt(W, H));
+        if (Math.random() < 0.4) bolts.push(spawnBolt(W, H));
+        lastSpawn = now;
+      }
+      bolts = bolts.filter(b => now - b.born < b.life);
+
+      const coA = Math.min(0.55, bolts.length * 0.14);
+      if (coA > 0.01) {
+        const cg = ctx.createRadialGradient(mouseX, mouseY, 0, mouseX, mouseY, Math.max(W, H) * 0.75);
+        cg.addColorStop(0, `rgba(100,160,255,${(coA * 0.35).toFixed(2)})`);
+        cg.addColorStop(0.35, `rgba(60,100,220,${(coA * 0.18).toFixed(2)})`);
+        cg.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = cg;
+        ctx.beginPath(); ctx.roundRect(0, 0, W, H, H / 2); ctx.fill();
+      }
+
+      for (const b of bolts) {
+        const age = (now - b.born) / b.life;
+        const alpha = age < 0.12 ? age / 0.12 : 1 - ((age - 0.12) / 0.88);
+        drawPath(ctx, b.main, alpha, 1.3, '120,180,255', 10);
+        for (const br of b.branches)
+          drawPath(ctx, br, alpha * 0.55, 0.7, '100,160,255', 6);
+      }
+
+      const bi = Math.min(1, bolts.length * 0.28);
+      if (bi > 0.05) {
+        btn.style.boxShadow = [
+          `inset 0 1px 0 rgba(255,255,255,0.75)`,
+          `0 0 ${Math.round(20 * bi)}px ${Math.round(8 * bi)}px rgba(80,130,255,${(bi * 0.55).toFixed(2)})`,
+          `0 0 ${Math.round(55 * bi)}px rgba(60,100,255,${(bi * 0.28).toFixed(2)})`,
+        ].join(', ');
+      }
+    },
+    onLeave() { this.reset(); },
+  };
+})();
+
+const Crack = (() => {
+  let cracks: any[] = [];
+  let phase = 'idle';
+  let animStart = 0, healStart = 0;
+  let ox = 0, oy = 0;
+  const ANIM = 680, HOLD = 1700, HEAL = 950;
+
+  function traceCrack(x: number, y: number, angle: number, W: number, H: number, strength: number, depth: number): any[] {
+    const maxLen = Math.sqrt(W * W + H * H) * (0.45 + rand(0, 0.4)) * strength;
+    const numSegs = 2 + Math.floor(rand(0, depth === 0 ? 4 : 3));
+    const pts = [{ x, y, dist: 0 }];
+    let cx = x, cy = y, len = 0, a = angle;
+
+    for (let s = 0; s < numSegs; s++) {
+      if (s > 0) a += rand(-0.75, 0.75);
+      const segLen = (maxLen / numSegs) * rand(0.55, 1.45);
+      const ex = cx + Math.cos(a) * segLen;
+      const ey = cy + Math.sin(a) * segLen;
+      len += segLen;
+      pts.push({ x: ex, y: ey, dist: len });
+
+      if (depth < 3 && s > 0 && Math.random() < (depth === 0 ? 0.42 : 0.20)) {
+        const ba = a + rand(-1.1, 1.1) * (Math.random() < 0.5 ? 1 : -1);
+        cracks.push(...traceCrack(cx, cy, ba, W, H, strength * (0.28 + rand(0, 0.18)), depth + 1));
+      }
+      cx = ex; cy = ey;
+    }
+    return [{ pts, totalLen: len, depth }];
+  }
+
+  return {
+    get phase() { return phase; },
+    trigger(x: number, y: number, W: number, H: number) {
+      ox = x; oy = y; cracks = [];
+      const n = 5 + Math.floor(rand(0, 4));
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * Math.PI * 2 + rand(-0.7, 0.7);
+        cracks.push(...traceCrack(x, y, a, W, H, 1.0, 0));
+      }
+      phase = 'cracking'; animStart = performance.now();
+      setTimeout(() => {
+        if (phase === 'holding') { phase = 'healing'; healStart = performance.now(); }
+      }, ANIM + HOLD);
+    },
+    render(ctx: CanvasRenderingContext2D, W: number, H: number, mouseX: number, mouseY: number, btn: HTMLElement) {
+      if (phase === 'idle') return;
+      const now = performance.now();
+      let progress, alpha;
+
+      if (phase === 'cracking') {
+        const t = Math.min(1, (now - animStart) / ANIM);
+        progress = 1 - Math.pow(1 - t, 3);
+        alpha = 1;
+        if (t >= 1) phase = 'holding';
+      } else if (phase === 'holding') {
+        progress = 1; alpha = 1;
+      } else {
+        progress = 1;
+        const t = Math.min(1, (now - healStart) / HEAL);
+        alpha = 1 - t * t;
+        if (alpha < 0.015) { phase = 'idle'; return; }
+      }
+
+      const flashR = 26 * alpha;
+      const fg = ctx.createRadialGradient(ox, oy, 0, ox, oy, flashR * 1.5);
+      fg.addColorStop(0, `rgba(255,230,100,${(alpha * 0.95).toFixed(2)})`);
+      fg.addColorStop(0.35, `rgba(255,110,20,${(alpha * 0.6).toFixed(2)})`);
+      fg.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = fg;
+      ctx.fillRect(ox - flashR * 1.5, oy - flashR * 1.5, flashR * 3, flashR * 3);
+
+      for (const c of cracks) {
+        const { pts, totalLen, depth } = c;
+        if (pts.length < 2) continue;
+        const drawLen = progress * totalLen;
+
+        const path = [];
+        for (let i = 0; i < pts.length; i++) {
+          if (pts[i].dist <= drawLen) {
+            path.push(pts[i]);
+          } else if (i > 0) {
+            const prev = pts[i - 1];
+            const frac = (drawLen - prev.dist) / (pts[i].dist - prev.dist);
+            path.push({ x: prev.x + (pts[i].x - prev.x) * frac, y: prev.y + (pts[i].y - prev.y) * frac });
+            break;
+          }
+        }
+        if (path.length < 2) continue;
+
+        const df = Math.pow(0.82, depth);
+        const outerW = depth === 0 ? 6 : depth === 1 ? 3.5 : 2;
+        const coreW = depth === 0 ? 1.5 : 0.8;
+
+        ctx.save();
+        ctx.globalAlpha = alpha * df;
+        ctx.strokeStyle = `rgba(255,${depth === 0 ? 90 : 50},0,0.85)`;
+        ctx.lineWidth = outerW;
+        ctx.lineCap = ctx.lineJoin = 'round';
+        ctx.shadowColor = 'rgba(255,60,0,1)';
+        ctx.shadowBlur = depth === 0 ? 18 : 9;
+        ctx.beginPath(); ctx.moveTo(path[0].x, path[0].y);
+        for (let i = 1; i < path.length; i++) ctx.lineTo(path[i].x, path[i].y);
+        ctx.stroke();
+
+        ctx.strokeStyle = `rgba(255,180,40,0.7)`;
+        ctx.lineWidth = outerW * 0.5;
+        ctx.shadowBlur = depth === 0 ? 8 : 4;
+        ctx.beginPath(); ctx.moveTo(path[0].x, path[0].y);
+        for (let i = 1; i < path.length; i++) ctx.lineTo(path[i].x, path[i].y);
+        ctx.stroke();
+
+        ctx.strokeStyle = 'rgba(255,248,200,0.98)';
+        ctx.lineWidth = coreW;
+        ctx.shadowBlur = 0;
+        ctx.beginPath(); ctx.moveTo(path[0].x, path[0].y);
+        for (let i = 1; i < path.length; i++) ctx.lineTo(path[i].x, path[i].y);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      if (alpha > 0.05) {
+        btn.style.boxShadow = [
+          `inset 0 1px 0 rgba(255,255,255,0.6)`,
+          `0 0 ${Math.round(30 * alpha)}px rgba(255,80,10,${(alpha * 0.6).toFixed(2)})`,
+          `0 0 ${Math.round(60 * alpha)}px rgba(255,40,0,${(alpha * 0.25).toFixed(2)})`,
+        ].join(', ');
+      }
+    },
+    reset() { phase = 'idle'; cracks = []; },
+  };
+})();
+
+const Plasma = (() => {
+  let t = 0;
+  return {
+    reset() { t = 0; },
+    render(ctx: CanvasRenderingContext2D, W: number, H: number, mouseX: number, mouseY: number, btn: HTMLElement) {
+      t += 0.017;
+      const blobs = [
+        { x: W * 0.28 + Math.sin(t * 0.71) * W * 0.32, y: H * 0.5 + Math.cos(t * 0.53) * H * 0.45, r: W * 0.72, c: '180,35,255', a: 0.30 },
+        { x: W * 0.72 + Math.cos(t * 0.87) * W * 0.28, y: H * 0.5 + Math.sin(t * 0.61) * H * 0.45, r: W * 0.65, c: '35,135,255', a: 0.27 },
+        { x: W * 0.5 + Math.sin(t * 1.13 + 1.4) * W * 0.35, y: H * 0.4 + Math.cos(t * 0.79) * H * 0.4, r: W * 0.52, c: '15,215,180', a: 0.23 },
+        { x: W * 0.5 + Math.cos(t * 0.62 + 2.2) * W * 0.22, y: H * 0.6 + Math.sin(t * 0.95) * H * 0.3, r: W * 0.45, c: '255,60,140', a: 0.20 },
+        { x: mouseX, y: mouseY, r: W * 0.38, c: '255,200,50', a: 0.22 },
+      ];
+
+      ctx.save();
+      ctx.globalCompositeOperation = 'screen';
+      for (const b of blobs) {
+        const gr = ctx.createRadialGradient(b.x, b.y, 0, b.x, b.y, b.r);
+        gr.addColorStop(0, `rgba(${b.c},${b.a.toFixed(2)})`);
+        gr.addColorStop(0.42, `rgba(${b.c},${(b.a * 0.28).toFixed(2)})`);
+        gr.addColorStop(1, `rgba(${b.c},0)`);
+        ctx.fillStyle = gr;
+        ctx.beginPath(); ctx.roundRect(0, 0, W, H, H / 2); ctx.fill();
+      }
+
+      for (let i = 0; i < 5; i++) {
+        const hue = ((t * 50 + i * 72) % 360);
+        const x1 = W * (0.1 + 0.8 * Math.sin(t * 0.48 + i * 1.26));
+        const x2 = W * (0.9 - 0.8 * Math.cos(t * 0.69 + i * 1.05));
+        const lg = ctx.createLinearGradient(x1, 0, x2, H);
+        lg.addColorStop(0, 'rgba(0,0,0,0)');
+        lg.addColorStop(0.5, `hsla(${hue},100%,70%,0.1)`);
+        lg.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = lg;
+        ctx.beginPath(); ctx.roundRect(0, 0, W, H, H / 2); ctx.fill();
+      }
+      ctx.restore();
+
+      const pulseA = 0.25 + 0.18 * Math.sin(t * 2.3);
+      btn.style.boxShadow = [
+        `inset 0 1px 0 rgba(255,255,255,0.75)`,
+        `0 0 28px rgba(150,60,255,${pulseA.toFixed(2)})`,
+        `0 0 55px rgba(40,120,255,${(pulseA * 0.5).toFixed(2)})`,
+      ].join(', ');
+    },
+  };
+})();
+
+const Glitch = (() => {
+  let nextBurst = 0, burstEnd = 0, bursting = false;
+  let scanT = 0;
+
+  function doBurst(ctx: CanvasRenderingContext2D, W: number, H: number) {
+    const n = 3 + Math.floor(rand(0, 7));
+    for (let i = 0; i < n; i++) {
+      const sy = rand(0, H);
+      const sh = rand(1, H * 0.14);
+      const off = (Math.random() - 0.5) * W * 0.18;
+
+      ctx.save();
+      ctx.globalCompositeOperation = 'difference';
+      ctx.globalAlpha = rand(0.35, 0.75);
+      ctx.fillStyle = `rgba(255,0,${Math.floor(rand(0, 120))},1)`;
+      ctx.fillRect(off + 3, sy, W, sh);
+      ctx.fillStyle = `rgba(0,255,${Math.floor(rand(0, 120))},1)`;
+      ctx.fillRect(off - 3, sy, W, sh * 0.7);
+      ctx.restore();
+
+      ctx.save();
+      ctx.globalAlpha = rand(0.06, 0.2);
+      for (let x = 0; x < W; x += 2) {
+        if (Math.random() < 0.45)
+          ctx.fillRect(x + off * (Math.random() * 0.5), sy + rand(0, sh), 2, 1);
+      }
+      ctx.restore();
+    }
+
+    if (Math.random() < 0.25) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'difference';
+      ctx.globalAlpha = rand(0.08, 0.22);
+      ctx.fillStyle = 'white';
+      ctx.beginPath(); ctx.roundRect(0, 0, W, H, H / 2); ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  return {
+    reset() {
+      nextBurst = 0; burstEnd = 0; bursting = false;
+    },
+    render(ctx: CanvasRenderingContext2D, W: number, H: number, mouseX: number, mouseY: number, btn: HTMLElement) {
+      scanT += 0.025;
+      const now = performance.now();
+
+      ctx.save();
+      ctx.globalAlpha = 0.045;
+      ctx.fillStyle = 'rgba(0,0,0,1)';
+      for (let y = 0; y < H; y += 3) ctx.fillRect(0, y, W, 1);
+      ctx.restore();
+
+      if (!bursting && now > nextBurst) {
+        bursting = true;
+        burstEnd = now + rand(80, 180);
+        nextBurst = burstEnd + rand(280, 1600);
+        btn.classList.add('glitch-burst');
+        btn.style.boxShadow = [
+          'inset 0 1px 0 rgba(255,255,255,0.75)',
+          '0 0 18px rgba(0,255,120,0.45)',
+          '0 0 40px rgba(0,200,100,0.2)',
+        ].join(', ');
+        setTimeout(() => {
+          bursting = false;
+          btn.classList.remove('glitch-burst');
+          btn.style.filter = '';
+        }, burstEnd - now);
+      }
+
+      if (bursting) doBurst(ctx, W, H);
+
+      ctx.save();
+      ctx.globalAlpha = 0.08;
+      for (let k = 0; k < 12; k++) {
+        const hue = (scanT * 120 + k * 29) % 360;
+        ctx.fillStyle = `hsla(${hue},100%,80%,1)`;
+        ctx.fillRect(rand(0, W), rand(0, H), rand(1, 2.5), rand(1, 2.5));
+      }
+      ctx.restore();
+    },
+  };
+})();
+
+const Liquid = (() => {
+  let t = 0;
+  return {
+    reset() { t = 0; },
+    render(ctx: CanvasRenderingContext2D, W: number, H: number, mouseX: number, mouseY: number, btn: HTMLElement) {
+      t += 0.05;
+      ctx.save();
+      ctx.globalCompositeOperation = 'screen';
+      
+      ctx.fillStyle = 'rgba(6, 182, 212, 0.4)';
+      ctx.beginPath();
+      ctx.moveTo(0, H);
+      for (let x = 0; x <= W; x += 5) {
+        const y = H * 0.6 + Math.sin(x * 0.02 + t) * 10 + Math.sin(x * 0.01 - t * 0.5) * 5;
+        ctx.lineTo(x, y);
+      }
+      ctx.lineTo(W, H);
+      ctx.fill();
+
+      ctx.fillStyle = 'rgba(56, 189, 248, 0.3)';
+      ctx.beginPath();
+      ctx.moveTo(0, H);
+      for (let x = 0; x <= W; x += 5) {
+        const y = H * 0.7 + Math.sin(x * 0.03 - t * 1.2) * 8 + Math.cos(x * 0.015 + t) * 6;
+        ctx.lineTo(x, y);
+      }
+      ctx.lineTo(W, H);
+      ctx.fill();
+
+      for(let i=0; i<5; i++) {
+         const bx = (W * 0.2 * i + t * 20) % W;
+         const by = H - ((t * 30 + i * 15) % H);
+         ctx.beginPath();
+         ctx.arc(bx, by, 2 + i, 0, Math.PI * 2);
+         ctx.fillStyle = 'rgba(255,255,255,0.5)';
+         ctx.fill();
+      }
+
+      ctx.restore();
+    }
+  }
+})();
+
+
+    // --- UI Controls (Hidden but required for React to render without errors) ---
+    
+function Slider({ label, value, min, max, step, onChange, unit = '' }: any) {
+  return (
+    <div className="flex flex-col gap-1.5 mb-5">
+      <div className="flex items-center justify-between">
+        <label className="text-[13px] font-medium text-white/65">{label}</label>
+        <span className="text-[12px] font-medium font-mono text-white/40 min-w-[52px] text-right">
+          {value}{unit}
+        </span>
+      </div>
+      <input
+        type="range"
+        min={min} max={max} step={step} value={value}
+        onChange={e => onChange(parseFloat(e.target.value))}
+        className="w-full h-1 bg-white/10 rounded-full appearance-none outline-none cursor-pointer mt-1 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:shadow-[0_0_0_3px_rgba(255,255,255,0.15)] hover:[&::-webkit-slider-thumb]:shadow-[0_0_0_5px_rgba(255,255,255,0.22)] transition-shadow"
+      />
+    </div>
+  );
+}
+
+function ColorPicker({ label, value, onChange }: any) {
+  return (
+    <div className="flex flex-col gap-1.5 mb-5">
+      <div className="flex items-center justify-between">
+        <label className="text-[13px] font-medium text-white/65">{label}</label>
+      </div>
+      <div className="flex items-center gap-2.5 mt-1">
+        <input
+          type="color"
+          value={value}
+          onChange={e => onChange(e.target.value)}
+          className="w-8 h-8 rounded-lg cursor-pointer appearance-none bg-transparent border-none p-0 overflow-hidden shadow-[0_0_0_1px_rgba(255,255,255,0.12)] [&::-webkit-color-swatch-wrapper]:p-0 [&::-webkit-color-swatch]:border-none [&::-webkit-color-swatch]:rounded-md"
+        />
+        <span className="text-[12px] font-mono text-white/40 tracking-wide uppercase">{value}</span>
+      </div>
+    </div>
+  );
+}
+
+function Select({ label, value, options, onChange }: any) {
+  return (
+    <div className="flex flex-col gap-1.5 mb-5">
+      <label className="text-[13px] font-medium text-white/65">{label}</label>
+      <select
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-[13px] text-white/80 outline-none focus:border-white/30 transition-colors appearance-none"
+      >
+        {options.map((opt: any) => (
+          <option key={opt.value} value={opt.value} className="bg-[#1a1a24] text-white">
+            {opt.label}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+function Chip({ active, onClick, children, effect }: any) {
+  return (
+    <button
+      onClick={onClick}
+      className={`
+        px-4 py-1.5 rounded-full border text-xs font-medium tracking-wide whitespace-nowrap transition-all duration-200 relative overflow-hidden
+        ${active 
+          ? 'text-white border-white/30 bg-white/10' 
+          : 'text-white/40 border-white/10 bg-white/5 hover:text-white/75 hover:border-white/20'}
+        ${active && effect === 'electric' ? '!bg-blue-500/20 !border-blue-400/50 !text-blue-200 shadow-[0_0_12px_rgba(59,130,246,0.3),inset_0_1px_0_rgba(96,165,250,0.25)]' : ''}
+        ${active && effect === 'crack' ? '!bg-orange-500/20 !border-orange-400/50 !text-orange-200 shadow-[0_0_12px_rgba(249,115,22,0.3),inset_0_1px_0_rgba(251,146,60,0.2)]' : ''}
+        ${active && effect === 'plasma' ? '!bg-purple-500/20 !border-purple-400/50 !text-purple-200 shadow-[0_0_12px_rgba(168,85,247,0.3),inset_0_1px_0_rgba(192,132,252,0.2)]' : ''}
+        ${active && effect === 'glitch' ? '!bg-green-500/20 !border-green-400/50 !text-green-200 shadow-[0_0_12px_rgba(34,197,94,0.3),inset_0_1px_0_rgba(74,222,128,0.2)]' : ''}
+        ${active && effect === 'liquid' ? '!bg-cyan-500/20 !border-cyan-400/50 !text-cyan-200 shadow-[0_0_12px_rgba(6,182,212,0.3),inset_0_1px_0_rgba(34,211,238,0.2)]' : ''}
+        ${active && effect === 'stardust' ? '!bg-yellow-500/20 !border-yellow-400/50 !text-yellow-200 shadow-[0_0_12px_rgba(234,179,8,0.3),inset_0_1px_0_rgba(250,204,21,0.2)]' : ''}
+      `}
+    >
+      <span className="relative z-10">{children}</span>
+      <div className="absolute inset-0 opacity-0 hover:opacity-100 transition-opacity duration-200 bg-[radial-gradient(circle_at_50%_0%,rgba(255,255,255,0.15),transparent_70%)]" />
+    </button>
+  );
+}
+
+
+    // --- Component Code ---
+    // Note: The DEFAULTS object below contains your exact customized state!
+    
+const DEFAULTS = {
+  "baseColor": "#709bff",
+  "baseAlpha": 88,
+  "hoverBoost": 8,
+  "glowColor": "#1c45e9",
+  "spotAlpha": 100,
+  "spotRadius": 90,
+  "outerGlow": 39,
+  "edgeAlpha": 74,
+  "edgeSpread": 103,
+  "fontColor": "#a52222",
+  "fontSize": 13,
+  "fontWeight": 400,
+  "tracking": 9,
+  "borderColor": "#ffffff",
+  "borderAlpha": 34,
+  "padH": 40,
+  "padV": 15,
+  "fontFamily": "Space Grotesk",
+  "backgroundType": "glass",
+  "gradientColor2": "#ff9a9e",
+  "shape": "pill",
+  "filling": "outline",
+  "effectMode": "electric",
+  "animation": "neon",
+  "interaction": "standard",
+  "particleEffect": "none"
+};
+
+function ButtonTweaker() {
+  const [s, setS] = useState(DEFAULTS);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const cvsRef = useRef<HTMLCanvasElement>(null);
+  const [hovering, setHovering] = useState(false);
+  const hoveringRef = useRef(false);
+  const rafRef = useRef<number | null>(null);
+  const mouseRef = useRef({ x: 0, y: 0 });
+  const controls = useAnimation();
+  const [particles, setParticles] = useState<any[]>([]);
+
+  const getBorderRadius = () => {
+    switch (s.shape) {
+      case 'pill': return '100px';
+      case 'rounded': return '12px';
+      case 'sharp': return '0px';
+      case 'leaf': return '24px 0px 24px 0px';
+      default: return '100px';
+    }
+  };
+
+  const getBackground = (isHover: boolean) => {
+    const a = s.baseAlpha / 100;
+    const rgb = hexToRgb(s.baseColor);
+    const hoverRgb = hexToRgb(lightenHex(s.baseColor, s.hoverBoost));
+    const hoverA = Math.min(1, (s.baseAlpha + 9) / 100);
+
+    if (s.filling === 'outline') return 'transparent';
+    if (s.filling === 'ghost') return isHover ? `rgba(${rgb}, 0.1)` : 'transparent';
+    if (s.filling === 'neumorphic') return '#07070f';
+
+    if (s.backgroundType === 'gradient') {
+      return `linear-gradient(135deg, ${s.baseColor}, ${s.gradientColor2})`;
+    }
+    if (s.backgroundType === 'glass') {
+      return `rgba(${rgb}, ${isHover ? hoverA : a})`;
+    }
+    return `rgba(${isHover ? hoverRgb : rgb}, ${isHover ? hoverA : a})`;
+  };
+
+  const applyBaseStyles = (btn: HTMLElement) => {
+    btn.style.background = getBackground(false);
+    btn.style.color = s.fontColor;
+    btn.style.fontSize = `${s.fontSize}px`;
+    btn.style.fontWeight = `${s.fontWeight}`;
+    btn.style.letterSpacing = `${(s.tracking / 100).toFixed(2)}em`;
+    btn.style.padding = `${s.padV}px ${s.padH}px`;
+    btn.style.borderRadius = getBorderRadius();
+    btn.style.fontFamily = s.fontFamily;
+
+    const ba = s.borderAlpha / 100;
+    const brg = hexToRgb(s.borderColor);
+    
+    if (s.filling === 'outline') {
+      btn.style.border = `2px solid rgba(${brg}, ${ba})`;
+      btn.style.boxShadow = 'none';
+    } else if (s.filling === 'neumorphic') {
+      btn.style.border = 'none';
+      btn.style.boxShadow = '5px 5px 10px #030306, -5px -5px 10px #0b0b18';
+    } else {
+      btn.style.border = `1px solid rgba(${brg}, ${ba})`;
+      btn.style.boxShadow = `inset 0 1px 0 rgba(255,255,255,0.6)`;
+    }
+    
+    if (s.backgroundType === 'glass') {
+      btn.style.backdropFilter = 'blur(10px)';
+    } else {
+      btn.style.backdropFilter = 'none';
+    }
+  };
+
+  const applyHoverStyles = (btn: HTMLElement) => {
+    btn.style.background = getBackground(true);
+    if (s.filling === 'neumorphic') {
+      btn.style.boxShadow = 'inset 5px 5px 10px #030306, inset -5px -5px 10px #0b0b18';
+    }
+  };
+
+  const updateEdgeGlow = (btn: HTMLElement) => {
+    if (s.filling === 'neumorphic') return;
+    const W = btn.offsetWidth;
+    const glowRgb = hexToRgb(s.glowColor);
+    const proxL = Math.max(0, 1 - (mouseRef.current.x / W) * 4);
+    const proxR = Math.max(0, 1 - ((W - mouseRef.current.x) / W) * 4);
+    const sp = s.edgeSpread;
+    const sL = Math.round(proxL * sp), sR = Math.round(proxR * sp);
+    const ea = s.edgeAlpha / 100;
+    const aL = (proxL * ea).toFixed(2), aR = (proxR * ea).toFixed(2);
+    const oa = (s.outerGlow / 100).toFixed(2);
+    const shadows = [
+      `inset 0 1px 0 rgba(255,255,255,0.75)`,
+      `0 0 24px 8px rgba(${glowRgb},${oa})`,
+    ];
+    if (proxL > 0.02) shadows.push(`-${Math.round(sL * 0.5)}px 0 ${sL}px rgba(${glowRgb},${aL})`);
+    if (proxR > 0.02) shadows.push(` ${Math.round(sR * 0.5)}px 0 ${sR}px rgba(${glowRgb},${aR})`);
+    btn.style.boxShadow = shadows.join(', ');
+  };
+
+  useEffect(() => {
+    if (btnRef.current) applyBaseStyles(btnRef.current);
+  }, [s]);
+
+  useEffect(() => {
+    const cvs = cvsRef.current;
+    const btn = btnRef.current;
+    if (!cvs || !btn) return;
+    const ctx = cvs.getContext('2d');
+    if (!ctx) return;
+
+    const resize = () => {
+      cvs.width = btn.offsetWidth;
+      cvs.height = btn.offsetHeight;
+    };
+    resize();
+    const ro = new ResizeObserver(resize);
+    ro.observe(btn);
+
+    const drawSpot = () => {
+      const W = cvs.width, H = cvs.height;
+      const glowRgb = hexToRgb(s.glowColor);
+      const r = Math.max(W, H) * (s.spotRadius / 100);
+      const a0 = (s.spotAlpha / 100).toFixed(2);
+      const a1 = (s.spotAlpha / 100 * 0.58).toFixed(2);
+      const a2 = (s.spotAlpha / 100 * 0.14).toFixed(2);
+      const g = ctx.createRadialGradient(mouseRef.current.x, mouseRef.current.y, 0, mouseRef.current.x, mouseRef.current.y, r);
+      g.addColorStop(0, `rgba(${glowRgb},${a0})`);
+      g.addColorStop(0.22, `rgba(${glowRgb},${a1})`);
+      g.addColorStop(0.55, `rgba(${glowRgb},${a2})`);
+      g.addColorStop(1, `rgba(${glowRgb},0)`);
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.roundRect(0, 0, W, H, H / 2);
+      ctx.fill();
+    };
+
+    const mainLoop = () => {
+      const W = cvs.width, H = cvs.height;
+      ctx.clearRect(0, 0, W, H);
+
+      if (hoveringRef.current && s.effectMode !== 'glitch') drawSpot();
+
+      switch (s.effectMode) {
+        case 'electric': if (hoveringRef.current) Electric.render(ctx, W, H, mouseRef.current.x, mouseRef.current.y, btn); break;
+        case 'crack': Crack.render(ctx, W, H, mouseRef.current.x, mouseRef.current.y, btn); break;
+        case 'plasma': if (hoveringRef.current) Plasma.render(ctx, W, H, mouseRef.current.x, mouseRef.current.y, btn); break;
+        case 'glitch': if (hoveringRef.current) Glitch.render(ctx, W, H, mouseRef.current.x, mouseRef.current.y, btn); break;
+        case 'liquid': if (hoveringRef.current) Liquid.render(ctx, W, H, mouseRef.current.x, mouseRef.current.y, btn); break;
+      }
+
+      const needsLoop = hoveringRef.current || (s.effectMode === 'crack' && Crack.phase !== 'idle');
+
+      if (needsLoop) {
+        rafRef.current = requestAnimationFrame(mainLoop);
+      } else {
+        rafRef.current = null;
+        ctx.clearRect(0, 0, W, H);
+        cvs.style.opacity = '0';
+        if (s.effectMode === 'glitch') { btn.style.filter = ''; btn.classList.remove('glitch-burst'); }
+        if (s.effectMode === 'electric' || s.effectMode === 'plasma' || s.effectMode === 'crack') {
+           applyBaseStyles(btn);
+        }
+      }
+    };
+
+    const startLoop = () => {
+      if (!rafRef.current) {
+        cvs.style.opacity = '1';
+        rafRef.current = requestAnimationFrame(mainLoop);
+      }
+    };
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const r = btn.getBoundingClientRect();
+      const x = e.clientX - r.left;
+      const y = e.clientY - r.top;
+      mouseRef.current = { x, y };
+      if (s.effectMode === 'none') updateEdgeGlow(btn);
+
+      if (s.interaction === 'magnetic') {
+        const cx = e.clientX - r.left - r.width / 2;
+        const cy = e.clientY - r.top - r.height / 2;
+        controls.start({
+          x: cx * 0.2,
+          y: cy * 0.2,
+          transition: { type: 'spring', stiffness: 300, damping: 20 }
+        });
+      }
+
+      if (s.effectMode === 'stardust' && Math.random() > 0.5) {
+        setParticles(prev => [...prev.slice(-20), {
+          id: Date.now(),
+          x, y,
+          vx: (Math.random() - 0.5) * 2,
+          vy: (Math.random() - 0.5) * 2 - 1,
+          life: 1
+        }]);
+      }
+    };
+
+    const handleMouseEnter = () => {
+      hoveringRef.current = true;
+      setHovering(true);
+      resize();
+      applyHoverStyles(btn);
+      startLoop();
+    };
+
+    const handleMouseLeave = () => {
+      hoveringRef.current = false;
+      setHovering(false);
+      if (s.effectMode === 'glitch') Glitch.reset();
+      if (s.effectMode === 'electric') Electric.onLeave();
+      if (s.effectMode === 'plasma') Plasma.reset();
+      if (s.effectMode !== 'crack') {
+        if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
+        ctx.clearRect(0, 0, cvs.width, cvs.height);
+        cvs.style.opacity = '0';
+        applyBaseStyles(btn);
+      }
+      if (s.interaction === 'magnetic') {
+        controls.start({ x: 0, y: 0, transition: { type: 'spring', stiffness: 300, damping: 20 } });
+      }
+    };
+
+    const handleMouseDown = (e: MouseEvent) => {
+      if (s.effectMode === 'crack') {
+        const r = btn.getBoundingClientRect();
+        Crack.trigger(e.clientX - r.left, e.clientY - r.top, cvs.width, cvs.height);
+        startLoop();
+      }
+      if (s.effectMode === 'stardust') {
+        const r = btn.getBoundingClientRect();
+        const x = e.clientX - r.left;
+        const y = e.clientY - r.top;
+        const burst = Array.from({ length: 15 }).map((_, i) => ({
+          id: Date.now() + i,
+          x, y,
+          vx: (Math.random() - 0.5) * 8,
+          vy: (Math.random() - 0.5) * 8,
+          life: 1
+        }));
+        setParticles(prev => [...prev, ...burst]);
+      }
+      if (s.particleEffect !== 'none') {
+        const r = btn.getBoundingClientRect();
+        const x = e.clientX - r.left;
+        const y = e.clientY - r.top;
+        const burst = Array.from({ length: 20 }).map((_, i) => ({
+          id: Date.now() + i + 100,
+          x, y,
+          vx: (Math.random() - 0.5) * 12,
+          vy: (Math.random() - 0.5) * 12,
+          life: 1,
+          color: s.particleEffect === 'sparkle' ? '#fff' : s.glowColor
+        }));
+        setParticles(prev => [...prev, ...burst]);
+      }
+    };
+
+    btn.addEventListener('mousemove', handleMouseMove);
+    btn.addEventListener('mouseenter', handleMouseEnter);
+    btn.addEventListener('mouseleave', handleMouseLeave);
+    btn.addEventListener('mousedown', handleMouseDown);
+
+    if (hoveringRef.current || (s.effectMode === 'crack' && Crack.phase !== 'idle')) {
+      startLoop();
+    }
+
+    return () => {
+      ro.disconnect();
+      btn.removeEventListener('mousemove', handleMouseMove);
+      btn.removeEventListener('mouseenter', handleMouseEnter);
+      btn.removeEventListener('mouseleave', handleMouseLeave);
+      btn.removeEventListener('mousedown', handleMouseDown);
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    };
+  }, [s]);
+
+  useEffect(() => {
+    if ((s.effectMode !== 'stardust' && s.particleEffect === 'none') || particles.length === 0) return;
+    let animationFrameId: number;
+    const updateParticles = () => {
+      setParticles(prev => prev.map(p => ({
+        ...p,
+        x: p.x + p.vx,
+        y: p.y + p.vy,
+        life: p.life - 0.02
+      })).filter(p => p.life > 0));
+      animationFrameId = requestAnimationFrame(updateParticles);
+    };
+    animationFrameId = requestAnimationFrame(updateParticles);
+    return () => cancelAnimationFrame(animationFrameId);
+  }, [s.effectMode, s.particleEffect, particles.length]);
+
+  return (
+    <div className="w-full flex flex-col items-center gap-0 pt-10 px-10">
+      <div className="relative inline-flex items-center justify-center mb-16 min-h-[100px]">
+        <motion.button
+          ref={btnRef as any}
+          animate={controls}
+          className={`relative overflow-hidden cursor-pointer outline-none transition-transform duration-150 will-change-transform active:scale-[0.97] ${s.effectMode === 'glitch' && hovering ? 'glitch-burst' : ''} ${s.animation === 'neon' ? 'animate-neon' : ''}`}
+          style={{ '--neon-color': s.glowColor } as any}
+        >
+          <canvas ref={cvsRef} className="absolute inset-0 pointer-events-none opacity-0 transition-opacity duration-200" style={{ borderRadius: getBorderRadius() }} />
+          
+          {s.effectMode === 'stardust' && particles.map(p => (
+            <div
+              key={p.id}
+              className="absolute pointer-events-none rounded-full"
+              style={{
+                left: p.x, top: p.y,
+                width: 4, height: 4,
+                backgroundColor: s.glowColor,
+                opacity: p.life,
+                transform: `scale(${p.life})`,
+                boxShadow: `0 0 8px ${s.glowColor}`
+              }}
+            />
+          ))}
+          
+          {s.particleEffect !== 'none' && particles.map(p => (
+            <div
+              key={p.id}
+              className="absolute pointer-events-none rounded-full"
+              style={{
+                left: p.x, top: p.y,
+                width: s.particleEffect === 'sparkle' ? 3 : 6,
+                height: s.particleEffect === 'sparkle' ? 3 : 6,
+                backgroundColor: p.color || s.glowColor,
+                opacity: p.life,
+                transform: `scale(${p.life})`,
+                boxShadow: s.particleEffect === 'sparkle' ? `0 0 6px ${p.color || s.glowColor}` : 'none'
+              }}
+            />
+          ))}
+
+          <span className="relative z-10 flex items-center gap-2.5 transition-all duration-75">
+            SEE IN ACTION
+            <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
+              <path stroke={s.fontColor} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" d="M3 7.5h9M8.5 4l3.5 3.5L8.5 11" />
+            </svg>
+          </span>
+        </motion.button>
+      </div>
+
+      <div className="w-full max-w-[800px] bg-white/[0.035] border border-white/[0.08] rounded-[18px] p-8 grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-0">
+        <div className="flex flex-col">
+          <div className="text-[10.5px] font-bold tracking-[0.1em] uppercase text-white/30 mb-5 pb-3 border-b border-white/[0.07]">Surface & Glow</div>
+          <ColorPicker label="Base button color" value={s.baseColor} onChange={(v: string) => setS({...s, baseColor: v})} />
+          <Slider label="Base opacity" value={s.baseAlpha} min={0} max={100} step={1} unit="%" onChange={(v: number) => setS({...s, baseAlpha: v})} />
+          <Slider label="Hover brightness" value={s.hoverBoost} min={0} max={30} step={1} unit="%" onChange={(v: number) => setS({...s, hoverBoost: v})} />
+          
+          <Select label="Background Type" value={s.backgroundType} options={[{label:'Solid', value:'solid'}, {label:'Gradient', value:'gradient'}, {label:'Glassmorphism', value:'glass'}]} onChange={(v: any) => setS({...s, backgroundType: v})} />
+          {s.backgroundType === 'gradient' && <ColorPicker label="Gradient Color 2" value={s.gradientColor2} onChange={(v: string) => setS({...s, gradientColor2: v})} />}
+          
+          <Select label="Filling Style" value={s.filling} options={[{label:'Solid', value:'solid'}, {label:'Outline', value:'outline'}, {label:'Ghost', value:'ghost'}, {label:'Neumorphic', value:'neumorphic'}]} onChange={(v: any) => setS({...s, filling: v})} />
+
+          <ColorPicker label="Glow / spot color" value={s.glowColor} onChange={(v: string) => setS({...s, glowColor: v})} />
+          <Slider label="Spot intensity" value={s.spotAlpha} min={0} max={100} step={1} unit="%" onChange={(v: number) => setS({...s, spotAlpha: v})} />
+          <Slider label="Spot radius" value={s.spotRadius} min={10} max={200} step={1} unit="%" onChange={(v: number) => setS({...s, spotRadius: v})} />
+          <Slider label="Outer glow base" value={s.outerGlow} min={0} max={100} step={1} unit="%" onChange={(v: number) => setS({...s, outerGlow: v})} />
+          <Slider label="Edge leak intensity" value={s.edgeAlpha} min={0} max={100} step={1} unit="%" onChange={(v: number) => setS({...s, edgeAlpha: v})} />
+          <Slider label="Edge leak spread" value={s.edgeSpread} min={0} max={150} step={1} unit="px" onChange={(v: number) => setS({...s, edgeSpread: v})} />
+        </div>
+
+        <div className="flex flex-col">
+          <div className="text-[10.5px] font-bold tracking-[0.1em] uppercase text-white/30 mb-5 pb-3 border-b border-white/[0.07]">Typography</div>
+          <Select label="Font Family" value={s.fontFamily} options={[{label:'Inter', value:'Inter'}, {label:'Roboto', value:'Roboto'}, {label:'Space Grotesk', value:'Space Grotesk'}, {label:'Playfair Display', value:'Playfair Display'}, {label:'JetBrains Mono', value:'JetBrains Mono'}, {label:'Syne', value:'Syne'}, {label:'Outfit', value:'Outfit'}]} onChange={(v: any) => setS({...s, fontFamily: v})} />
+          <ColorPicker label="Font color" value={s.fontColor} onChange={(v: string) => setS({...s, fontColor: v})} />
+          <Slider label="Font size" value={s.fontSize} min={8} max={32} step={1} unit="px" onChange={(v: number) => setS({...s, fontSize: v})} />
+          <Slider label="Font weight" value={s.fontWeight} min={100} max={900} step={100} onChange={(v: number) => setS({...s, fontWeight: v})} />
+          <Slider label="Letter spacing" value={s.tracking} min={0} max={50} step={1} unit="" onChange={(v: number) => setS({...s, tracking: v})} />
+
+          <div className="text-[10.5px] font-bold tracking-[0.1em] uppercase text-white/30 mb-5 pb-3 border-b border-white/[0.07] mt-2">Border & Shape</div>
+          <Select label="Shape" value={s.shape} options={[{label:'Pill', value:'pill'}, {label:'Rounded', value:'rounded'}, {label:'Sharp', value:'sharp'}, {label:'Leaf', value:'leaf'}]} onChange={(v: any) => setS({...s, shape: v})} />
+          <ColorPicker label="Border color" value={s.borderColor} onChange={(v: string) => setS({...s, borderColor: v})} />
+          <Slider label="Border opacity" value={s.borderAlpha} min={0} max={100} step={1} unit="%" onChange={(v: number) => setS({...s, borderAlpha: v})} />
+          <Slider label="Padding H" value={s.padH} min={0} max={100} step={1} unit="px" onChange={(v: number) => setS({...s, padH: v})} />
+          <Slider label="Padding V" value={s.padV} min={0} max={50} step={1} unit="px" onChange={(v: number) => setS({...s, padV: v})} />
+        </div>
+
+        <div className="col-span-1 md:col-span-2 mt-7 pt-6 border-t border-white/[0.07]">
+          <div className="text-[10.5px] font-bold tracking-[0.1em] uppercase text-white/30 mb-4">Special Effects</div>
+          <div className="flex flex-wrap gap-2">
+            <Chip active={s.effectMode === 'none'} onClick={() => setS({...s, effectMode: 'none'})}>None</Chip>
+            <Chip active={s.effectMode === 'electric'} effect="electric" onClick={() => setS({...s, effectMode: 'electric'})}>⚡ Electric Shock</Chip>
+            <Chip active={s.effectMode === 'crack'} effect="crack" onClick={() => setS({...s, effectMode: 'crack'})}>💥 Surface Crack</Chip>
+            <Chip active={s.effectMode === 'plasma'} effect="plasma" onClick={() => setS({...s, effectMode: 'plasma'})}>🌀 Plasma Field</Chip>
+            <Chip active={s.effectMode === 'glitch'} effect="glitch" onClick={() => setS({...s, effectMode: 'glitch'})}>▓ Glitch</Chip>
+            <Chip active={s.effectMode === 'liquid'} effect="liquid" onClick={() => setS({...s, effectMode: 'liquid'})}>💧 Liquid Wave</Chip>
+            <Chip active={s.effectMode === 'stardust'} effect="stardust" onClick={() => setS({...s, effectMode: 'stardust'})}>✨ Stardust</Chip>
+          </div>
+          <div className="mt-4 flex items-center gap-4">
+             <Select label="CSS Animation" value={s.animation} options={[{label:'None', value:'none'}, {label:'Neon Pulse', value:'neon'}]} onChange={(v: any) => setS({...s, animation: v})} />
+             <Select label="Interaction" value={s.interaction} options={[{label:'Standard', value:'standard'}, {label:'Magnetic', value:'magnetic'}]} onChange={(v: any) => setS({...s, interaction: v})} />
+             <Select label="Click Particles" value={s.particleEffect} options={[{label:'None', value:'none'}, {label:'Sparkle', value:'sparkle'}, {label:'Splash', value:'splash'}]} onChange={(v: any) => setS({...s, particleEffect: v})} />
+          </div>
+        </div>
+      </div>
+      <div className="w-full max-w-[800px] flex justify-end mt-6 gap-3">
+        <button onClick={() => downloadHTML('Button', s)} className="px-5 py-2 rounded-lg bg-white/[0.06] border border-white/10 text-white/50 text-[12.5px] font-medium hover:bg-white/10 hover:text-white/75 transition-all">
+          Download HTML
+        </button>
+        <button onClick={() => downloadCSS('Button', s)} className="px-5 py-2 rounded-lg bg-white/[0.06] border border-white/10 text-white/50 text-[12.5px] font-medium hover:bg-white/10 hover:text-white/75 transition-all">
+          Download CSS
+        </button>
+        <button onClick={() => setS(DEFAULTS)} className="px-5 py-2 rounded-lg bg-white/[0.06] border border-white/10 text-white/50 text-[12.5px] font-medium hover:bg-white/10 hover:text-white/75 transition-all">
+          Reset to defaults
+        </button>
+      </div>
+    </div>
+  );
+}
+
+
+    // --- Render ---
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<ButtonTweaker />);
+  </script>
+</body>
+</html>

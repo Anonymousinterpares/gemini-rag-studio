@@ -1,0 +1,109 @@
+<div style="min-height:260px;display:flex;align-items:center;justify-content:center;background:#07070f;border-radius:12px;">
+  <div style="position:relative;display:inline-flex;">
+    <button id="btn" style="
+      position:relative;overflow:hidden;
+      padding:15px 40px;
+      border-radius:100px;
+      border:1px solid rgba(255,255,255,0.6);
+      background:#d1d1d1;
+      cursor:pointer;
+      font-family:'Inter',system-ui,sans-serif;
+      font-size:12px;font-weight:700;
+      letter-spacing:0.09em;text-transform:uppercase;
+      color:#5A250A;
+      white-space:nowrap;
+      box-shadow:inset 0 1px 0 rgba(255,255,255,0.6);
+      outline:none;
+      transition:background .18s ease, box-shadow .12s ease;
+    ">
+      <canvas id="cvs" style="position:absolute;inset:0;pointer-events:none;border-radius:100px;opacity:0;transition:opacity .18s ease;"></canvas>
+      <span style="position:relative;z-index:1;display:flex;align-items:center;gap:10px;">
+        SEE IN ACTION
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 17 9" style="height:9px;width:17px;color:#5A250A;flex-shrink:0;position:relative;">
+          <path fill="currentColor" fill-rule="evenodd" d="m12.495 0 4.495 4.495-4.495 4.495-.99-.99 2.805-2.805H0v-1.4h14.31L11.505.99z" clip-rule="evenodd"/>
+        </svg>
+      </span>
+    </button>
+  </div>
+</div>
+
+<script>
+const btn = document.getElementById('btn');
+const cvs = document.getElementById('cvs');
+const ctx = cvs.getContext('2d');
+// Colors from Style 1
+const ORA = '232, 120, 40'; 
+const BTN_BG = '#d1d1d1';
+const BTN_BG_HOVER = '#e2e2e2';
+
+let mx = 0, my = 0, inside = false;
+
+function resize() {
+  cvs.width  = btn.offsetWidth;
+  cvs.height = btn.offsetHeight;
+}
+resize();
+new ResizeObserver(resize).observe(btn);
+
+function drawSpot() {
+  const W = cvs.width, H = cvs.height;
+  ctx.clearRect(0, 0, W, H);
+  if (!inside) return;
+
+  const r = Math.max(W, H) * 0.9;
+  const g = ctx.createRadialGradient(mx, my, 0, mx, my, r);
+  // Using the gradient feel from Style 1's spot
+  g.addColorStop(0,    `rgba(255, 255, 245, 0.85)`); // White center
+  g.addColorStop(0.15, `rgba(${ORA}, 0.65)`);       // Orange core
+  g.addColorStop(0.45, `rgba(${ORA}, 0.25)`);       // Fading orange
+  g.addColorStop(1,    `rgba(${ORA}, 0)`);
+  
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.roundRect(0, 0, W, H, H / 2);
+  ctx.fill();
+
+  requestAnimationFrame(drawSpot);
+}
+
+btn.addEventListener('mouseenter', () => {
+  inside = true;
+  cvs.style.opacity = '1';
+  btn.style.background = BTN_BG_HOVER;
+  requestAnimationFrame(drawSpot);
+});
+
+btn.addEventListener('mousemove', e => {
+  const r   = btn.getBoundingClientRect();
+  mx = e.clientX - r.left;
+  my = e.clientY - r.top;
+  const W   = r.width;
+
+  // External glow proximity logic from Style 2
+  const proxL = Math.max(0, 1 - (mx / W) * 3.2);
+  const proxR = Math.max(0, 1 - ((W - mx) / W) * 3.2);
+  const sL = Math.round(proxL * 45);
+  const sR = Math.round(proxR * 45);
+  const aL = (proxL * 0.72).toFixed(2);
+  const aR = (proxR * 0.72).toFixed(2);
+
+  const shadows = [
+    `inset 0 1px 0 rgba(255,255,255,0.75)`,
+    `0 0 20px 4px rgba(${ORA},0.25)`
+  ];
+  if (proxL > 0.02) shadows.push(`-${Math.round(sL*0.4)}px 0 ${sL}px rgba(${ORA},${aL})`);
+  if (proxR > 0.02) shadows.push(` ${Math.round(sR*0.4)}px 0 ${sR}px rgba(${ORA},${aR})`);
+  btn.style.boxShadow = shadows.join(', ');
+});
+
+btn.addEventListener('mouseleave', () => {
+  inside = false;
+  cvs.style.opacity = '0';
+  btn.style.background = BTN_BG;
+  btn.style.boxShadow  = 'inset 0 1px 0 rgba(255,255,255,0.6)';
+  ctx.clearRect(0, 0, cvs.width, cvs.height);
+});
+
+btn.addEventListener('mousedown', () => btn.style.transform = 'scale(0.97)');
+btn.addEventListener('mouseup',   () => btn.style.transform = 'scale(1)');
+</script>
